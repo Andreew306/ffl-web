@@ -148,52 +148,53 @@ export default function SeasonDetailPage({ season }: { season: any }) {
 <TabsContent value="matches">
   <div className="space-y-6">
     {matches.map(match => (
-      <Card key={match._id} className="bg-gradient-to-br from-slate-800 to-slate-900 border-cyan-500/20">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between">
-            <Badge variant="outline">{match.week || '-'}</Badge>
-            <span className="text-gray-400 text-sm">
-              {match.date ? new Date(match.date).toLocaleDateString() : '-'}
-            </span>
-          </div>
+  <Link key={match._id} href={`/matches/${match._id}`} className="block">
+    <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-cyan-500/20 hover:border-cyan-500/40 transition-all">
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <Badge variant="outline">{match.week || '-'}</Badge>
+          <span className="text-gray-400 text-sm">
+            {match.date ? new Date(match.date).toLocaleDateString() : '-'}
+          </span>
+        </div>
+        <div className="flex items-center justify-between mt-4">
+          <div className="flex items-center space-x-4">
+            {/* Equipo 1 */}
+            <div className="flex items-center space-x-2">
+              <Image
+                src={match.team1?.logo || "/placeholder.svg"}
+                alt={match.team1?.teamName || "-"}
+                width={40}
+                height={40}
+                className="rounded-full"
+              />
+              <span className="text-white font-medium">{match.team1?.teamName || "-"}</span>
+            </div>
 
-          <div className="flex items-center justify-between mt-4">
-            <div className="flex items-center space-x-4">
-              {/* Equipo 1 */}
-              <div className="flex items-center space-x-2">
-                <Image
-                  src={match.team1?.logo || "/placeholder.svg"}
-                  alt={match.team1?.teamName || "-"}
-                  width={40}
-                  height={40}
-                  className="rounded-full"
-                />
-                <span className="text-white font-medium">{match.team1?.teamName || "-"}</span>
-              </div>
+            {/* Marcador */}
+            <div className="text-center">
+              <span className="text-3xl font-bold text-cyan-400">
+                {match.score_team1 ?? 0} - {match.score_team2 ?? 0}
+              </span>
+            </div>
 
-              {/* Marcador */}
-              <div className="text-center">
-                <span className="text-3xl font-bold text-cyan-400">
-                  {match.score_team1 ?? 0} - {match.score_team2 ?? 0}
-                </span>
-              </div>
-
-              {/* Equipo 2 */}
-              <div className="flex items-center space-x-2">
-                <Image
-                  src={match.team2?.logo || "/placeholder.svg"}
-                  alt={match.team2?.teamName || "-"}
-                  width={40}
-                  height={40}
-                  className="rounded-full"
-                />
-                <span className="text-white font-medium">{match.team2?.teamName || "-"}</span>
-              </div>
+            {/* Equipo 2 */}
+            <div className="flex items-center space-x-2">
+              <Image
+                src={match.team2?.logo || "/placeholder.svg"}
+                alt={match.team2?.teamName || "-"}
+                width={40}
+                height={40}
+                className="rounded-full"
+              />
+              <span className="text-white font-medium">{match.team2?.teamName || "-"}</span>
             </div>
           </div>
-        </CardContent>
-      </Card>
-    ))}
+        </div>
+      </CardContent>
+    </Card>
+  </Link>
+))}
   </div>
 </TabsContent>
 

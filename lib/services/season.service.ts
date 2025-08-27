@@ -1,11 +1,16 @@
 // services/season.service.ts
 import mongoose from "mongoose";
 import connectDB from "../db/mongoose";
+import TeamModel from "@/lib/models/Team";
 import CompetitionModel from "@/lib/models/Competition";
 import TeamCompetitionModel from "@/lib/models/TeamCompetition";
-import TeamModel from "@/lib/models/Team";
 import PlayerCompetitionModel from "@/lib/models/PlayerCompetition";
 import MatchModel from "@/lib/models/Match";
+
+// Registrar Player y Team para asegurar populate
+import "@/lib/models/Player";
+import "@/lib/models/Team";
+
 
 // 👇 Con solo importar ya queda registrado el modelo en mongoose
 import "@/lib/models/Player";
