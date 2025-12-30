@@ -90,7 +90,7 @@ const seasonSchema = new mongoose.Schema({
 seasonSchema.virtual('full_name').get(function() {
   const seasonNames = ['Winter', 'Spring', 'Summer', 'Autumn'];
   const seasonName = seasonNames[(this.season_number - 1) % 4] || '';
-  return `Temporada ${this.season_number} - ${seasonName} ${this.divisions === 2 ? 'League' : 'Championship'}`;
+  return `Season ${this.season_number} - ${seasonName} ${this.divisions === 2 ? 'League' : 'Championship'}`;
 });
 
 // Virtual para estadísticas

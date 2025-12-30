@@ -14,12 +14,12 @@ export default function GalleryPage() {
       views: "2.1K",
       likes: "89",
       date: "2024-01-15",
-      type: "Partido Completo",
+      type: "Full Match",
       platform: "YouTube",
     },
     {
       id: 2,
-      title: "Top 10 Goles de la Temporada 5",
+      title: "Top 10 Goals of Season 5",
       thumbnail: "/placeholder.svg?height=200&width=350",
       duration: "8:45",
       views: "3.5K",
@@ -30,7 +30,7 @@ export default function GalleryPage() {
     },
     {
       id: 3,
-      title: "Stream en Vivo - Jornada 8",
+      title: "Live Stream - Matchday 8",
       thumbnail: "/placeholder.svg?height=200&width=350",
       duration: "2:15:20",
       views: "892",
@@ -41,18 +41,18 @@ export default function GalleryPage() {
     },
     {
       id: 4,
-      title: "Entrevista con xXProGamerXx",
+      title: "Interview with xXProGamerXx",
       thumbnail: "/placeholder.svg?height=200&width=350",
       duration: "12:18",
       views: "1.8K",
       likes: "72",
       date: "2024-01-05",
-      type: "Entrevista",
+      type: "Interview",
       platform: "YouTube",
     },
     {
       id: 5,
-      title: "Mejores Jugadas - Semana 7",
+      title: "Best Plays - Week 7",
       thumbnail: "/placeholder.svg?height=200&width=350",
       duration: "6:33",
       views: "2.7K",
@@ -77,7 +77,7 @@ export default function GalleryPage() {
   const memes = [
     {
       id: 1,
-      title: "Cuando tu equipo va perdiendo 3-0",
+      title: "When your team is losing 3-0",
       image: "/placeholder.svg?height=300&width=300",
       likes: "234",
       comments: "45",
@@ -98,7 +98,7 @@ export default function GalleryPage() {
     },
     {
       id: 4,
-      title: "La cara del rival cuando haces un hat-trick",
+      title: "Your opponent's face when you score a hat-trick",
       image: "/placeholder.svg?height=300&width=300",
       likes: "156",
       comments: "28",
@@ -111,10 +111,10 @@ export default function GalleryPage() {
       <section className="py-16 bg-black/20">
         <div className="container mx-auto px-4 text-center">
           <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-4">
-            Explora todas las temporadas regulares, Summer Cups y Nations Cup de la Futsal Fusion League
+            Explore all regular seasons, Summer Cups, and Nations Cups of the Futsal Fusion League
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            Revive los mejores momentos, highlights y contenido de la comunidad de la FFL.
+            Relive the best moments, highlights, and community content from FFL.
           </p>
         </div>
       </section>
@@ -124,7 +124,7 @@ export default function GalleryPage() {
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-white mb-8 flex items-center">
             <Play className="mr-3 h-8 w-8 text-red-400" />
-            Videos y Streams
+            Videos and Streams
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {videos.map((video) => (
@@ -143,7 +143,7 @@ export default function GalleryPage() {
                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <Button size="lg" className="bg-red-600 hover:bg-red-700">
                       <Play className="mr-2 h-5 w-5" />
-                      Reproducir
+                      Play
                     </Button>
                   </div>
                   <div className="absolute bottom-2 right-2 bg-black/80 text-white text-xs px-2 py-1 rounded">
@@ -192,7 +192,7 @@ export default function GalleryPage() {
         <div className="container mx-auto px-4">
           <h2 className="text-3xl font-bold text-white mb-8 flex items-center">
             <span className="mr-3 text-3xl">😂</span>
-            Memes de la Comunidad
+            Community Memes
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {memes.map((meme) => (
@@ -236,18 +236,18 @@ export default function GalleryPage() {
       {/* Featured Content */}
       <section className="py-16">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-white mb-8 text-center">Contenido Destacado</h2>
+          <h2 className="text-3xl font-bold text-white mb-8 text-center">Featured Content</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
             {/* Featured Video */}
             <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-cyan-500/20">
               <CardHeader>
-                <CardTitle className="text-xl text-cyan-400">🔥 Video Destacado</CardTitle>
+                <CardTitle className="text-xl text-cyan-400">🔥 Featured video</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="relative mb-4">
                   <Image
                     src="/placeholder.svg?height=250&width=400"
-                    alt="Video Destacado"
+                    alt="Featured video"
                     width={400}
                     height={250}
                     className="w-full h-48 object-cover rounded-lg"
@@ -255,18 +255,18 @@ export default function GalleryPage() {
                   <div className="absolute inset-0 bg-black/40 rounded-lg flex items-center justify-center">
                     <Button size="lg" className="bg-red-600 hover:bg-red-700">
                       <Play className="mr-2 h-6 w-6" />
-                      Ver Ahora
+                      Watch now
                     </Button>
                   </div>
                 </div>
-                <h3 className="text-white font-bold mb-2">Final de Temporada 4 - Partido Legendario</h3>
+                <h3 className="text-white font-bold mb-2">Season 4 Final - Legendary Match</h3>
                 <p className="text-gray-400 text-sm mb-4">
                   Revive el emocionante partido final entre Digital Kings y Thunder Bolts que decidió el campeón de la
                   temporada anterior.
                 </p>
                 <div className="flex items-center justify-between text-sm text-gray-400">
                   <span>45:23 min</span>
-                  <span>15.2K visualizaciones</span>
+                  <span>15.2K views</span>
                 </div>
               </CardContent>
             </Card>
@@ -291,7 +291,7 @@ export default function GalleryPage() {
                     <span className="text-white text-xs">LIVE</span>
                   </div>
                   <div className="flex-1">
-                    <h4 className="text-white font-medium text-sm">Stream Highlights - Jornada 9</h4>
+                    <h4 className="text-white font-medium text-sm">Stream Highlights - Matchday 9</h4>
                     <p className="text-gray-400 text-xs">5.2K views • hace 1 día</p>
                   </div>
                 </div>

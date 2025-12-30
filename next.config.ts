@@ -5,6 +5,20 @@ const nextConfig: NextConfig = {
   env: {
     MONGODB_URI: process.env.MONGODB_URI,
   },
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn.discordapp.com',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'twemoji.maxcdn.com',
+        pathname: '/**',
+      },
+    ],
+  },
   // Otras configuraciones...
 };
 

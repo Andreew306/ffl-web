@@ -19,6 +19,7 @@ export interface IPlayerMatchStats extends Document {
   kicks: number;
   passes: number;
   shotsOnGoal: number;
+  shotsOffGoal?: number;
   shotsDefended: number;
   goalsConceded: number;
   cs: number;
@@ -49,6 +50,7 @@ const playerMatchStatsSchema = new Schema<IPlayerMatchStats>({
   kicks: { type: Number, default: 0 },
   passes: { type: Number, default: 0 },
   shotsOnGoal: { type: Number, default: 0 },
+  shotsOffGoal: { type: Number, default: 0 },
   shotsDefended: { type: Number, default: 0 },
   goalsConceded: { type: Number, default: 0 },
   cs: { type: Number, default: 0 },

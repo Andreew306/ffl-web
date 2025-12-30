@@ -27,7 +27,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
       <section className="py-16 bg-black/20 text-center">
-        <Badge variant="default" className="mb-4">{season?.status || 'Desconocido'}</Badge>
+        <Badge variant="default" className="mb-4">{season?.status || 'Unknown'}</Badge>
         <h1 className="text-5xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent mb-4">
           {season?.competitionName || 'Competición'}
         </h1>
@@ -37,7 +37,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
             <span>{season?.startDate ? new Date(season.startDate).toLocaleDateString() : '-'} - {season?.endDate ? new Date(season.endDate).toLocaleDateString() : '-'}</span>
           </div>
           <div className="flex items-center space-x-2">
-            <Badge variant="outline">{teams.length} equipos</Badge>
+            <Badge variant="outline">{teams.length} teams</Badge>
           </div>
         </div>
       </section>
@@ -46,13 +46,13 @@ export default function SeasonDetailPage({ season }: { season: any }) {
       <section className="py-16 container mx-auto px-4">
         <Tabs defaultValue="teams" className="w-full">
           <TabsList className="grid w-full grid-cols-4 bg-slate-800 mb-8">
-            <TabsTrigger value="teams" className="data-[state=active]:bg-cyan-600">Equipos</TabsTrigger>
-            <TabsTrigger value="standings" className="data-[state=active]:bg-cyan-600">Clasificación</TabsTrigger>
-            <TabsTrigger value="matches" className="data-[state=active]:bg-cyan-600">Partidos</TabsTrigger>
-            <TabsTrigger value="statistics" className="data-[state=active]:bg-cyan-600">Estadísticas</TabsTrigger>
+            <TabsTrigger value="teams" className="data-[state=active]:bg-cyan-600">Teams</TabsTrigger>
+            <TabsTrigger value="standings" className="data-[state=active]:bg-cyan-600">Standings</TabsTrigger>
+            <TabsTrigger value="matches" className="data-[state=active]:bg-cyan-600">Matches</TabsTrigger>
+            <TabsTrigger value="statistics" className="data-[state=active]:bg-cyan-600">Statistics</TabsTrigger>
           </TabsList>
 
-{/* Equipos */}
+{/* Teams */}
 <TabsContent value="teams">
   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
     {teams.map(team => (
@@ -60,19 +60,19 @@ export default function SeasonDetailPage({ season }: { season: any }) {
         <CardContent className="p-6 text-center">
           <Image
             src={team.team_id?.logo || "/placeholder.svg"}
-            alt={team.team_id?.teamName || "Equipo"}
+            alt={team.team_id?.teamName || "Team"}
             width={60}
             height={60}
             className="mx-auto mb-4 rounded-full border-2 border-cyan-400"
           />
-          <h3 className="text-lg font-bold text-white mb-2">{team.team_id?.teamName || "Equipo"}</h3>
+          <h3 className="text-lg font-bold text-white mb-2">{team.team_id?.teamName || "Team"}</h3>
           <div className="space-y-1 text-sm text-gray-400">
-            <p className="text-xs">{team.players || 0} jugadores</p>
+            <p className="text-xs">{team.players || 0} players</p>
             <p>{(team.matchesWon || 0)}V - {(team.matchesDraw || 0)}D - {(team.matchesLost || 0)}L</p>
           </div>
           <Link href={`/teams/${team.team_id?._id || ""}`}>
             <Button className="w-full mt-4 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600">
-              Ver Equipo
+              View Team
             </Button>
           </Link>
         </CardContent>
@@ -88,7 +88,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
   <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-cyan-500/20">
     <CardHeader>
       <CardTitle className="text-2xl font-bold text-cyan-400 flex items-center">
-        <Trophy className="mr-2 h-6 w-6" /> Tabla de Posiciones
+        <Trophy className="mr-2 h-6 w-6" /> Standings table
       </CardTitle>
     </CardHeader>
     <CardContent>
@@ -97,14 +97,14 @@ export default function SeasonDetailPage({ season }: { season: any }) {
           <thead>
             <tr className="border-b border-gray-700 text-left">
               <th>#</th>
-              <th>Equipo</th>
-              <th>PJ</th>
-              <th>V</th>
-              <th>E</th>
+              <th>Team</th>
+              <th>MP</th>
+              <th>W</th>
               <th>D</th>
+              <th>L</th>
               <th>GF</th>
-              <th>GC</th>
-              <th>DG</th>
+              <th>GA</th>
+              <th>GD</th>
               <th>Pts</th>
             </tr>
           </thead>
@@ -144,7 +144,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
 
 
 
-          {/* Partidos */}
+          {/* Matches */}
 <TabsContent value="matches">
   <div className="space-y-6">
     {matches.map(match => (
@@ -159,7 +159,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
         </div>
         <div className="flex items-center justify-between mt-4">
           <div className="flex items-center space-x-4">
-            {/* Equipo 1 */}
+            {/* Team 1 */}
             <div className="flex items-center space-x-2">
               <Image
                 src={match.team1?.logo || "/placeholder.svg"}
@@ -178,7 +178,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
               </span>
             </div>
 
-            {/* Equipo 2 */}
+            {/* Team 2 */}
             <div className="flex items-center space-x-2">
               <Image
                 src={match.team2?.logo || "/placeholder.svg"}
@@ -204,18 +204,18 @@ export default function SeasonDetailPage({ season }: { season: any }) {
 
     <Tabs defaultValue="goals" className="w-full">
       <TabsList className="grid grid-cols-3 gap-1 mb-2 bg-slate-800">
-        <TabsTrigger value="goals" className="data-[state=active]:bg-cyan-600">Top Goles</TabsTrigger>
-        <TabsTrigger value="assists" className="data-[state=active]:bg-purple-600">Top Asistencias</TabsTrigger>
+        <TabsTrigger value="goals" className="data-[state=active]:bg-cyan-600">Top Goals</TabsTrigger>
+        <TabsTrigger value="assists" className="data-[state=active]:bg-purple-600">Top Assists</TabsTrigger>
         <TabsTrigger value="cs" className="data-[state=active]:bg-cyan-400">Top CS</TabsTrigger>
       </TabsList>
 
-      {/* Top Goles */}
+      {/* Top Goals */}
       <TabsContent value="goals">
         <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-green-500/20 mb-2">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-green-400 flex items-center">
               <Target className="mr-2 h-6 w-6" />
-              Top Goleadores
+              Top Scorers
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -238,23 +238,23 @@ export default function SeasonDetailPage({ season }: { season: any }) {
                         className="rounded-sm"
                       />
                     )}
-                    <span className="text-white font-medium">{p.player_id?.playerName || "Jugador"}</span>
+                    <span className="text-white font-medium">{p.player_id?.playerName || "Player"}</span>
                   </div>
                 </div>
-                <p className="text-green-400 font-bold">{p.goals || 0} goles</p>
+                <p className="text-green-400 font-bold">{p.goals || 0} goals</p>
               </div>
             ))}
           </CardContent>
         </Card>
       </TabsContent>
 
-      {/* Top Asistencias */}
+      {/* Top Assists */}
       <TabsContent value="assists">
         <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-purple-500/20 mb-2">
           <CardHeader>
             <CardTitle className="text-2xl font-bold text-purple-400 flex items-center">
               <Award className="mr-2 h-6 w-6" />
-              Top Asistidores
+              Top Assist Providers
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -277,10 +277,10 @@ export default function SeasonDetailPage({ season }: { season: any }) {
                         className="rounded-sm"
                       />
                     )}
-                    <span className="text-white font-medium">{p.player_id?.playerName || "Jugador"}</span>
+                    <span className="text-white font-medium">{p.player_id?.playerName || "Player"}</span>
                   </div>
                 </div>
-                <p className="text-purple-400 font-bold">{p.assists || 0} asistencias</p>
+                <p className="text-purple-400 font-bold">{p.assists || 0} assists</p>
               </div>
             ))}
           </CardContent>
@@ -316,7 +316,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
                         className="rounded-sm"
                       />
                     )}
-                    <span className="text-white font-medium">{p.player_id?.playerName || "Jugador"}</span>
+                    <span className="text-white font-medium">{p.player_id?.playerName || "Player"}</span>
                   </div>
                 </div>
                 <p className="text-cyan-400 font-bold">{p.cs || 0} CS</p>
@@ -332,18 +332,18 @@ export default function SeasonDetailPage({ season }: { season: any }) {
       <CardHeader>
         <CardTitle className="text-2xl font-bold text-yellow-400 flex items-center">
           <BarChart className="mr-2 h-6 w-6" />
-          Estadísticas de Temporada
+          Season Statistics
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="grid grid-cols-2 gap-4">
           <div className="text-center">
             <p className="text-3xl font-bold text-cyan-400">{season.statistics?.matchesPlayed || 0}</p>
-            <p className="text-gray-400 text-sm">Partidos Jugados</p>
+            <p className="text-gray-400 text-sm">Matches Jugados</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-green-400">{season.statistics?.goals || 0}</p>
-            <p className="text-gray-400 text-sm">Goles Totales</p>
+            <p className="text-gray-400 text-sm">Total goals</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-purple-400">
@@ -351,11 +351,11 @@ export default function SeasonDetailPage({ season }: { season: any }) {
                 ? (season.statistics.goals / season.statistics.matchesPlayed).toFixed(2)
                 : "0"}
             </p>
-            <p className="text-gray-400 text-sm">Goles por Partido</p>
+            <p className="text-gray-400 text-sm">Goals per match</p>
           </div>
           <div className="text-center">
             <p className="text-3xl font-bold text-yellow-400">{season.statistics?.activePlayers || 0}</p>
-            <p className="text-gray-400 text-sm">Jugadores Activos</p>
+            <p className="text-gray-400 text-sm">Playeres Activos</p>
           </div>
         </div>
       </CardContent>

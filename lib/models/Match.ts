@@ -16,6 +16,7 @@ export interface IMatch extends Document {
   score_team1: number;
   score_team2: number;
   goalsDetails: IGoalDetail[];
+  comments?: string;
 }
 
 const goalDetailSchema = new Schema<IGoalDetail>({
@@ -34,6 +35,7 @@ const matchSchema = new Schema<IMatch>({
   score_team1: { type: Number, default: 0 },
   score_team2: { type: Number, default: 0 },
   goalsDetails: { type: [goalDetailSchema], default: [] },
+  comments: { type: String },
 });
 
 const MatchModel = models.Match || mongoose.model<IMatch>("Match", matchSchema);

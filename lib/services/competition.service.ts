@@ -44,7 +44,9 @@ export class CompetitionService {
 
   static async getCompetitionById(id: string): Promise<FormattedCompetition | null> {
     await connectDB();
-    const competition = await Competition.findById(id)
+    const competition = await Competition.findOne({
+      $or: [{ competition_id: id }, { _id: id }],
+    })
       .populate('champion_team_id', 'name');
     
     return competition ? formatCompetition(competition) : null;

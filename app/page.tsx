@@ -1,144 +1,1180 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, Users, Calendar, TrendingUp, Play, Star } from "lucide-react"
+import { Trophy, Users, Calendar, Play, Star } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
+import connectDB from "@/lib/db/mongoose"
+import TeamModel from "@/lib/models/Team"
+import PlayerModel from "@/lib/models/Player"
+import MatchModel from "@/lib/models/Match"
+import CompetitionModel from "@/lib/models/Competition"
+import PlayerCompetitionModel from "@/lib/models/PlayerCompetition"
+import PlayerMatchStatsModel from "@/lib/models/PlayerMatchStats"
+import HistoricMatches from "@/components/historic-matches"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { formatMinutesSeconds } from "@/lib/utils"
+import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 
-export default function HomePage() {
-  const recentMatches = [
+function getTwemojiUrl(emoji: string) {
+  if (!emoji) return ""
+  const codePoints = Array.from(emoji)
+    .map((c) => c.codePointAt(0)?.toString(16))
+    .join("-")
+  return `https://twemoji.maxcdn.com/v/latest/72x72/${codePoints}.png`
+}
+
+export default async function HomePage() {
+  await connectDB()
+  const [teamCount, playerCount, matchCount, competitionCount] = await Promise.all([
+    TeamModel.countDocuments(),
+    PlayerModel.countDocuments(),
+    MatchModel.countDocuments(),
+    CompetitionModel.countDocuments(),
+  ])
+  const historicMatches = await MatchModel.find({
+    comments: { $regex: "Historic", $options: "i" },
+  })
+    .sort({ date: -1 })
+    .limit(5)
+    .populate({
+      path: "team1_competition_id",
+      populate: { path: "team_id" },
+    })
+    .populate({
+      path: "team2_competition_id",
+      populate: { path: "team_id" },
+    })
+    .lean()
+
+  const scoringFeats = await PlayerMatchStatsModel.aggregate([
     {
-      id: 1,
-      team1: { name: "Thunder Bolts", logo: "/placeholder.svg?height=40&width=40", score: 4 },
-      team2: { name: "Neon Strikers", logo: "/placeholder.svg?height=40&width=40", score: 2 },
-      date: "2024-01-15",
-      status: "Finalizado",
+      $group: {
+        _id: { pc: "$player_competition_id", match: "$match_id" },
+        goals: { $max: "$goals" },
+      },
     },
     {
-      id: 2,
-      team1: { name: "Cyber Wolves", logo: "/placeholder.svg?height=40&width=40", score: 1 },
-      team2: { name: "Digital Kings", logo: "/placeholder.svg?height=40&width=40", score: 3 },
-      date: "2024-01-14",
-      status: "Finalizado",
+      $project: {
+        pc: "$_id.pc",
+        goals: 1,
+      },
     },
     {
-      id: 3,
-      team1: { name: "Pixel Warriors", logo: "/placeholder.svg?height=40&width=40", score: null },
-      team2: { name: "Elite Squad", logo: "/placeholder.svg?height=40&width=40", score: null },
-      date: "2024-01-20",
-      status: "Próximo",
+      $group: {
+        _id: "$pc",
+        braces: { $sum: { $cond: [{ $eq: ["$goals", 2] }, 1, 0] } },
+        hatTricks: { $sum: { $cond: [{ $eq: ["$goals", 3] }, 1, 0] } },
+        pokers: { $sum: { $cond: [{ $gte: ["$goals", 4] }, 1, 0] } },
+      },
+    },
+    {
+      $lookup: {
+        from: "playercompetitions",
+        localField: "_id",
+        foreignField: "_id",
+        as: "pc",
+      },
+    },
+    { $unwind: { path: "$pc", preserveNullAndEmptyArrays: false } },
+    {
+      $group: {
+        _id: "$pc.player_id",
+        braces: { $sum: "$braces" },
+        hatTricks: { $sum: "$hatTricks" },
+        pokers: { $sum: "$pokers" },
+      },
+    },
+  ])
+  const teamGoalsByPlayerRaw = await PlayerMatchStatsModel.aggregate([
+    {
+      $lookup: {
+        from: "playercompetitions",
+        localField: "player_competition_id",
+        foreignField: "_id",
+        as: "playerCompetition",
+      },
+    },
+    { $unwind: { path: "$playerCompetition", preserveNullAndEmptyArrays: false } },
+    {
+      $project: {
+        playerId: "$playerCompetition.player_id",
+        matchId: "$match_id",
+        teamCompetitionId: "$team_competition_id",
+      },
+    },
+    {
+      $group: {
+        _id: {
+          playerId: "$playerId",
+          matchId: "$matchId",
+          teamCompetitionId: "$teamCompetitionId",
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "goals",
+        let: { matchId: "$_id.matchId", teamCompetitionId: "$_id.teamCompetitionId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$match_id", "$$matchId"] },
+                  { $eq: ["$team_competition_id", "$$teamCompetitionId"] },
+                ],
+              },
+            },
+          },
+          { $count: "goals" },
+        ],
+        as: "matchGoals",
+      },
+    },
+    {
+      $addFields: {
+        goals: { $ifNull: [{ $arrayElemAt: ["$matchGoals.goals", 0] }, 0] },
+      },
+    },
+    {
+      $group: {
+        _id: "$_id.playerId",
+        teamGoals: { $sum: "$goals" },
+      },
+    },
+  ])
+  const teamTotalsRaw = await TeamCompetitionModel.aggregate([
+    {
+      $group: {
+        _id: "$team_id",
+        matchesPlayed: { $sum: "$matches_played" },
+        matchesWon: { $sum: "$matches_won" },
+        matchesDraw: { $sum: "$matches_draw" },
+        matchesLost: { $sum: "$matches_lost" },
+        goalsScored: { $sum: "$goals_scored" },
+        goalsConceded: { $sum: "$goals_conceded" },
+        points: { $sum: "$points" },
+        possessionAvg: { $avg: "$possession_avg" },
+        kicks: { $sum: "$kicks" },
+        passes: { $sum: "$passes" },
+        shotsOnGoal: { $sum: "$shots_on_goal" },
+        shotsOffGoal: { $sum: "$shots_off_goal" },
+        saves: { $sum: "$saves" },
+        cs: { $sum: "$cs" },
+      },
+    },
+    {
+      $lookup: {
+        from: "teams",
+        localField: "_id",
+        foreignField: "_id",
+        as: "team",
+      },
+    },
+    { $unwind: { path: "$team", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        teamId: "$_id",
+        teamName: "$team.teamName",
+        teamAltName: "$team.team_name",
+        country: "$team.country",
+        matchesPlayed: 1,
+        matchesWon: 1,
+        matchesDraw: 1,
+        matchesLost: 1,
+        goalsScored: 1,
+        goalsConceded: 1,
+        points: 1,
+        possessionAvg: 1,
+        kicks: 1,
+        passes: 1,
+        shotsOnGoal: 1,
+        shotsOffGoal: 1,
+        saves: 1,
+        cs: 1,
+      },
+    },
+  ])
+  const playerTotalsRaw = await PlayerCompetitionModel.aggregate([
+    {
+      $lookup: {
+        from: "teamcompetitions",
+        localField: "team_competition_id",
+        foreignField: "_id",
+        as: "teamCompetition",
+      },
+    },
+    { $unwind: { path: "$teamCompetition", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "competitions",
+        localField: "teamCompetition.competition_id",
+        foreignField: "_id",
+        as: "competition",
+      },
+    },
+    { $unwind: { path: "$competition", preserveNullAndEmptyArrays: true } },
+    {
+      $addFields: {
+        competitionStart: { $ifNull: ["$competition.start_date", new Date(0)] },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          playerId: "$player_id",
+          teamCompetitionId: "$team_competition_id",
+          competitionStart: "$competitionStart",
+        },
+        matchesPlayedTeam: { $sum: "$matches_played" },
+        matchesWon: { $sum: "$matches_won" },
+        matchesDraw: { $sum: "$matches_draw" },
+        matchesLost: { $sum: "$matches_lost" },
+        starter: { $sum: "$starter" },
+        substitute: { $sum: "$substitute" },
+        minutesPlayed: { $sum: "$minutes_played" },
+        goals: { $sum: "$goals" },
+        assists: { $sum: "$assists" },
+        preassists: { $sum: "$preassists" },
+        kicks: { $sum: "$kicks" },
+        passes: { $sum: "$passes" },
+        passesForward: { $sum: "$passes_forward" },
+        passesLateral: { $sum: "$passes_lateral" },
+        passesBackward: { $sum: "$passes_backward" },
+        keypass: { $sum: "$keypass" },
+        autopass: { $sum: "$autopass" },
+        misspass: { $sum: "$misspass" },
+        shotsOnGoal: { $sum: "$shots_on_goal" },
+        shotsOffGoal: { $sum: "$shots_off_goal" },
+        shotsDefended: { $sum: "$shotsDefended" },
+        saves: { $sum: "$saves" },
+        recoveries: { $sum: "$recoveries" },
+        clearances: { $sum: "$clearances" },
+        goalsConceded: { $sum: "$goals_conceded" },
+        cs: {
+          $sum: {
+            $cond: [
+              { $eq: [{ $toUpper: { $ifNull: ["$position", ""] } }, "GK"] },
+              { $ifNull: ["$cs", 0] },
+              0,
+            ],
+          },
+        },
+        owngoals: { $sum: "$owngoals" },
+        avgSum: { $sum: "$avg" },
+        avgCount: { $sum: 1 },
+        TOTW: { $sum: "$TOTW" },
+        MVP: { $sum: "$MVP" },
+        hasGK: { $max: { $cond: [{ $eq: [{ $toUpper: { $ifNull: ["$position", ""] } }, "GK"] }, 1, 0] } },
+      },
+    },
+    { $sort: { "_id.competitionStart": -1, matchesPlayedTeam: -1 } },
+    {
+      $group: {
+        _id: "$_id.playerId",
+        teamCompetitionId: { $first: "$_id.teamCompetitionId" },
+        matchesPlayed: { $sum: "$matchesPlayedTeam" },
+        matchesWon: { $sum: "$matchesWon" },
+        matchesDraw: { $sum: "$matchesDraw" },
+        matchesLost: { $sum: "$matchesLost" },
+        starter: { $sum: "$starter" },
+        substitute: { $sum: "$substitute" },
+        minutesPlayed: { $sum: "$minutesPlayed" },
+        goals: { $sum: "$goals" },
+        assists: { $sum: "$assists" },
+        preassists: { $sum: "$preassists" },
+        kicks: { $sum: "$kicks" },
+        passes: { $sum: "$passes" },
+        passesForward: { $sum: "$passesForward" },
+        passesLateral: { $sum: "$passesLateral" },
+        passesBackward: { $sum: "$passesBackward" },
+        keypass: { $sum: "$keypass" },
+        autopass: { $sum: "$autopass" },
+        misspass: { $sum: "$misspass" },
+        shotsOnGoal: { $sum: "$shotsOnGoal" },
+        shotsOffGoal: { $sum: "$shotsOffGoal" },
+        shotsDefended: { $sum: "$shotsDefended" },
+        saves: { $sum: "$saves" },
+        recoveries: { $sum: "$recoveries" },
+        clearances: { $sum: "$clearances" },
+        goalsConceded: { $sum: "$goalsConceded" },
+        cs: { $sum: "$cs" },
+        owngoals: { $sum: "$owngoals" },
+        avgSum: { $sum: "$avgSum" },
+        avgCount: { $sum: "$avgCount" },
+        TOTW: { $sum: "$TOTW" },
+        MVP: { $sum: "$MVP" },
+        hasGK: { $max: "$hasGK" },
+      },
+    },
+    {
+      $lookup: {
+        from: "players",
+        localField: "_id",
+        foreignField: "_id",
+        as: "player",
+      },
+    },
+    { $unwind: { path: "$player", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "teamcompetitions",
+        localField: "teamCompetitionId",
+        foreignField: "_id",
+        as: "teamCompetition",
+      },
+    },
+    { $unwind: { path: "$teamCompetition", preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: "teams",
+        localField: "teamCompetition.team_id",
+        foreignField: "_id",
+        as: "team",
+      },
+    },
+    { $unwind: { path: "$team", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: 0,
+        playerId: "$_id",
+        playerName: "$player.player_name",
+        country: "$player.country",
+        teamName: "$team.teamName",
+        teamAltName: "$team.team_name",
+        matchesPlayed: 1,
+        matchesWon: 1,
+        matchesDraw: 1,
+        matchesLost: 1,
+        starter: 1,
+        substitute: 1,
+        minutesPlayed: 1,
+        goals: 1,
+        assists: 1,
+        preassists: 1,
+        kicks: 1,
+        passes: 1,
+        passesForward: 1,
+        passesLateral: 1,
+        passesBackward: 1,
+        keypass: 1,
+        autopass: 1,
+        misspass: 1,
+        shotsOnGoal: 1,
+        shotsOffGoal: 1,
+        shotsDefended: 1,
+        saves: 1,
+        recoveries: 1,
+        clearances: 1,
+        goalsConceded: 1,
+        cs: 1,
+        owngoals: 1,
+        avgSum: 1,
+        avgCount: 1,
+        TOTW: 1,
+        MVP: 1,
+        hasGK: 1,
+      },
+    },
+  ])
+
+  const scoringFeatsByPlayer = new Map<string, { braces: number; hatTricks: number; pokers: number }>()
+  scoringFeats.forEach((row: any) => {
+    if (!row?._id) return
+    scoringFeatsByPlayer.set(String(row._id), {
+      braces: Number(row.braces ?? 0),
+      hatTricks: Number(row.hatTricks ?? 0),
+      pokers: Number(row.pokers ?? 0),
+    })
+  })
+  const teamGoalsByPlayer = new Map<string, number>()
+  teamGoalsByPlayerRaw.forEach((row: any) => {
+    if (!row?._id) return
+    teamGoalsByPlayer.set(String(row._id), Number(row.teamGoals ?? 0))
+  })
+
+  const safeDivide = (numerator: number, denominator: number) =>
+    denominator > 0 ? numerator / denominator : 0
+
+  const players = playerTotalsRaw.map((row: any) => ({
+    id: row.playerId?.toString() || "",
+    name: row.playerName || "Player",
+    country: row.country || "",
+    team: row.teamName || row.teamAltName || "Team",
+    matchesPlayed: Number(row.matchesPlayed ?? 0),
+    matchesWon: Number(row.matchesWon ?? 0),
+    matchesDraw: Number(row.matchesDraw ?? 0),
+    matchesLost: Number(row.matchesLost ?? 0),
+    starter: Number(row.starter ?? 0),
+    substitute: Number(row.substitute ?? 0),
+    minutesPlayed: Number(row.minutesPlayed ?? 0),
+    goals: Number(row.goals ?? 0),
+    assists: Number(row.assists ?? 0),
+    preassists: Number(row.preassists ?? 0),
+    kicks: Number(row.kicks ?? 0),
+    passes: Number(row.passes ?? 0),
+    passesForward: Number(row.passesForward ?? 0),
+    passesLateral: Number(row.passesLateral ?? 0),
+    passesBackward: Number(row.passesBackward ?? 0),
+    keypass: Number(row.keypass ?? 0),
+    autopass: Number(row.autopass ?? 0),
+    misspass: Number(row.misspass ?? 0),
+    shotsOnGoal: Number(row.shotsOnGoal ?? 0),
+    shotsOffGoal: Number(row.shotsOffGoal ?? 0),
+    shotsDefended: Number(row.shotsDefended ?? 0),
+    saves: Number(row.saves ?? 0),
+    recoveries: Number(row.recoveries ?? 0),
+    clearances: Number(row.clearances ?? 0),
+    goalsConceded: Number(row.goalsConceded ?? 0),
+    cs: Number(row.cs ?? 0),
+    owngoals: Number(row.owngoals ?? 0),
+    teamGoals: teamGoalsByPlayer.get(String(row.playerId)) ?? 0,
+    braces: scoringFeatsByPlayer.get(String(row.playerId))?.braces ?? 0,
+    hatTricks: scoringFeatsByPlayer.get(String(row.playerId))?.hatTricks ?? 0,
+    pokers: scoringFeatsByPlayer.get(String(row.playerId))?.pokers ?? 0,
+    avg: safeDivide(Number(row.avgSum ?? 0), Number(row.avgCount ?? 1)),
+    TOTW: Number(row.TOTW ?? 0),
+    MVP: Number(row.MVP ?? 0),
+    hasGK: Boolean(row.hasGK),
+  }))
+  const teams = teamTotalsRaw.map((row: any) => ({
+    id: row.teamId?.toString() || "",
+    name: row.teamName || row.teamAltName || "Team",
+    country: row.country || "",
+    matchesPlayed: Number(row.matchesPlayed ?? 0),
+    matchesWon: Number(row.matchesWon ?? 0),
+    matchesDraw: Number(row.matchesDraw ?? 0),
+    matchesLost: Number(row.matchesLost ?? 0),
+    goalsScored: Number(row.goalsScored ?? 0),
+    goalsConceded: Number(row.goalsConceded ?? 0),
+    points: Number(row.points ?? 0),
+    possessionAvg: Number(row.possessionAvg ?? 0),
+    kicks: Number(row.kicks ?? 0),
+    passes: Number(row.passes ?? 0),
+    shotsOnGoal: Number(row.shotsOnGoal ?? 0),
+    shotsOffGoal: Number(row.shotsOffGoal ?? 0),
+    saves: Number(row.saves ?? 0),
+    cs: Number(row.cs ?? 0),
+  }))
+
+  const metricGroups = [
+    {
+      key: "impact",
+      label: "Impact",
+      metrics: [
+        { key: "games", label: "Games", format: "number", value: (p: any) => p.matchesPlayed },
+        { key: "won", label: "Won", format: "number", value: (p: any) => p.matchesWon },
+        { key: "draw", label: "Draw", format: "number", value: (p: any) => p.matchesDraw },
+        { key: "lost", label: "Lost", format: "number", value: (p: any) => p.matchesLost },
+        {
+          key: "win_rate",
+          label: "Win rate",
+          format: "percent",
+          value: (p: any) => safeDivide(p.matchesWon, p.matchesPlayed),
+        },
+        { key: "avg", label: "Avg", format: "decimal", value: (p: any) => p.avg },
+        {
+          key: "gap",
+          label: "G/A/P",
+          format: "number",
+          value: (p: any) => p.goals + p.assists + p.preassists,
+        },
+        {
+          key: "gi",
+          label: "Team GI",
+          format: "percent",
+          value: (p: any) =>
+            safeDivide(p.goals + p.assists + p.preassists, p.teamGoals),
+        },
+        { key: "totw", label: "TOTW", format: "number", value: (p: any) => p.TOTW },
+        { key: "mvp", label: "MVP", format: "number", value: (p: any) => p.MVP },
+      ],
+    },
+    {
+      key: "finishing",
+      label: "Finishing",
+      metrics: [
+        { key: "goals", label: "Goals", format: "number", value: (p: any) => p.goals },
+        { key: "braces", label: "Braces", format: "number", value: (p: any) => p.braces },
+        {
+          key: "hat_tricks",
+          label: "Hat tricks",
+          format: "number",
+          value: (p: any) => p.hatTricks,
+        },
+        { key: "pokers", label: "Pokers", format: "number", value: (p: any) => p.pokers },
+        {
+          key: "shots_on",
+          label: "Shots on Goal",
+          format: "number",
+          value: (p: any) => p.shotsOnGoal,
+        },
+        {
+          key: "shots_off",
+          label: "Shots off Goal",
+          format: "number",
+          value: (p: any) => p.shotsOffGoal,
+        },
+        {
+          key: "shots_per_min",
+          label: "Shots per min",
+          format: "decimal",
+          value: (p: any) =>
+            safeDivide((p.shotsOnGoal + p.shotsOffGoal) * 60, p.minutesPlayed),
+        },
+        {
+          key: "on_target_pct",
+          label: "% on target",
+          format: "percent",
+          value: (p: any) =>
+            p.shotsOnGoal + p.shotsOffGoal >= 7
+              ? safeDivide(p.shotsOnGoal, p.shotsOnGoal + p.shotsOffGoal)
+              : 0,
+        },
+        {
+          key: "goal_accuracy",
+          label: "Goal accuracy",
+          format: "percent",
+          value: (p: any) =>
+            safeDivide(p.goals, p.shotsOnGoal + p.shotsOffGoal),
+        },
+        { key: "owngoals", label: "Owngoals", format: "number", value: (p: any) => p.owngoals },
+      ],
+    },
+    {
+      key: "passing",
+      label: "Passing",
+      metrics: [
+        { key: "assists", label: "Assists", format: "number", value: (p: any) => p.assists },
+        {
+          key: "preassists",
+          label: "Pre-Assists",
+          format: "number",
+          value: (p: any) => p.preassists,
+        },
+        { key: "passes", label: "Passes", format: "number", value: (p: any) => p.passes },
+        {
+          key: "passes_per_min",
+          label: "Passes per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.passes * 60, p.minutesPlayed),
+        },
+        {
+          key: "pass_accuracy",
+          label: "Pass accuracy",
+          format: "percent",
+          value: (p: any) => safeDivide(p.passes, p.passes + p.misspass),
+        },
+        { key: "keypasses", label: "Keypasses", format: "number", value: (p: any) => p.keypass },
+        {
+          key: "keypass_pct",
+          label: "% key passes",
+          format: "percent",
+          value: (p: any) => safeDivide(p.keypass, p.passes),
+        },
+        {
+          key: "autopasses",
+          label: "Autopasses",
+          format: "number",
+          value: (p: any) => p.autopass,
+        },
+        {
+          key: "autopass_pct",
+          label: "% autopass",
+          format: "percent",
+          value: (p: any) => safeDivide(p.autopass, p.kicks),
+        },
+      ],
+    },
+    {
+      key: "defense",
+      label: "Defense",
+      metrics: [
+        {
+          key: "recoveries",
+          label: "Recoveries",
+          format: "number",
+          value: (p: any) => p.recoveries,
+        },
+        {
+          key: "recoveries_per_min",
+          label: "Recoveries per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.recoveries * 60, p.minutesPlayed),
+        },
+        {
+          key: "clearances",
+          label: "Clearances",
+          format: "number",
+          value: (p: any) => p.clearances,
+        },
+        {
+          key: "clearances_per_min",
+          label: "Clearances per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.clearances * 60, p.minutesPlayed),
+        },
+        { key: "saves", label: "Saves", format: "number", value: (p: any) => p.saves },
+        {
+          key: "goals_conceded",
+          label: "Goals conceded",
+          format: "number",
+          value: (p: any) => p.goalsConceded,
+        },
+        {
+          key: "save_pct",
+          label: "% shots saved",
+          format: "percent",
+          value: (p: any) => safeDivide(p.saves, p.saves + p.goalsConceded),
+        },
+        {
+          key: "cs",
+          label: "Clean sheets",
+          format: "number",
+          value: (p: any) => p.cs,
+          gkOnly: true,
+        },
+        {
+          key: "cs_pct",
+          label: "% games with CS",
+          format: "percent",
+          value: (p: any) => safeDivide(p.cs, p.matchesPlayed),
+          gkOnly: true,
+        },
+      ],
+    },
+    {
+      key: "progression",
+      label: "Progression",
+      metrics: [
+        { key: "fwd", label: "Fwd", format: "number", value: (p: any) => p.passesForward },
+        {
+          key: "fwd_per_min",
+          label: "Fwd per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.passesForward * 60, p.minutesPlayed),
+        },
+        { key: "lat", label: "Lat", format: "number", value: (p: any) => p.passesLateral },
+        {
+          key: "lat_per_min",
+          label: "Lat per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.passesLateral * 60, p.minutesPlayed),
+        },
+        {
+          key: "back",
+          label: "Back",
+          format: "number",
+          value: (p: any) => p.passesBackward,
+        },
+        {
+          key: "back_per_min",
+          label: "Back per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.passesBackward * 60, p.minutesPlayed),
+        },
+        {
+          key: "fwd_back_balance",
+          label: "Fwd-Back balance",
+          format: "number",
+          value: (p: any) => p.passesForward - p.passesBackward,
+        },
+        {
+          key: "pct_forward",
+          label: "% forward",
+          format: "percent",
+          value: (p: any) => safeDivide(p.passesForward, p.passes),
+        },
+        {
+          key: "pct_lateral",
+          label: "% lateral",
+          format: "percent",
+          value: (p: any) => safeDivide(p.passesLateral, p.passes),
+        },
+        {
+          key: "pct_backward",
+          label: "% backward",
+          format: "percent",
+          value: (p: any) => safeDivide(p.passesBackward, p.passes),
+        },
+      ],
+    },
+    {
+      key: "physical",
+      label: "Physical",
+      metrics: [
+        {
+          key: "minutes",
+          label: "Minutes",
+          format: "time",
+          value: (p: any) => p.minutesPlayed,
+        },
+        {
+          key: "minutes_per_game",
+          label: "Minutes per game",
+          format: "time",
+          value: (p: any) => safeDivide(p.minutesPlayed, p.matchesPlayed),
+        },
+        { key: "starter", label: "Starter", format: "number", value: (p: any) => p.starter },
+        {
+          key: "substitute",
+          label: "Substitute",
+          format: "number",
+          value: (p: any) => p.substitute,
+        },
+        {
+          key: "starter_pct",
+          label: "% as starter",
+          format: "percent",
+          value: (p: any) => safeDivide(p.starter, p.matchesPlayed),
+        },
+        {
+          key: "substitute_pct",
+          label: "% as substitute",
+          format: "percent",
+          value: (p: any) => safeDivide(p.substitute, p.matchesPlayed),
+        },
+        { key: "kicks", label: "Kicks", format: "number", value: (p: any) => p.kicks },
+        {
+          key: "kicks_per_min",
+          label: "Kicks per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.kicks * 60, p.minutesPlayed),
+        },
+        {
+          key: "misspasses",
+          label: "Misspasses",
+          format: "number",
+          value: (p: any) => p.misspass,
+        },
+        {
+          key: "misspasses_per_min",
+          label: "Misspasses per min",
+          format: "decimal",
+          value: (p: any) => safeDivide(p.misspass * 60, p.minutesPlayed),
+        },
+      ],
+    },
+  ]
+  const teamMetricGroups = [
+    {
+      key: "impact",
+      label: "Impact",
+      metrics: [
+        { key: "games", label: "Games", format: "number", value: (t: any) => t.matchesPlayed },
+        { key: "won", label: "Won", format: "number", value: (t: any) => t.matchesWon },
+        { key: "draw", label: "Draw", format: "number", value: (t: any) => t.matchesDraw },
+        { key: "lost", label: "Lost", format: "number", value: (t: any) => t.matchesLost },
+        {
+          key: "win_rate",
+          label: "Win rate",
+          format: "percent",
+          value: (t: any) => safeDivide(t.matchesWon, t.matchesPlayed),
+        },
+      ],
+    },
+    {
+      key: "finishing",
+      label: "Finishing",
+      metrics: [
+        {
+          key: "goals_scored",
+          label: "Goals scored",
+          format: "number",
+          value: (t: any) => t.goalsScored,
+        },
+        {
+          key: "shots_on",
+          label: "Shots on Goal",
+          format: "number",
+          value: (t: any) => t.shotsOnGoal,
+        },
+        {
+          key: "shots_off",
+          label: "Shots off Goal",
+          format: "number",
+          value: (t: any) => t.shotsOffGoal,
+        },
+        {
+          key: "on_target_pct",
+          label: "% on target",
+          format: "percent",
+          value: (t: any) =>
+            safeDivide(t.shotsOnGoal, t.shotsOnGoal + t.shotsOffGoal),
+        },
+      ],
+    },
+    {
+      key: "passing",
+      label: "Passing",
+      metrics: [
+        { key: "passes", label: "Passes", format: "number", value: (t: any) => t.passes },
+        { key: "kicks", label: "Kicks", format: "number", value: (t: any) => t.kicks },
+        {
+          key: "possession",
+          label: "Possession",
+          format: "percent",
+          value: (t: any) => safeDivide(t.possessionAvg, 100),
+        },
+      ],
+    },
+    {
+      key: "defense",
+      label: "Defense",
+      metrics: [
+        {
+          key: "goals_conceded",
+          label: "Goals conceded",
+          format: "number",
+          value: (t: any) => t.goalsConceded,
+        },
+        { key: "saves", label: "Saves", format: "number", value: (t: any) => t.saves },
+        { key: "cs", label: "Clean sheets", format: "number", value: (t: any) => t.cs },
+      ],
     },
   ]
 
-  const leaderboard = [
-    { position: 1, team: "Digital Kings", points: 18, matches: 8, wins: 6, draws: 0, losses: 2 },
-    { position: 2, team: "Thunder Bolts", points: 15, matches: 8, wins: 5, draws: 0, losses: 3 },
-    { position: 3, team: "Neon Strikers", points: 12, matches: 8, wins: 4, draws: 0, losses: 4 },
-    { position: 4, team: "Cyber Wolves", points: 9, matches: 8, wins: 3, draws: 0, losses: 5 },
-  ]
+  const formatValue = (value: number, format: string) => {
+    if (!Number.isFinite(value)) return "-"
+    if (format === "time") {
+      return formatMinutesSeconds(value)
+    }
+    if (format === "percent") return `${(value * 100).toFixed(1)}%`
+    if (format === "decimal") return value.toFixed(2)
+    return Math.round(value).toString()
+  }
 
-  const topScorers = [
-    { name: "xXProGamerXx", team: "Digital Kings", goals: 12, flag: "🇪🇸" },
-    { name: "NeonMaster", team: "Thunder Bolts", goals: 10, flag: "🇧🇷" },
-    { name: "CyberStrike", team: "Neon Strikers", goals: 8, flag: "🇦🇷" },
-  ]
+  const buildTopRanking = (metric: any) => {
+    const rows = players
+      .filter((player) => player.matchesPlayed >= 7)
+      .filter((player) => !metric.gkOnly || player.hasGK)
+      .map((player) => {
+        const base = {
+          id: player.id,
+          name: player.name,
+          country: player.country,
+          team: player.team,
+          value: metric.value(player),
+        }
+        if (metric.key === "gap") {
+          return {
+            ...base,
+            goals: player.goals,
+            assists: player.assists,
+            preassists: player.preassists,
+          }
+        }
+        return base
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 30)
+
+    return rows
+  }
+  const buildTeamRanking = (metric: any) => {
+    const rows = teams
+      .map((team) => ({
+        id: team.id,
+        name: team.name,
+        country: team.country,
+        value: metric.value(team),
+        matchesWon: team.matchesWon,
+        matchesDraw: team.matchesDraw,
+        matchesLost: team.matchesLost,
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 30)
+
+    return rows
+  }
+
+  const rankingsByMetric = metricGroups.reduce<Record<string, any[]>>((acc, group) => {
+    group.metrics.forEach((metric: any) => {
+      acc[metric.key] = buildTopRanking(metric)
+    })
+    return acc
+  }, {})
+  const teamRankingsByMetric = teamMetricGroups.reduce<Record<string, any[]>>((acc, group) => {
+    group.metrics.forEach((metric: any) => {
+      acc[metric.key] = buildTeamRanking(metric)
+    })
+    return acc
+  }, {})
+
+  const renderRankingTabs = (
+    groups: typeof metricGroups,
+    rankings: Record<string, any[]>,
+    showGapDetails: boolean,
+    showTeamRecord: boolean
+  ) => (
+    <Tabs defaultValue={groups[0]?.key} className="w-full">
+      <TabsList className="grid grid-cols-3 gap-2 mb-4 bg-slate-950/60 md:grid-cols-6">
+        {groups.map((group) => (
+          <TabsTrigger
+            key={group.key}
+            value={group.key}
+            className="data-[state=active]:bg-teal-500/20 data-[state=active]:text-teal-100"
+          >
+            {group.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+
+      {groups.map((group) => (
+        <TabsContent key={group.key} value={group.key}>
+          <Tabs defaultValue={group.metrics[0]?.key} className="w-full">
+            <div className="mb-4 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              <TabsList className="inline-flex w-max flex-nowrap gap-2 rounded-lg bg-slate-950/60 p-1 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]">
+                {group.metrics.map((metric) => (
+                  <TabsTrigger
+                    key={metric.key}
+                    value={metric.key}
+                    className="flex-none whitespace-nowrap data-[state=active]:bg-teal-500/20 data-[state=active]:text-teal-100"
+                  >
+                    {metric.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
+
+            {group.metrics.map((metric) => (
+              <TabsContent key={metric.key} value={metric.key}>
+                <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-slate-950/70 via-slate-950/60 to-slate-900/60">
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 text-[11px] uppercase tracking-[0.4em] text-slate-400">
+                    <span>{group.label}</span>
+                    <span>{metric.label}</span>
+                  </div>
+                  <div className="h-[372px] overflow-hidden">
+                    <div className="h-full space-y-3 overflow-y-auto pr-2">
+                      {(rankings[metric.key] || []).map((row, idx) => (
+                        <div
+                          key={row.id}
+                          className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/70 p-3 transition-colors hover:bg-slate-900/90"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="relative h-8 w-8 rounded-full bg-teal-500/20 text-teal-200 flex items-center justify-center text-xs font-semibold tracking-wide">
+                              {idx + 1}
+                              {row.country ? (
+                                <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-slate-900/90 p-0.5">
+                                  <Image
+                                    src={getTwemojiUrl(row.country)}
+                                    alt={row.country}
+                                    width={12}
+                                    height={12}
+                                    className="h-3 w-3"
+                                  />
+                                </span>
+                              ) : null}
+                            </div>
+                            <div>
+                              <p className="text-white font-medium">{row.name}</p>
+                              {row.team ? (
+                                <p className="text-xs text-slate-400">{row.team}</p>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="text-sm text-teal-300 font-semibold">
+                            <div>{formatValue(row.value, metric.format)}</div>
+                            {showTeamRecord && metric.key === "games" && (
+                              <div className="text-[11px] text-slate-400">
+                                {row.matchesWon ?? 0}W/{row.matchesDraw ?? 0}D/
+                                {row.matchesLost ?? 0}L
+                              </div>
+                            )}
+                            {showGapDetails && metric.key === "gap" && (
+                              <div className="text-[11px] text-slate-400">
+                                {row.goals ?? 0}G/{row.assists ?? 0}SA/
+                                {row.preassists ?? 0}P
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                      {!rankings[metric.key]?.length && (
+                        <div className="rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-center text-slate-400">
+                          No data
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+        </TabsContent>
+      ))}
+    </Tabs>
+  )
+
+  const scoringLeaders = rankingsByMetric.goals || []
+  const latestLeague = await CompetitionModel.findOne({ type: "league", division: 1 })
+    .sort({ competition_id: -1 })
+    .select({ _id: 1, competition_id: 1, season_id: 1, season: 1 })
+    .lean()
+  const latestLeagueHref = latestLeague
+    ? `/competitions/${latestLeague.competition_id ?? latestLeague._id}`
+    : "/competitions"
+  const historicMatchesData = historicMatches.map((match: any) => {
+    const team1 = match.team1_competition_id?.team_id
+    const team2 = match.team2_competition_id?.team_id
+    return {
+      id: match._id?.toString() || "",
+      team1Name: team1?.teamName || team1?.team_name || "Team A",
+      team2Name: team2?.teamName || team2?.team_name || "Team B",
+      team1Image: team1?.image || "/placeholder.svg?height=40&width=40",
+      team2Image: team2?.image || "/placeholder.svg?height=40&width=40",
+      score1: Number(match.score_team1 ?? match.scoreTeam1 ?? 0),
+      score2: Number(match.score_team2 ?? match.scoreTeam2 ?? 0),
+      date: match.date ? new Date(match.date).toLocaleDateString("es-ES") : "-",
+    }
+  })
+  const latestSeasonValue =
+    latestLeague?.season_id ?? latestLeague?.season ?? latestLeague?.competition_id
+  const latestSeasonLabel = latestSeasonValue
+    ? `Season ${latestSeasonValue}`
+    : "Season"
+
+  const recentMatchesRaw = await MatchModel.find()
+    .sort({ date: -1, match_id: -1 })
+    .limit(5)
+    .populate({
+      path: "team1_competition_id",
+      populate: { path: "team_id" },
+    })
+    .populate({
+      path: "team2_competition_id",
+      populate: { path: "team_id" },
+    })
+    .lean()
+  const now = new Date()
+  const recentMatches = recentMatchesRaw.map((match: any) => {
+    const team1 = match.team1_competition_id?.team_id
+    const team2 = match.team2_competition_id?.team_id
+    const matchDate = match.date ? new Date(match.date) : null
+    const isFuture = matchDate ? matchDate.getTime() > now.getTime() : false
+    return {
+      id: match._id?.toString() || "",
+      team1: {
+        name: team1?.teamName || team1?.team_name || "Team A",
+        logo: team1?.image || "/placeholder.svg?height=40&width=40",
+        score: match.score_team1 ?? match.scoreTeam1 ?? null,
+      },
+      team2: {
+        name: team2?.teamName || team2?.team_name || "Team B",
+        logo: team2?.image || "/placeholder.svg?height=40&width=40",
+        score: match.score_team2 ?? match.scoreTeam2 ?? null,
+      },
+      date: matchDate ? matchDate.toLocaleDateString("es-ES") : "-",
+      status: isFuture ? "Proximo" : "Finalizado",
+      href: match._id ? `/matches/${match._id}` : "/matches",
+    }
+  })
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-gray-900 to-black">
-      {/* Hero Section */}
+    <div className="min-h-screen bg-slate-950 text-white">
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-teal-500/10 to-slate-800/20" />
-        <div className="relative container mx-auto px-4 py-20 text-center">
-          <div className="mb-8">
-            <Image
-              src="/ffl-logo.png"
-              alt="FFL Logo"
-              width={120}
-              height={120}
-              className="mx-auto mb-4 rounded-full border-4 border-teal-400 shadow-lg shadow-teal-400/50"
-            />
-            <h1 className="text-6xl font-bold bg-gradient-to-r from-teal-400 to-white bg-clip-text text-transparent mb-4">
-              FUTSAL FUSION LEAGUE
-            </h1>
-            <p className="text-xl text-gray-300 mb-8">La liga más competitiva de Haxball 7v7 - FFL</p>
-            <div className="flex flex-wrap justify-center gap-4">
-              <Button
-                size="lg"
-                className="bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 text-white"
-              >
-                <Play className="mr-2 h-5 w-5" />
-                Ver Temporada Actual
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-white/20 text-white hover:bg-white/10 bg-transparent"
-              >
-                <Users className="mr-2 h-5 w-5" />
-                Únete a la Liga
-              </Button>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.18),_transparent_55%)]" />
+        <div className="absolute -top-32 right-[-10%] h-80 w-80 rounded-full bg-teal-500/10 blur-3xl" />
+        <div className="absolute -bottom-40 left-[-10%] h-96 w-96 rounded-full bg-slate-700/40 blur-3xl" />
+
+        <div className="relative container mx-auto px-4 pt-24 pb-16">
+          <div className="grid gap-12 lg:grid-cols-[1.15fr_0.85fr] items-center">
+            <div>
+              <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs uppercase tracking-[0.3em] text-slate-300">
+                <span className="h-2 w-2 rounded-full bg-teal-400" />
+                {latestSeasonLabel}
+              </div>
+              <h1 className="mt-6 text-4xl font-semibold tracking-tight md:text-6xl">
+                Futsal Fusion League
+              </h1>
+              <p className="mt-4 text-lg text-slate-300 md:text-xl">
+                The most competitive Haxball 7v7 esports league - FFL. Join the community and show your skill.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-4">
+                <Link href={latestLeagueHref}>
+                  <Button className="bg-teal-500 text-slate-950 hover:bg-teal-400" size="lg">
+                    <Play className="mr-2 h-5 w-5" />
+                    View current season
+                  </Button>
+                </Link>
+                <a
+                  href="https://discord.gg/CjpZZXgh"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="border-white/20 text-white hover:bg-white/10"
+                  >
+                    <Users className="mr-2 h-5 w-5" />
+                    Unete a la liga
+                  </Button>
+                </a>
+              </div>
+              <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {[
+                  { label: "Teams", value: teamCount },
+                  { label: "Players", value: playerCount },
+                  { label: "Matches played", value: matchCount },
+                  { label: "Tournaments", value: competitionCount },
+                ].map((item) => (
+                  <div
+                    key={item.label}
+                    className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-4"
+                  >
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                      {item.label}
+                    </p>
+                    <p className="mt-2 text-2xl font-semibold text-white">
+                      {item.value ?? 0}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-[28px] bg-gradient-to-br from-teal-500/30 via-slate-900/40 to-slate-800/60 p-[1px]">
+              <div className="rounded-[27px] border border-white/10 bg-slate-950/70 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-slate-400">
+                      Featured match
+                    </p>
+                  <h2 className="mt-2 text-2xl font-semibold">Memorable matches</h2>
+                  </div>
+                </div>
+                <div className="mt-6 space-y-4">
+                  <HistoricMatches matches={historicMatchesData} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* Stats Overview */}
-      <section className="py-16 bg-black/20">
-        <div className="container mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-teal-500/20">
-              <CardContent className="p-6 text-center">
-                <Trophy className="h-12 w-12 text-teal-400 mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-white">8</h3>
-                <p className="text-gray-400">Equipos Activos</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-white/20">
-              <CardContent className="p-6 text-center">
-                <Users className="h-12 w-12 text-white mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-white">56</h3>
-                <p className="text-gray-400">Jugadores</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-teal-500/20">
-              <CardContent className="p-6 text-center">
-                <Calendar className="h-12 w-12 text-teal-400 mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-white">180</h3>
-                <p className="text-gray-400">Partidos Jugados</p>
-              </CardContent>
-            </Card>
-            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-white/20">
-              <CardContent className="p-6 text-center">
-                <TrendingUp className="h-12 w-12 text-white mx-auto mb-4" />
-                <h3 className="text-2xl font-bold text-white">10</h3>
-                <p className="text-gray-400">Torneos</p>
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* Recent Matches & Leaderboard */}
       <section className="py-16">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Recent Matches */}
-            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-teal-500/20">
+            <Card className="border-white/10 bg-slate-900/70">
               <CardHeader>
-                <CardTitle className="text-2xl font-bold text-teal-400 flex items-center">
-                  <Calendar className="mr-2 h-6 w-6" />
-                  Últimos Partidos
+                <CardTitle className="text-2xl font-semibold text-white flex items-center">
+                  <Calendar className="mr-2 h-6 w-6 text-teal-300" />
+                  Latest matches
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {recentMatches.map((match) => (
-                  <div
+                  <Link
                     key={match.id}
-                    className="bg-slate-700/50 rounded-lg p-4 hover:bg-slate-700/70 transition-colors"
+                    href={match.href}
+                    className="block rounded-2xl border border-white/10 bg-slate-950/60 p-4 transition-colors hover:bg-slate-900/70"
                   >
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-4">
-                        <div className="flex items-center space-x-2">
+                    <div className="flex items-center justify-between gap-4">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
                           <Image
                             src={match.team1.logo || "/placeholder.svg"}
                             alt={match.team1.name}
@@ -148,16 +1184,16 @@ export default function HomePage() {
                           />
                           <span className="text-white font-medium">{match.team1.name}</span>
                         </div>
-                        <div className="text-center">
+                        <div className="w-16 text-center">
                           {match.team1.score !== null ? (
-                            <span className="text-2xl font-bold text-teal-400">
+                            <span className="text-xl font-semibold text-teal-300">
                               {match.team1.score} - {match.team2.score}
                             </span>
                           ) : (
-                            <span className="text-gray-400">vs</span>
+                            <span className="text-slate-400">vs</span>
                           )}
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex items-center gap-2">
                           <Image
                             src={match.team2.logo || "/placeholder.svg"}
                             alt={match.team2.name}
@@ -171,151 +1207,61 @@ export default function HomePage() {
                       <Badge
                         variant={match.status === "Finalizado" ? "default" : "secondary"}
                         className={
-                          match.status === "Finalizado" ? "bg-teal-500/20 text-teal-400 border-teal-500/50" : ""
+                          match.status === "Finalizado"
+                            ? "border border-teal-500/40 bg-teal-500/10 text-teal-200"
+                            : "border border-white/10 bg-white/5 text-slate-200"
                         }
                       >
                         {match.status}
                       </Badge>
                     </div>
-                    <p className="text-gray-400 text-sm mt-2">{match.date}</p>
-                  </div>
+                    <p className="text-slate-400 text-sm mt-2">{match.date}</p>
+                  </Link>
                 ))}
-                <Link href="/matches">
-                  <Button className="w-full bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700">
-                    Ver Todos los Partidos
+                <Link href="/seasons">
+                  <Button className="w-full bg-teal-500 text-slate-950 hover:bg-teal-400">
+                    View all matches
                   </Button>
                 </Link>
               </CardContent>
             </Card>
 
-            {/* Leaderboard */}
-            <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-white/20">
+            <Card className="border-white/10 bg-slate-900/70">
               <CardHeader>
-                <CardTitle className="text-2xl font-bold text-white flex items-center">
-                  <Trophy className="mr-2 h-6 w-6" />
-                  Tabla de Posiciones
+                <CardTitle className="text-2xl font-semibold text-white flex items-center">
+                  <Trophy className="mr-2 h-6 w-6 text-amber-300" />
+                  League ranking
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  {leaderboard.map((team) => (
-                    <div
-                      key={team.position}
-                      className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3 hover:bg-slate-700/70 transition-colors"
+                <Tabs defaultValue="players" className="w-full">
+                  <TabsList className="mb-4 grid grid-cols-2 gap-2 bg-slate-950/60">
+                    <TabsTrigger
+                      value="players"
+                      className="data-[state=active]:bg-teal-500/20 data-[state=active]:text-teal-100"
                     >
-                      <div className="flex items-center space-x-3">
-                        <div
-                          className={`w-8 h-8 rounded-full flex items-center justify-center font-bold ${
-                            team.position === 1
-                              ? "bg-teal-500 text-black"
-                              : team.position === 2
-                                ? "bg-gray-400 text-black"
-                                : team.position === 3
-                                  ? "bg-amber-600 text-white"
-                                  : "bg-slate-600 text-white"
-                          }`}
-                        >
-                          {team.position}
-                        </div>
-                        <span className="text-white font-medium">{team.team}</span>
-                      </div>
-                      <div className="flex items-center space-x-4 text-sm">
-                        <span className="text-teal-400 font-bold">{team.points} pts</span>
-                        <span className="text-gray-400">
-                          {team.wins}V-{team.losses}D
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <Link href="/leaderboard">
-                  <Button className="w-full mt-4 bg-gradient-to-r from-white/10 to-white/20 hover:from-white/20 hover:to-white/30 text-white border border-white/20">
-                    Ver Tabla Completa
-                  </Button>
-                </Link>
+                      Players
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="teams"
+                      className="data-[state=active]:bg-teal-500/20 data-[state=active]:text-teal-100"
+                    >
+                      Teams
+                    </TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="players">
+                    {renderRankingTabs(metricGroups, rankingsByMetric, true, false)}
+                  </TabsContent>
+                  <TabsContent value="teams">
+                    {renderRankingTabs(teamMetricGroups, teamRankingsByMetric, false, true)}
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </div>
         </div>
       </section>
 
-      {/* Top Scorers */}
-      <section className="py-16 bg-black/20">
-        <div className="container mx-auto px-4">
-          <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-teal-500/20">
-            <CardHeader>
-              <CardTitle className="text-2xl font-bold text-teal-400 flex items-center justify-center">
-                <Star className="mr-2 h-6 w-6" />
-                Top Goleadores
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {topScorers.map((player, index) => (
-                  <div
-                    key={player.name}
-                    className="bg-slate-700/50 rounded-lg p-4 text-center hover:bg-slate-700/70 transition-colors"
-                  >
-                    <div
-                      className={`w-12 h-12 rounded-full mx-auto mb-3 flex items-center justify-center font-bold text-lg ${
-                        index === 0
-                          ? "bg-teal-500 text-black"
-                          : index === 1
-                            ? "bg-gray-400 text-black"
-                            : "bg-amber-600 text-white"
-                      }`}
-                    >
-                      {index + 1}
-                    </div>
-                    <h3 className="text-white font-bold">{player.name}</h3>
-                    <p className="text-gray-400 text-sm">{player.team}</p>
-                    <div className="flex items-center justify-center space-x-2 mt-2">
-                      <span className="text-2xl">{player.flag}</span>
-                      <span className="text-teal-400 font-bold text-lg">{player.goals} goles</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </section>
-
-      {/* Quick Access */}
-      <section className="py-16">
-        <div className="container mx-auto px-4 text-center">
-          <h2 className="text-3xl font-bold text-white mb-8">Acceso Rápido</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Link href="/competitions">
-              <Card className="bg-gradient-to-br from-teal-600 to-teal-700 hover:from-teal-700 hover:to-teal-800 transition-all cursor-pointer">
-                <CardContent className="p-8 text-center">
-                  <Trophy className="h-16 w-16 text-white mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">Competiciones</h3>
-                  <p className="text-teal-100">Explora todas las temporadas</p>
-                </CardContent>
-              </Card>
-            </Link>
-            <Link href="/teams">
-              <Card className="bg-gradient-to-br from-slate-600 to-slate-700 hover:from-slate-700 hover:to-slate-800 transition-all cursor-pointer border border-white/20">
-                <CardContent className="p-8 text-center">
-                  <Users className="h-16 w-16 text-white mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">Equipos</h3>
-                  <p className="text-gray-300">Conoce a los equipos</p>
-                </CardContent>
-              </Card>
-            </Link>
-            <Link href="/gallery">
-              <Card className="bg-gradient-to-br from-gray-600 to-gray-700 hover:from-gray-700 hover:to-gray-800 transition-all cursor-pointer border border-teal-500/20">
-                <CardContent className="p-8 text-center">
-                  <Play className="h-16 w-16 text-teal-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">Galería</h3>
-                  <p className="text-gray-300">Videos y highlights</p>
-                </CardContent>
-              </Card>
-            </Link>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }
