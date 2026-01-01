@@ -264,6 +264,9 @@ function MiniLineChart({
   label: string
   valueSuffix?: string
 }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [hoverX, setHoverX] = useState(0)
+
   if (data.length === 0) {
     return <div className="text-xs text-slate-500">No data yet.</div>
   }
@@ -287,8 +290,6 @@ function MiniLineChart({
     .join(" ")
   const areaPath = `${linePath} L ${width - padding} ${height - padding} L ${padding} ${height - padding} Z`
 
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [hoverX, setHoverX] = useState(0)
   const hoveredPoint = hoverIndex !== null ? data[hoverIndex] : null
 
   return (
@@ -1474,7 +1475,9 @@ export default function PlayerStatsTabs({
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-400">Total</div>
                 </div>
                 <div className="flex h-full w-fit flex-col justify-center rounded-lg border border-slate-800 bg-slate-900/60 px-4 py-3 whitespace-nowrap">
-                  <div className="text-3xl font-semibold">{perMinuteStat.toFixed(2)}</div>
+                  <div className="text-3xl font-semibold">
+                    {(perMinuteStat ?? 0).toFixed(2)}
+                  </div>
                   <div className="text-xs uppercase tracking-[0.2em] text-slate-400">
                     {activeChartLabel} / min
                   </div>

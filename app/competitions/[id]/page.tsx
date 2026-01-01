@@ -4,12 +4,141 @@ import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 import MatchModel from "@/lib/models/Match"
 import PlayerCompetitionModel from "@/lib/models/PlayerCompetition"
 import PlayerMatchStatsModel from "@/lib/models/PlayerMatchStats"
-import GoalModel from "@/lib/models/Goal"
 import CompetitionDetailTabs from "./CompetitionDetailTabs"
 import { notFound } from "next/navigation"
 import "@/lib/models/Team"
 
-function formatCompetitionTitle(competition: any) {
+type CompetitionDoc = {
+  _id: string
+  competition_id?: number
+  season_id?: number | string
+  season?: number | string
+  division?: number
+  start_date?: Date | string
+  end_date?: Date | string
+  type?: string
+  name?: string
+}
+
+type TeamDoc = {
+  _id?: { toString(): string }
+  teamName?: string
+  team_name?: string
+  image?: string
+  country?: string
+}
+
+type TeamCompetitionRow = {
+  _id?: unknown
+  team_id?: TeamDoc
+}
+
+type MatchDoc = {
+  _id?: unknown
+  date?: Date | string
+  comments?: string
+  team1_competition_id?: { team_id?: TeamDoc }
+  team2_competition_id?: { team_id?: TeamDoc }
+  score_team1?: number
+  scoreTeam1?: number
+  score_team2?: number
+  scoreTeam2?: number
+}
+
+type ScoringFeatRow = {
+  _id?: unknown
+  braces?: number
+  hatTricks?: number
+  pokers?: number
+}
+
+type TeamGoalsRow = {
+  _id?: unknown
+  teamGoals?: number
+}
+
+type PlayerTotalsRow = {
+  playerId?: unknown
+  playerName?: string
+  country?: string
+  teamName?: string
+  teamAltName?: string
+  matchesPlayed?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+  starter?: number
+  substitute?: number
+  minutesPlayed?: number
+  goals?: number
+  assists?: number
+  preassists?: number
+  kicks?: number
+  passes?: number
+  passesForward?: number
+  passesLateral?: number
+  passesBackward?: number
+  keypass?: number
+  autopass?: number
+  misspass?: number
+  shotsOnGoal?: number
+  shotsOffGoal?: number
+  shotsDefended?: number
+  saves?: number
+  recoveries?: number
+  clearances?: number
+  goalsConceded?: number
+  cs?: number
+  owngoals?: number
+  avgSum?: number
+  avgCount?: number
+  TOTW?: number
+  MVP?: number
+  hasGK?: boolean
+}
+
+type TeamTotalsRow = {
+  teamId?: unknown
+  teamName?: string
+  teamAltName?: string
+  country?: string
+  matchesPlayed?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+  goalsScored?: number
+  goalsConceded?: number
+  points?: number
+  possessionAvg?: number
+  kicks?: number
+  passes?: number
+  shotsOnGoal?: number
+  shotsOffGoal?: number
+  saves?: number
+  cs?: number
+}
+
+type ParticipantRow = {
+  id: string
+  name: string
+  image: string
+  country: string
+}
+
+type StandingStat = {
+  id: string
+  name: string
+  image: string
+  matchesPlayed: number
+  matchesWon: number
+  matchesDraw: number
+  matchesLost: number
+  goalsScored: number
+  goalsConceded: number
+  points: number
+}
+
+function formatCompetitionTitle(competition: CompetitionDoc | null) {
   if (!competition) return "Competition"
   const seasonRaw = competition.season_id ?? competition.season
   const season = seasonRaw === undefined || seasonRaw === null ? "" : String(seasonRaw)
@@ -36,21 +165,22 @@ function formatCompetitionTitle(competition: any) {
   return competition.name || "Competition"
 }
 
-export default async function CompetitionPage({ params }: { params: { id: string } }) {
+export default async function CompetitionPage({ params }: { params: Promise<{ id: string }> }) {
   await dbConnect()
 
-  const numericId = Number(params.id)
-  const competition =
+  const { id } = await params
+  const numericId = Number(id)
+  const competition: CompetitionDoc | null =
     (Number.isFinite(numericId) &&
-      (await CompetitionModel.findOne({ competition_id: numericId }).lean())) ||
-    (await CompetitionModel.findById(params.id).lean())
+      (await CompetitionModel.findOne({ competition_id: numericId }).lean<CompetitionDoc | null>())) ||
+    (await CompetitionModel.findById(id).lean<CompetitionDoc | null>())
 
   if (!competition) return notFound()
 
   const teamCompetitions = await TeamCompetitionModel.find({ competition_id: competition._id })
     .populate({ path: "team_id" })
-    .lean()
-  const teamCompetitionObjectIds = teamCompetitions.map((row: any) => row._id).filter(Boolean)
+    .lean<TeamCompetitionRow[]>()
+  const teamCompetitionObjectIds = teamCompetitions.map((row) => row._id).filter(Boolean)
 
   const matches = await MatchModel.find({ competition_id: competition._id })
     .populate({
@@ -61,7 +191,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
       path: "team2_competition_id",
       populate: { path: "team_id" },
     })
-    .lean()
+    .lean<MatchDoc[]>()
 
   const scoringFeats = teamCompetitionObjectIds.length
     ? await PlayerMatchStatsModel.aggregate([
@@ -374,9 +504,10 @@ export default async function CompetitionPage({ params }: { params: { id: string
     },
   ])
 
-  const participantsMap = teamCompetitions.reduce<Record<string, any>>((acc, row: any) => {
+  const participantsMap = teamCompetitions.reduce<Record<string, ParticipantRow>>((acc, row) => {
     const team = row.team_id
-    const teamId = team?._id?.toString()
+    if (!team) return acc
+    const teamId = team._id?.toString()
     if (!teamId) return acc
     if (!acc[teamId]) {
       acc[teamId] = {
@@ -391,7 +522,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
 
   const participants = Object.values(participantsMap)
 
-  const standingsMap = matches.reduce<Record<string, any>>((acc, match: any) => {
+  const standingsMap = matches.reduce<Record<string, StandingStat>>((acc, match) => {
     const team1Competition = match.team1_competition_id
     const team2Competition = match.team2_competition_id
     const team1 = team1Competition?.team_id
@@ -403,7 +534,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
     if (!team1Id || !team2Id) return acc
     if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) return acc
 
-    const ensure = (teamId: string, meta?: any) => {
+    const ensure = (teamId: string, meta?: TeamDoc) => {
       if (!acc[teamId]) {
         acc[teamId] = {
           id: teamId,
@@ -449,7 +580,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
     return acc
   }, {})
 
-  const standings = participants.map((team: any) => {
+  const standings = participants.map((team) => {
     const stats = standingsMap[team.id] || {
       matchesPlayed: 0,
       matchesWon: 0,
@@ -472,7 +603,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
       points: stats.points,
     }
   })
-  .sort((a: any, b: any) => {
+  .sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points
     const aDiff = a.goalsScored - a.goalsConceded
     const bDiff = b.goalsScored - b.goalsConceded
@@ -481,36 +612,27 @@ export default async function CompetitionPage({ params }: { params: { id: string
     return a.name.localeCompare(b.name)
   })
 
-  const matchRows = matches.map((match: any) => {
+  const matchRows = matches.flatMap((match) => {
+    const id = match._id?.toString()
+    if (!id) return []
     const teamA = match.team1_competition_id?.team_id
     const teamB = match.team2_competition_id?.team_id
-    return {
-      id: match._id?.toString(),
-      date: match.date ? new Date(match.date).toLocaleDateString("en-GB") : "",
-      teamA: teamA?.teamName || teamA?.team_name || "Team A",
-      teamB: teamB?.teamName || teamB?.team_name || "Team B",
-      teamAImage: teamA?.image || "",
-      teamBImage: teamB?.image || "",
-      scoreA: match.score_team1 ?? match.scoreTeam1,
-      scoreB: match.score_team2 ?? match.scoreTeam2,
-    }
+    return [
+      {
+        id,
+        date: match.date ? new Date(match.date).toLocaleDateString("en-GB") : "",
+        teamA: teamA?.teamName || teamA?.team_name || "Team A",
+        teamB: teamB?.teamName || teamB?.team_name || "Team B",
+        teamAImage: teamA?.image || "",
+        teamBImage: teamB?.image || "",
+        scoreA: match.score_team1 ?? match.scoreTeam1,
+        scoreB: match.score_team2 ?? match.scoreTeam2,
+      },
+    ]
   })
 
-  const totalGoals = standings.reduce((sum: number, row: any) => sum + row.goalsScored, 0)
-  const totalCleanSheets = standings.reduce((sum: number, row: any) => sum + (row.cs ?? 0), 0)
-  const stats = {
-    teams: participants.length,
-    matches: matchRows.length,
-    goals: totalGoals,
-    goalsPerMatch: matchRows.length ? totalGoals / matchRows.length : 0,
-    cleanSheets: totalCleanSheets,
-    deffwinMatches: matches.filter((match: any) =>
-      String(match.comments || "").toLowerCase().includes("deffwin")
-    ).length,
-  }
-
   const scoringFeatsByPlayer = new Map<string, { braces: number; hatTricks: number; pokers: number }>()
-  scoringFeats.forEach((row: any) => {
+  ;(scoringFeats as ScoringFeatRow[]).forEach((row) => {
     if (!row?._id) return
     scoringFeatsByPlayer.set(String(row._id), {
       braces: Number(row.braces ?? 0),
@@ -519,7 +641,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
     })
   })
   const teamGoalsByPlayer = new Map<string, number>()
-  teamGoalsByPlayerRaw.forEach((row: any) => {
+  ;(teamGoalsByPlayerRaw as TeamGoalsRow[]).forEach((row) => {
     if (!row?._id) return
     teamGoalsByPlayer.set(String(row._id), Number(row.teamGoals ?? 0))
   })
@@ -527,7 +649,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
   const safeDivide = (numerator: number, denominator: number) =>
     denominator > 0 ? numerator / denominator : 0
 
-  const players = playerTotalsRaw.map((row: any) => ({
+  const players = (playerTotalsRaw as PlayerTotalsRow[]).map((row) => ({
     id: row.playerId?.toString() || "",
     name: row.playerName || "Player",
     country: row.country || "",
@@ -568,7 +690,7 @@ export default async function CompetitionPage({ params }: { params: { id: string
     MVP: Number(row.MVP ?? 0),
     hasGK: Boolean(row.hasGK),
   }))
-  const teams = teamTotalsRaw.map((row: any) => ({
+  const teams = (teamTotalsRaw as TeamTotalsRow[]).map((row) => ({
     id: row.teamId?.toString() || "",
     name: row.teamName || row.teamAltName || "Team",
     country: row.country || "",
@@ -587,6 +709,19 @@ export default async function CompetitionPage({ params }: { params: { id: string
     saves: Number(row.saves ?? 0),
     cs: Number(row.cs ?? 0),
   }))
+
+  const totalGoals = standings.reduce((sum, row) => sum + row.goalsScored, 0)
+  const totalCleanSheets = teams.reduce((sum, row) => sum + row.cs, 0)
+  const stats = {
+    teams: participants.length,
+    matches: matchRows.length,
+    goals: totalGoals,
+    goalsPerMatch: matchRows.length ? totalGoals / matchRows.length : 0,
+    cleanSheets: totalCleanSheets,
+    deffwinMatches: matches.filter((match) =>
+      String(match.comments || "").toLowerCase().includes("deffwin")
+    ).length,
+  }
 
   const title = formatCompetitionTitle(competition)
   const subtitle = competition.type ? competition.type.replace("_", " ") : "competition"

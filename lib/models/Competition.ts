@@ -15,14 +15,14 @@ const competitionSchema = new mongoose.Schema({
   season_id: {
     type: String,
     ref: "Season",
-    required: function() {
-      return ['league', 'cup', 'supercup'].includes(this.type);
+    required: function(this: { type?: string }) {
+      return ['league', 'cup', 'supercup'].includes(this.type || "");
     }
   },
   division: {
     type: Number,
     enum: [1, 2],
-    required: function() {
+    required: function(this: { type?: string }) {
       return this.type === 'league';
     }
   },

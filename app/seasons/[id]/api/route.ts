@@ -1,13 +1,12 @@
 import dbConnect from '@/lib/db/mongoose'
-import Competition from '@/lib/models/Competition'
 import TeamCompetition from '@/lib/models/TeamCompetition'
 import MatchModel from '@/lib/models/Match'
 
-export async function GET(req: Request, { params }: { params: { id: string } }) {
+export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     await dbConnect()
 
-    const competitionId = params.id
+    const { id: competitionId } = await params
 
     // 1️⃣ Equipos
     const teams = await TeamCompetition.find({ competition_id: competitionId }).lean()

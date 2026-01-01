@@ -1,17 +1,6 @@
 import connectDB from '../db/mongoose';
 import Competition from '../models/Competition';
-import { formatCompetition } from '../utils/competitionFormatter';
-
-interface FormattedCompetition {
-  id: string;
-  name: string;
-  type: string;
-  status: string;
-  startDate: string;
-  endDate: string;
-  champion?: string;
-  image?: string;
-}
+import { formatCompetition, type FormattedCompetition } from '../utils/competitionFormatter';
 
 export class CompetitionService {
   static async getAllCompetitions(): Promise<FormattedCompetition[]> {

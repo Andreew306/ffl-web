@@ -15,6 +15,121 @@ import "@/lib/models/Goal"
 import { notFound } from "next/navigation"
 import TeamStatsTabs from "./TeamStatsTabs"
 
+type TeamRef = {
+  _id?: { toString(): string }
+  teamName?: string
+  team_name?: string
+  image?: string
+}
+
+type CompetitionRef = {
+  _id?: { toString(): string }
+  type?: string
+  season_id?: string | number
+  season?: string | number
+  division?: number
+  start_date?: Date | string
+  name?: string
+}
+
+type TeamCompetitionRow = {
+  _id?: { toString(): string }
+  team_competition_id?: string | number
+  competition_id?: CompetitionRef
+  matches_played?: number
+  matchesPlayed?: number
+  matches_won?: number
+  matchesWon?: number
+  matches_draw?: number
+  matchesDraw?: number
+  matches_lost?: number
+  matchesLost?: number
+  goals_scored?: number
+  goalsScored?: number
+  goals_conceded?: number
+  goalsConceded?: number
+  saves?: number
+  cs?: number
+  points?: number
+  possession_avg?: number
+  possessionAvg?: number
+  kicks?: number
+  passes?: number
+  shots_on_goal?: number
+  shotsOnGoal?: number
+}
+
+type MatchRef = {
+  _id?: { toString(): string }
+  date?: Date | string
+  competition_id?: CompetitionRef
+  team1_competition_id?: { _id?: { toString(): string }; team_id?: TeamRef }
+  team2_competition_id?: { _id?: { toString(): string }; team_id?: TeamRef }
+  score_team1?: number
+  score_team2?: number
+}
+
+type TeamMatchStatRow = {
+  [key: string]: unknown
+  match_id?: MatchRef
+  team_competition_id?: { toString(): string } | string
+  goals_scored?: number
+  goalsScored?: number
+  goals_conceded?: number
+  goalsConceded?: number
+  saves?: number
+  cs?: number
+  points?: number
+  possession?: number
+  kicks?: number
+  passes?: number
+  shots_on_goal?: number
+  shotsOnGoal?: number
+  won?: number
+  draw?: number
+  lost?: number
+}
+
+type PlayerMatchStatRow = {
+  [key: string]: unknown
+  match_id?: MatchRef
+  team_competition_id?: { toString(): string } | string
+  player_competition_id?: {
+    _id?: { toString(): string }
+    player_id?: { _id?: { toString(): string }; player_name?: string; avatar?: string }
+  } | string
+  goals?: number
+  assists?: number
+  preassists?: number
+  saves?: number
+  cs?: number
+}
+
+type GoalRow = {
+  match_id?: MatchRef
+  team_competition_id?: { _id?: { toString(): string } } | string
+  scorer_id?: { _id?: { toString(): string }; player_id?: { _id?: { toString(): string }; playerName?: string; player_name?: string; avatar?: string } }
+  assist_id?: { player_id?: { _id?: { toString(): string }; playerName?: string; player_name?: string; avatar?: string } }
+  preassist_id?: { player_id?: { _id?: { toString(): string }; playerName?: string; player_name?: string; avatar?: string } }
+}
+
+type PlayerCompetitionRow = {
+  team_competition_id?: { toString(): string } | string
+  player_id?: { _id?: { toString(): string }; player_name?: string; avatar?: string; country?: string }
+  position?: string
+  matchesPlayed?: number
+  matches_played?: number
+}
+
+const toObjectIdString = (value: unknown) => {
+  if (typeof value === "string") return value
+  if (!value || typeof value !== "object") return ""
+  const maybeWithId = value as { _id?: { toString?: () => string } }
+  if (maybeWithId._id?.toString) return maybeWithId._id.toString()
+  const maybeToString = value as { toString?: () => string }
+  return maybeToString.toString ? maybeToString.toString() : ""
+}
+
 function getTwemojiUrl(emoji: string) {
   const codePoints = Array.from(emoji).map((c) => c.codePointAt(0)?.toString(16)).join("-")
   return `https://twemoji.maxcdn.com/v/latest/72x72/${codePoints}.png`
@@ -90,13 +205,21 @@ function formatMatchCompetitionLabel(competition: {
   return competition.name || "Competition"
 }
 
-export default async function TeamPage({ params }: { params: { id: string } }) {
-  const numericId = Number(params.id)
+export default async function TeamPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const numericId = Number(id)
   await dbConnect()
 
-  const team =
-    (Number.isFinite(numericId) && (await TeamModel.findOne({ team_id: numericId }).lean())) ||
-    (await TeamModel.findById(params.id).lean())
+  const team = ((Number.isFinite(numericId)
+    ? await TeamModel.findOne({ team_id: numericId }).lean()
+    : null) ||
+    (await TeamModel.findById(id).lean())) as {
+    _id?: unknown
+    teamName?: string
+    team_name?: string
+    image?: string
+    country?: string
+  } | null
 
   if (!team) {
     return notFound()
@@ -104,9 +227,9 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
   const teamCompetitions = await TeamCompetitionModel.find({ team_id: team._id })
     .populate("competition_id")
-    .lean()
+    .lean<TeamCompetitionRow[]>()
 
-  const buildStatsFromRow = (row: any) => ({
+  const buildStatsFromRow = (row: TeamCompetitionRow) => ({
     matchesPlayed: row.matches_played ?? row.matchesPlayed ?? 0,
     matchesWon: row.matches_won ?? row.matchesWon ?? 0,
     matchesDraw: row.matches_draw ?? row.matchesDraw ?? 0,
@@ -122,9 +245,23 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
     shotsOnGoal: row.shots_on_goal ?? row.shotsOnGoal ?? 0,
   })
 
-  const aggregateStats = (rows: any[]) => {
+  const aggregateStats = (rows: TeamCompetitionRow[]) => {
     const totals = rows.reduce(
-      (acc, row) => {
+      (acc: {
+        matchesPlayed: number
+        matchesWon: number
+        matchesDraw: number
+        matchesLost: number
+        goalsScored: number
+        goalsConceded: number
+        saves: number
+        cs: number
+        points: number
+        possessionTotal: number
+        kicks: number
+        passes: number
+        shotsOnGoal: number
+      }, row) => {
         const stats = buildStatsFromRow(row)
         acc.matchesPlayed += stats.matchesPlayed
         acc.matchesWon += stats.matchesWon
@@ -179,7 +316,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
   }
 
   const totalStats = aggregateStats(teamCompetitions)
-  const matchLimits = teamCompetitions.reduce<Record<string, number>>((acc, row: any) => {
+  const matchLimits = teamCompetitions.reduce<Record<string, number>>((acc, row) => {
     const id = row._id?.toString()
     if (!id) return acc
     acc[id] = row.matches_played ?? row.matchesPlayed ?? 0
@@ -188,21 +325,29 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
 
   const allowedMainTypes = new Set(["league", "summer_cup", "nations_cup"])
   const competitionTabs = teamCompetitions
-    .filter((row: any) => allowedMainTypes.has(row.competition_id?.type))
-    .sort((a: any, b: any) => {
+    .filter((row) => {
+      const type = row.competition_id?.type
+      return type ? allowedMainTypes.has(type) : false
+    })
+    .sort((a, b) => {
       const aDate = a.competition_id?.start_date
       const bDate = b.competition_id?.start_date
       const aTime = aDate ? new Date(aDate).getTime() : 0
       const bTime = bDate ? new Date(bDate).getTime() : 0
       return bTime - aTime
     })
-    .map((row: any) => {
+    .map((row) => {
       const competition = row.competition_id
       const tab: {
         id: string
         label: string
         stats: ReturnType<typeof buildStatsFromRow>
-        seasonFilters?: Record<string, ReturnType<typeof buildStatsFromRow>>
+        seasonFilters?: {
+          all: ReturnType<typeof buildStatsFromRow>
+          league: ReturnType<typeof buildStatsFromRow>
+          cup: ReturnType<typeof buildStatsFromRow>
+          supercup: ReturnType<typeof buildStatsFromRow>
+        }
         seasonFilterIds?: {
           all: string[]
           league: string[]
@@ -221,22 +366,27 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         const seasonIdRaw = competition?.season_id ?? competition?.season
         const seasonId = seasonIdRaw === undefined || seasonIdRaw === null ? "" : String(seasonIdRaw)
         if (!seasonId) return tab
-        const seasonRows = teamCompetitions.filter((item: any) => {
+        const seasonRows = teamCompetitions.filter((item) => {
           const itemCompetition = item.competition_id
           const itemSeasonRaw = itemCompetition?.season_id ?? itemCompetition?.season
           const itemSeason =
             itemSeasonRaw === undefined || itemSeasonRaw === null ? "" : String(itemSeasonRaw)
-          return itemSeason === seasonId && ["league", "cup", "supercup"].includes(itemCompetition?.type)
+          const competitionType = itemCompetition?.type
+          return (
+            itemSeason === seasonId &&
+            competitionType !== undefined &&
+            ["league", "cup", "supercup"].includes(competitionType)
+          )
         })
 
         const leagueRows = seasonRows.filter(
-          (item: any) => item.competition_id?.type === "league"
+          (item) => item.competition_id?.type === "league"
         )
         const cupRows = seasonRows.filter(
-          (item: any) => item.competition_id?.type === "cup"
+          (item) => item.competition_id?.type === "cup"
         )
         const supercupRows = seasonRows.filter(
-          (item: any) => item.competition_id?.type === "supercup"
+          (item) => item.competition_id?.type === "supercup"
         )
 
         tab.seasonFilters = {
@@ -245,18 +395,19 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           cup: aggregateStats(cupRows),
           supercup: aggregateStats(supercupRows),
         }
+        const toId = (item: TeamCompetitionRow) => item._id?.toString()
         tab.seasonFilterIds = {
-          all: seasonRows.map((item: any) => item._id?.toString()).filter(Boolean),
-          league: leagueRows.map((item: any) => item._id?.toString()).filter(Boolean),
-          cup: cupRows.map((item: any) => item._id?.toString()).filter(Boolean),
-          supercup: supercupRows.map((item: any) => item._id?.toString()).filter(Boolean),
+          all: seasonRows.map(toId).filter((id): id is string => Boolean(id)),
+          league: leagueRows.map(toId).filter((id): id is string => Boolean(id)),
+          cup: cupRows.map(toId).filter((id): id is string => Boolean(id)),
+          supercup: supercupRows.map(toId).filter((id): id is string => Boolean(id)),
         }
       }
 
       return tab
     })
 
-  const teamCompetitionObjectIds = teamCompetitions.map((row: any) => row._id).filter(Boolean)
+  const teamCompetitionObjectIds = teamCompetitions.map((row) => row._id).filter(Boolean)
 
   const matchStatsRows = teamCompetitionObjectIds.length
     ? await TeamMatchStatsModel.find({ team_competition_id: { $in: teamCompetitionObjectIds } })
@@ -272,7 +423,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
             },
           ],
         })
-        .lean()
+        .lean<TeamMatchStatRow[]>()
     : []
   const playerMatchStatsRows = teamCompetitionObjectIds.length
     ? await PlayerMatchStatsModel.find({ team_competition_id: { $in: teamCompetitionObjectIds } })
@@ -280,17 +431,26 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
           path: "player_competition_id",
           populate: { path: "player_id" },
         })
-        .lean()
+        .lean<PlayerMatchStatRow[]>()
     : []
 
-  const readMatchStat = (row: any, snakeKey: string, camelKey?: string) => {
-    if (row?.[snakeKey] !== undefined) return row[snakeKey] || 0
-    if (camelKey && row?.[camelKey] !== undefined) return row[camelKey] || 0
+  const readMatchStat = (row: Record<string, unknown>, snakeKey: string, camelKey?: string) => {
+    if (row?.[snakeKey] !== undefined) {
+      const value = Number(row[snakeKey])
+      return Number.isFinite(value) ? value : 0
+    }
+    if (camelKey && row?.[camelKey] !== undefined) {
+      const value = Number(row[camelKey])
+      return Number.isFinite(value) ? value : 0
+    }
     return 0
   }
 
+  const isNotNull = <T,>(value: T | null | undefined): value is T =>
+    value !== null && value !== undefined
+
   const matchSeries = matchStatsRows
-    .map((row: any) => {
+    .map((row) => {
       const match = row.match_id
       const matchDate = match?.date ? new Date(match.date).toISOString() : ""
       const competitionLabel = match?.competition_id
@@ -315,7 +475,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
       const isTeam2 = team2CompetitionId && team2CompetitionId === teamCompetitionId
       const teamScore = isTeam1 ? scoreA : isTeam2 ? scoreB : 0
       const opponentScore = isTeam1 ? scoreB : isTeam2 ? scoreA : 0
-      const outcome =
+      const outcome: "win" | "loss" | "draw" =
         teamScore > opponentScore ? "win" : teamScore < opponentScore ? "loss" : "draw"
       const matchLabel = `${teamA} - ${teamB}`
       if (!matchDate || !teamCompetitionId) return null
@@ -350,10 +510,10 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         },
       }
     })
-    .filter(Boolean)
+    .filter(isNotNull)
 
   const goalsByOpponent = matchStatsRows
-    .map((row: any) => {
+    .map((row) => {
       const match = row.match_id
       const teamCompetitionId = row.team_competition_id?.toString() || ""
       if (!match || !teamCompetitionId) return null
@@ -377,9 +537,9 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         goalsScored: readMatchStat(row, "goals_scored", "goalsScored"),
       }
     })
-    .filter(Boolean)
+    .filter(isNotNull)
   const goalsConcededByOpponent = matchStatsRows
-    .map((row: any) => {
+    .map((row) => {
       const match = row.match_id
       const teamCompetitionId = row.team_competition_id?.toString() || ""
       if (!match || !teamCompetitionId) return null
@@ -403,11 +563,17 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         goalsConceded: readMatchStat(row, "goals_conceded", "goalsConceded"),
       }
     })
-    .filter(Boolean)
+    .filter(isNotNull)
   const topScorers = playerMatchStatsRows
-    .map((row: any) => {
-      const player = row.player_competition_id?.player_id
-      const playerCompetitionId = row.player_competition_id?._id?.toString() || ""
+    .map((row) => {
+      const player =
+        typeof row.player_competition_id === "string"
+          ? undefined
+          : row.player_competition_id?.player_id
+      const playerCompetitionId =
+        typeof row.player_competition_id === "string"
+          ? ""
+          : row.player_competition_id?._id?.toString() || ""
       const teamCompetitionId = row.team_competition_id?.toString() || ""
       if (!player || !playerCompetitionId || !teamCompetitionId) return null
       return {
@@ -418,8 +584,10 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         goals: row.goals || 0,
       }
     })
-    .filter(Boolean)
-  const teamCompetitionIds = teamCompetitionObjectIds.map((id) => id.toString())
+    .filter(isNotNull)
+  const teamCompetitionIds = teamCompetitionObjectIds
+    .filter((id): id is { toString(): string } => Boolean(id))
+    .map((id) => id.toString())
   const concededScorerGoals = teamCompetitionIds.length
     ? await GoalModel.find({ match_id: { $ne: null } })
         .populate({ path: "scorer_id", populate: { path: "player_id" } })
@@ -430,17 +598,17 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         .populate({
           path: "team_competition_id",
         })
-        .lean()
+        .lean<GoalRow[]>()
     : []
   const concedingScorers = concededScorerGoals
-    .map((row: any) => {
+    .map((row) => {
       const scorer = row.scorer_id?.player_id
       const scorerCompetitionId = row.scorer_id?._id?.toString() || ""
       const match = row.match_id
-      const scoringTeamCompetitionId = row.team_competition_id?._id?.toString() || row.team_competition_id?.toString() || ""
+      const scoringTeamCompetitionId = toObjectIdString(row.team_competition_id)
       if (!scorer || !scorerCompetitionId || !match || !scoringTeamCompetitionId) return null
-      const team1 = match.team1_competition_id?._id?.toString() || match.team1_competition_id?.toString()
-      const team2 = match.team2_competition_id?._id?.toString() || match.team2_competition_id?.toString()
+      const team1 = toObjectIdString(match.team1_competition_id)
+      const team2 = toObjectIdString(match.team2_competition_id)
       if (!team1 || !team2) return null
       const opponentTeamCompetitionId =
         scoringTeamCompetitionId === team1 ? team2 : scoringTeamCompetitionId === team2 ? team1 : ""
@@ -453,18 +621,21 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         goals: 1,
       }
     })
-    .filter(Boolean)
+    .filter(isNotNull)
   const playerMatchStatsForTeam = teamCompetitionObjectIds.length
     ? await PlayerMatchStatsModel.find({ team_competition_id: { $in: teamCompetitionObjectIds } })
         .populate({
           path: "player_competition_id",
           populate: { path: "player_id" },
         })
-        .lean()
+        .lean<PlayerMatchStatRow[]>()
     : []
   const matchesByPlayer = playerMatchStatsForTeam
-    .map((row: any) => {
-      const player = row.player_competition_id?.player_id
+    .map((row) => {
+      const player =
+        typeof row.player_competition_id === "string"
+          ? undefined
+          : row.player_competition_id?.player_id
       const teamCompetitionId = row.team_competition_id?.toString() || ""
       if (!player || !teamCompetitionId) return null
       return {
@@ -475,14 +646,14 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         matchesPlayed: 1,
       }
     })
-    .filter(Boolean)
+    .filter(isNotNull)
   const rosterRows = teamCompetitionObjectIds.length
     ? await PlayerCompetitionModel.find({ team_competition_id: { $in: teamCompetitionObjectIds } })
         .populate({ path: "player_id" })
-        .lean()
+        .lean<PlayerCompetitionRow[]>()
     : []
   const roster = rosterRows
-    .map((row: any) => {
+    .map((row) => {
       const player = row.player_id
       const teamCompetitionId = row.team_competition_id?.toString() || ""
       if (!player || !teamCompetitionId) return null
@@ -496,7 +667,7 @@ export default async function TeamPage({ params }: { params: { id: string } }) {
         matchesPlayed: row.matchesPlayed ?? row.matches_played ?? 0,
       }
     })
-    .filter(Boolean)
+    .filter(isNotNull)
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">

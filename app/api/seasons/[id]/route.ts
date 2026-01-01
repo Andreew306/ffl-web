@@ -5,8 +5,8 @@ import TeamCompetitionModel from "@/lib/models/TeamCompetition";
 import MatchModel from "@/lib/models/Match";
 import TeamMatchStatsModel from "@/lib/models/TeamMatchStats";
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const { searchParams } = new URL(request.url);
   const highlight = searchParams.get("highlight");
 

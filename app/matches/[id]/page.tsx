@@ -12,13 +12,95 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatMinutesSeconds } from "@/lib/utils";
 import { notFound } from "next/navigation";
 
-function getTwemojiUrl(emoji: string) {
-  if (!emoji) return "";
-  const codePoints = Array.from(emoji)
-    .map((c) => c.codePointAt(0)?.toString(16))
-    .join("-");
-  return `https://twemoji.maxcdn.com/v/latest/72x72/${codePoints}.png`;
-}
+type TeamRef = {
+  _id?: { toString(): string };
+  team_name?: string;
+  teamName?: string;
+  image?: string;
+};
+
+type TeamCompetitionRef = {
+  _id?: { toString(): string };
+  team_id?: TeamRef;
+};
+
+type MatchDoc = {
+  _id?: unknown;
+  date?: Date | string;
+  comments?: string;
+  team1_competition_id?: TeamCompetitionRef;
+  team2_competition_id?: TeamCompetitionRef;
+  score_team1?: number;
+  scoreTeam1?: number;
+  score_team2?: number;
+  scoreTeam2?: number;
+};
+
+type TeamStatDoc = {
+  shotsOnGoal?: number;
+  shotsOffGoal?: number;
+  [key: string]: unknown;
+};
+
+type PlayerStatDoc = {
+  _id?: unknown;
+  position?: string;
+  goals?: number;
+  assists?: number;
+  avg?: number;
+  minutesPlayed?: number;
+  minutes_played?: number;
+  starter?: number;
+  substitute?: number;
+  team_competition_id?: { _id?: { toString(): string } } | string;
+  player_competition_id?: {
+    player_id?: { player_name?: string; playerName?: string; country?: string };
+  };
+  player_match_stats_id?: string | number;
+  won?: number;
+  draw?: number;
+  lost?: number;
+  matchesWon?: number;
+  matchesDraw?: number;
+  matchesLost?: number;
+  preassists?: number;
+  preassist?: number;
+  kicks?: number;
+  passes?: number;
+  passes_forward?: number;
+  passesForward?: number;
+  passes_lateral?: number;
+  passesLateral?: number;
+  passes_backward?: number;
+  passesBackward?: number;
+  keypass?: number;
+  autopass?: number;
+  misspass?: number;
+  shots_on_goal?: number;
+  shotsOnGoal?: number;
+  shots_off_goal?: number;
+  shotsOffGoal?: number;
+  shotsDefended?: number;
+  saves?: number;
+  clearances?: number;
+  recoveries?: number;
+  goals_conceded?: number;
+  goalsConceded?: number;
+  cs?: number;
+  owngoals?: number;
+};
+
+type GoalDoc = {
+  team_competition_id?: { _id?: { toString(): string } } | string;
+  scorer_id?: { player_id?: { player_name?: string; playerName?: string } };
+  assist_id?: { player_id?: { player_name?: string; playerName?: string } };
+  preassist_id?: { player_id?: { player_name?: string; playerName?: string } };
+  own_goal?: boolean;
+  ownGoal?: boolean;
+  is_own_goal?: boolean;
+  isOwnGoal?: boolean;
+  minute?: number;
+};
 
 function StatBar({ value1, value2 }: { value1: number; value2: number }) {
   const total = value1 + value2;
@@ -42,7 +124,7 @@ function formatPercent(value: unknown) {
   return `${num.toFixed(1)}%`;
 }
 
-function getTeamStatValue(team: any, key: string) {
+function getTeamStatValue(team: TeamStatDoc | undefined, key: string) {
   if (!team) return 0;
   const direct = team[key];
   if (direct != null) return direct;
@@ -57,8 +139,8 @@ function normalizeStatValue(value: unknown) {
   return Number.isFinite(num) ? num : 0;
 }
 
-export default async function MatchDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params;
+export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   await connectDB();
 
   const match = await MatchModel.findById(id)
@@ -70,7 +152,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
       path: "team2_competition_id",
       populate: { path: "team_id" },
     })
-    .lean();
+    .lean<MatchDoc | null>();
 
   if (!match) return notFound();
 
@@ -79,14 +161,14 @@ export default async function MatchDetailPage({ params }: { params: { id: string
       path: "team_competition_id",
       populate: { path: "team_id" },
     })
-    .lean();
+    .lean<TeamStatDoc[]>();
 
   const playerStats = await PlayerMatchStatsModel.find({ match_id: match._id })
     .populate({
       path: "player_competition_id",
       populate: { path: "player_id" },
     })
-    .lean();
+    .lean<PlayerStatDoc[]>();
 
   const goals = await GoalModel.find({ match_id: match._id })
     .populate({
@@ -104,7 +186,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
     .populate({
       path: "team_competition_id",
     })
-    .lean();
+    .lean<GoalDoc[]>();
 
   const team1CompetitionId = match.team1_competition_id?._id?.toString() || "";
   const team2CompetitionId = match.team2_competition_id?._id?.toString() || "";
@@ -114,10 +196,12 @@ export default async function MatchDetailPage({ params }: { params: { id: string
         team1: { scorer: string; minuteLabel: string; minuteValue: number }[];
         team2: { scorer: string; minuteLabel: string; minuteValue: number }[];
       },
-      goal: any
+      goal
     ) => {
       const teamCompetitionId =
-        goal.team_competition_id?._id?.toString() || goal.team_competition_id?.toString() || "";
+        typeof goal.team_competition_id === "string"
+          ? goal.team_competition_id
+          : goal.team_competition_id?._id?.toString() || "";
       const scorerName =
         goal.scorer_id?.player_id?.player_name ||
         goal.scorer_id?.player_id?.playerName ||
@@ -187,16 +271,16 @@ export default async function MatchDetailPage({ params }: { params: { id: string
   const substitutes = playerStats.filter((player) => Number(player.substitute ?? 0) === 1);
   const team1Substitutes = substitutes.filter((player) => {
     const teamId =
-      player.team_competition_id?._id?.toString() ||
-      player.team_competition_id?.toString() ||
-      "";
+      typeof player.team_competition_id === "string"
+        ? player.team_competition_id
+        : player.team_competition_id?._id?.toString() || "";
     return teamId === team1CompetitionId;
   });
   const team2Substitutes = substitutes.filter((player) => {
     const teamId =
-      player.team_competition_id?._id?.toString() ||
-      player.team_competition_id?.toString() ||
-      "";
+      typeof player.team_competition_id === "string"
+        ? player.team_competition_id
+        : player.team_competition_id?._id?.toString() || "";
     return teamId === team2CompetitionId;
   });
   const maxMinutesPlayed = playerStats.reduce((max, player) => {
@@ -205,21 +289,21 @@ export default async function MatchDetailPage({ params }: { params: { id: string
   }, 0);
   const team1Starters = starters.filter((player) => {
     const teamId =
-      player.team_competition_id?._id?.toString() ||
-      player.team_competition_id?.toString() ||
-      "";
+      typeof player.team_competition_id === "string"
+        ? player.team_competition_id
+        : player.team_competition_id?._id?.toString() || "";
     return teamId === team1CompetitionId;
   });
   const team2Starters = starters.filter((player) => {
     const teamId =
-      player.team_competition_id?._id?.toString() ||
-      player.team_competition_id?.toString() ||
-      "";
+      typeof player.team_competition_id === "string"
+        ? player.team_competition_id
+        : player.team_competition_id?._id?.toString() || "";
     return teamId === team2CompetitionId;
   });
 
-  const buildLineupSlots = (players: any[], side: "home" | "away") => {
-    const positionMap = new Map<string, any[]>();
+  const buildLineupSlots = (players: PlayerStatDoc[], side: "home" | "away") => {
+    const positionMap = new Map<string, PlayerStatDoc[]>();
     players.forEach((player) => {
       const key = player.position || "";
       if (!positionMap.has(key)) positionMap.set(key, []);
@@ -252,7 +336,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
       substituted: boolean;
     }[] = [];
     rows.forEach((row) => {
-      const rowPlayers: any[] = [];
+      const rowPlayers: PlayerStatDoc[] = [];
       row.positions.forEach((pos) => {
         const bucket = positionMap.get(pos) || [];
         bucket.forEach((player) => rowPlayers.push(player));
@@ -303,8 +387,10 @@ export default async function MatchDetailPage({ params }: { params: { id: string
 
   const homeLineup = buildLineupSlots(team1Starters, "home");
   const awayLineup = buildLineupSlots(team2Starters, "away");
-  const getPlayerTeamId = (player: any) =>
-    player.team_competition_id?._id?.toString() || player.team_competition_id?.toString() || "";
+  const getPlayerTeamId = (player: PlayerStatDoc) =>
+    typeof player.team_competition_id === "string"
+      ? player.team_competition_id
+      : player.team_competition_id?._id?.toString() || "";
   const team1Players = playerStats.filter(
     (player) => getPlayerTeamId(player) === team1CompetitionId
   );
@@ -566,7 +652,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
                             player.player_competition_id?.player_id?.playerName ||
                             "-";
                           return (
-                            <li key={player._id} className="truncate">
+                            <li key={String(player._id ?? name)} className="truncate">
                               {name}
                             </li>
                           );
@@ -587,7 +673,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
                             player.player_competition_id?.player_id?.playerName ||
                             "-";
                           return (
-                            <li key={player._id} className="truncate">
+                            <li key={String(player._id ?? name)} className="truncate">
                               {name}
                             </li>
                           );
@@ -692,7 +778,7 @@ export default async function MatchDetailPage({ params }: { params: { id: string
                         const timeSeconds = player.minutesPlayed ?? player.minutes_played ?? 0;
                         return (
                           <tr
-                            key={player._id}
+                            key={String(player._id ?? name)}
                             className={`border-b transition-colors ${
                               group.accent === "red"
                                 ? "border-rose-500/10"

@@ -17,11 +17,76 @@ function getTwemojiUrl(emoji: string) {
   return `https://twemoji.maxcdn.com/v/latest/72x72/${codePoints}.png`;
 }
 
+type TeamRef = {
+  _id?: string
+  teamName?: string
+  logo?: string
+}
 
-export default function SeasonDetailPage({ season }: { season: any }) {
-  const teams = Array.isArray(season?.teams) ? season.teams : []
-  const standings = Array.isArray(season?.standings) ? season.standings : []
-  const matches = Array.isArray(season?.matches) ? season.matches : []
+type TeamCompetitionRow = {
+  _id?: string
+  team_id?: TeamRef
+  matchesPlayed?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+  goalsScored?: number
+  goalsConceded?: number
+  points?: number
+  players?: number
+}
+
+type MatchRow = {
+  _id?: string
+  week?: string | number
+  date?: Date | string
+  team1?: TeamRef
+  team2?: TeamRef
+  score_team1?: number
+  score_team2?: number
+}
+
+type TopStatPlayer = {
+  _id?: string
+  playerName?: string
+  player_name?: string
+  country?: string
+  avatar?: string
+}
+
+type TopStatRow = {
+  _id?: string
+  player_id?: TopStatPlayer
+  goals?: number
+  assists?: number
+  cs?: number
+}
+
+type SeasonStatistics = {
+  topScorers?: TopStatRow[]
+  topAssists?: TopStatRow[]
+  topCS?: TopStatRow[]
+  matchesPlayed?: number
+  goals?: number
+  activePlayers?: number
+}
+
+export type SeasonDetail = {
+  status?: string
+  competitionName?: string
+  startDate?: Date | string
+  endDate?: Date | string
+  teams?: TeamCompetitionRow[]
+  standings?: TeamCompetitionRow[]
+  matches?: MatchRow[]
+  statistics?: SeasonStatistics
+}
+
+export default function SeasonDetailPage({ season }: { season: SeasonDetail }) {
+  const teams: TeamCompetitionRow[] = Array.isArray(season?.teams) ? season.teams : []
+  const standings: TeamCompetitionRow[] = Array.isArray(season?.standings) ? season.standings : []
+  const matches: MatchRow[] = Array.isArray(season?.matches) ? season.matches : []
+  const standingsData = standings.length ? standings : teams
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
@@ -109,7 +174,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
             </tr>
           </thead>
           <tbody>
-            {teams
+            {standingsData
               .slice() // copia para no mutar el array original
               .sort((a, b) => (b.points || 0) - (a.points || 0))
               .map((tc, idx) => (
@@ -219,7 +284,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {season.statistics?.topScorers?.slice(0, 7).map((p: any, idx: number) => (
+            {season.statistics?.topScorers?.slice(0, 7).map((p, idx) => (
               <div
                 key={p._id}
                 className="flex items-center justify-between bg-slate-700/50 rounded-lg p-2"
@@ -258,7 +323,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {season.statistics?.topAssists?.slice(0, 7).map((p: any, idx: number) => (
+            {season.statistics?.topAssists?.slice(0, 7).map((p, idx) => (
               <div
                 key={p._id}
                 className="flex items-center justify-between bg-slate-700/50 rounded-lg p-2"
@@ -297,7 +362,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {season.statistics?.topCS?.slice(0, 7).map((p: any, idx: number) => (
+            {season.statistics?.topCS?.slice(0, 7).map((p, idx) => (
               <div
                 key={p._id}
                 className="flex items-center justify-between bg-slate-700/50 rounded-lg p-2"
@@ -348,7 +413,7 @@ export default function SeasonDetailPage({ season }: { season: any }) {
           <div className="text-center">
             <p className="text-3xl font-bold text-purple-400">
               {season.statistics?.matchesPlayed
-                ? (season.statistics.goals / season.statistics.matchesPlayed).toFixed(2)
+                ? ((season.statistics.goals || 0) / season.statistics.matchesPlayed).toFixed(2)
                 : "0"}
             </p>
             <p className="text-gray-400 text-sm">Goals per match</p>

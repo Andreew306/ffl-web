@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Trophy, Users, Calendar, Play, Star } from "lucide-react"
+import { Trophy, Users, Calendar, Play } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
 import connectDB from "@/lib/db/mongoose"
@@ -15,6 +15,207 @@ import HistoricMatches from "@/components/historic-matches"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatMinutesSeconds } from "@/lib/utils"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
+
+export const revalidate = 60
+
+type ScoringFeatRow = {
+  _id?: unknown
+  braces?: number
+  hatTricks?: number
+  pokers?: number
+}
+
+type TeamGoalsRow = {
+  _id?: unknown
+  teamGoals?: number
+}
+
+type PlayerTotalsRow = {
+  playerId?: unknown
+  playerName?: string
+  country?: string
+  teamName?: string
+  teamAltName?: string
+  matchesPlayed?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+  starter?: number
+  substitute?: number
+  minutesPlayed?: number
+  goals?: number
+  assists?: number
+  preassists?: number
+  kicks?: number
+  passes?: number
+  passesForward?: number
+  passesLateral?: number
+  passesBackward?: number
+  keypass?: number
+  autopass?: number
+  misspass?: number
+  shotsOnGoal?: number
+  shotsOffGoal?: number
+  shotsDefended?: number
+  saves?: number
+  recoveries?: number
+  clearances?: number
+  goalsConceded?: number
+  cs?: number
+  owngoals?: number
+  avgSum?: number
+  avgCount?: number
+  TOTW?: number
+  MVP?: number
+  hasGK?: boolean
+}
+
+type TeamTotalsRow = {
+  teamId?: unknown
+  teamName?: string
+  teamAltName?: string
+  country?: string
+  matchesPlayed?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+  goalsScored?: number
+  goalsConceded?: number
+  points?: number
+  possessionAvg?: number
+  kicks?: number
+  passes?: number
+  shotsOnGoal?: number
+  shotsOffGoal?: number
+  saves?: number
+  cs?: number
+}
+
+type PlayerRow = {
+  id: string
+  name: string
+  country: string
+  team: string
+  matchesPlayed: number
+  matchesWon: number
+  matchesDraw: number
+  matchesLost: number
+  starter: number
+  substitute: number
+  minutesPlayed: number
+  goals: number
+  assists: number
+  preassists: number
+  kicks: number
+  passes: number
+  passesForward: number
+  passesLateral: number
+  passesBackward: number
+  keypass: number
+  autopass: number
+  misspass: number
+  shotsOnGoal: number
+  shotsOffGoal: number
+  shotsDefended: number
+  saves: number
+  recoveries: number
+  clearances: number
+  goalsConceded: number
+  cs: number
+  owngoals: number
+  teamGoals: number
+  braces: number
+  hatTricks: number
+  pokers: number
+  avg: number
+  TOTW: number
+  MVP: number
+  hasGK: boolean
+}
+
+type TeamRow = {
+  id: string
+  name: string
+  country: string
+  matchesPlayed: number
+  matchesWon: number
+  matchesDraw: number
+  matchesLost: number
+  goalsScored: number
+  goalsConceded: number
+  points: number
+  possessionAvg: number
+  kicks: number
+  passes: number
+  shotsOnGoal: number
+  shotsOffGoal: number
+  saves: number
+  cs: number
+}
+
+type RankingRow = {
+  id: string
+  name: string
+  country: string
+  team?: string
+  value: number
+  goals?: number
+  assists?: number
+  preassists?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+}
+
+type PlayerMetric = {
+  key: string
+  label: string
+  format: "number" | "percent" | "decimal" | "time"
+  value: (player: PlayerRow) => number
+  gkOnly?: boolean
+}
+
+type TeamMetric = {
+  key: string
+  label: string
+  format: "number" | "percent"
+  value: (team: TeamRow) => number
+}
+
+type MetricGroup<TMetric> = {
+  key: string
+  label: string
+  metrics: TMetric[]
+}
+
+type HistoricMatchDoc = {
+  _id?: unknown
+  date?: Date | string
+  score_team1?: number
+  scoreTeam1?: number
+  score_team2?: number
+  scoreTeam2?: number
+  team1_competition_id?: { team_id?: { teamName?: string; team_name?: string; image?: string } }
+  team2_competition_id?: { team_id?: { teamName?: string; team_name?: string; image?: string } }
+}
+
+type RecentMatchDoc = {
+  _id?: unknown
+  date?: Date | string
+  score_team1?: number
+  scoreTeam1?: number
+  score_team2?: number
+  scoreTeam2?: number
+  team1_competition_id?: { team_id?: { teamName?: string; team_name?: string; image?: string } }
+  team2_competition_id?: { team_id?: { teamName?: string; team_name?: string; image?: string } }
+}
+
+type CompetitionSummary = {
+  _id?: unknown
+  competition_id?: number | string
+  season_id?: number | string
+  season?: number | string
+}
 
 function getTwemojiUrl(emoji: string) {
   if (!emoji) return ""
@@ -381,7 +582,7 @@ export default async function HomePage() {
   ])
 
   const scoringFeatsByPlayer = new Map<string, { braces: number; hatTricks: number; pokers: number }>()
-  scoringFeats.forEach((row: any) => {
+  ;(scoringFeats as ScoringFeatRow[]).forEach((row) => {
     if (!row?._id) return
     scoringFeatsByPlayer.set(String(row._id), {
       braces: Number(row.braces ?? 0),
@@ -390,7 +591,7 @@ export default async function HomePage() {
     })
   })
   const teamGoalsByPlayer = new Map<string, number>()
-  teamGoalsByPlayerRaw.forEach((row: any) => {
+  ;(teamGoalsByPlayerRaw as TeamGoalsRow[]).forEach((row) => {
     if (!row?._id) return
     teamGoalsByPlayer.set(String(row._id), Number(row.teamGoals ?? 0))
   })
@@ -398,7 +599,7 @@ export default async function HomePage() {
   const safeDivide = (numerator: number, denominator: number) =>
     denominator > 0 ? numerator / denominator : 0
 
-  const players = playerTotalsRaw.map((row: any) => ({
+  const players: PlayerRow[] = (playerTotalsRaw as PlayerTotalsRow[]).map((row) => ({
     id: row.playerId?.toString() || "",
     name: row.playerName || "Player",
     country: row.country || "",
@@ -439,7 +640,7 @@ export default async function HomePage() {
     MVP: Number(row.MVP ?? 0),
     hasGK: Boolean(row.hasGK),
   }))
-  const teams = teamTotalsRaw.map((row: any) => ({
+  const teams: TeamRow[] = (teamTotalsRaw as TeamTotalsRow[]).map((row) => ({
     id: row.teamId?.toString() || "",
     name: row.teamName || row.teamAltName || "Team",
     country: row.country || "",
@@ -459,76 +660,76 @@ export default async function HomePage() {
     cs: Number(row.cs ?? 0),
   }))
 
-  const metricGroups = [
+  const metricGroups: MetricGroup<PlayerMetric>[] = [
     {
       key: "impact",
       label: "Impact",
       metrics: [
-        { key: "games", label: "Games", format: "number", value: (p: any) => p.matchesPlayed },
-        { key: "won", label: "Won", format: "number", value: (p: any) => p.matchesWon },
-        { key: "draw", label: "Draw", format: "number", value: (p: any) => p.matchesDraw },
-        { key: "lost", label: "Lost", format: "number", value: (p: any) => p.matchesLost },
+        { key: "games", label: "Games", format: "number", value: (p) => p.matchesPlayed },
+        { key: "won", label: "Won", format: "number", value: (p) => p.matchesWon },
+        { key: "draw", label: "Draw", format: "number", value: (p) => p.matchesDraw },
+        { key: "lost", label: "Lost", format: "number", value: (p) => p.matchesLost },
         {
           key: "win_rate",
           label: "Win rate",
           format: "percent",
-          value: (p: any) => safeDivide(p.matchesWon, p.matchesPlayed),
+          value: (p) => safeDivide(p.matchesWon, p.matchesPlayed),
         },
-        { key: "avg", label: "Avg", format: "decimal", value: (p: any) => p.avg },
+        { key: "avg", label: "Avg", format: "decimal", value: (p) => p.avg },
         {
           key: "gap",
           label: "G/A/P",
           format: "number",
-          value: (p: any) => p.goals + p.assists + p.preassists,
+          value: (p) => p.goals + p.assists + p.preassists,
         },
         {
           key: "gi",
           label: "Team GI",
           format: "percent",
-          value: (p: any) =>
+          value: (p) =>
             safeDivide(p.goals + p.assists + p.preassists, p.teamGoals),
         },
-        { key: "totw", label: "TOTW", format: "number", value: (p: any) => p.TOTW },
-        { key: "mvp", label: "MVP", format: "number", value: (p: any) => p.MVP },
+        { key: "totw", label: "TOTW", format: "number", value: (p) => p.TOTW },
+        { key: "mvp", label: "MVP", format: "number", value: (p) => p.MVP },
       ],
     },
     {
       key: "finishing",
       label: "Finishing",
       metrics: [
-        { key: "goals", label: "Goals", format: "number", value: (p: any) => p.goals },
-        { key: "braces", label: "Braces", format: "number", value: (p: any) => p.braces },
+        { key: "goals", label: "Goals", format: "number", value: (p) => p.goals },
+        { key: "braces", label: "Braces", format: "number", value: (p) => p.braces },
         {
           key: "hat_tricks",
           label: "Hat tricks",
           format: "number",
-          value: (p: any) => p.hatTricks,
+          value: (p) => p.hatTricks,
         },
-        { key: "pokers", label: "Pokers", format: "number", value: (p: any) => p.pokers },
+        { key: "pokers", label: "Pokers", format: "number", value: (p) => p.pokers },
         {
           key: "shots_on",
           label: "Shots on Goal",
           format: "number",
-          value: (p: any) => p.shotsOnGoal,
+          value: (p) => p.shotsOnGoal,
         },
         {
           key: "shots_off",
           label: "Shots off Goal",
           format: "number",
-          value: (p: any) => p.shotsOffGoal,
+          value: (p) => p.shotsOffGoal,
         },
         {
           key: "shots_per_min",
           label: "Shots per min",
           format: "decimal",
-          value: (p: any) =>
+          value: (p) =>
             safeDivide((p.shotsOnGoal + p.shotsOffGoal) * 60, p.minutesPlayed),
         },
         {
           key: "on_target_pct",
           label: "% on target",
           format: "percent",
-          value: (p: any) =>
+          value: (p) =>
             p.shotsOnGoal + p.shotsOffGoal >= 7
               ? safeDivide(p.shotsOnGoal, p.shotsOnGoal + p.shotsOffGoal)
               : 0,
@@ -537,54 +738,54 @@ export default async function HomePage() {
           key: "goal_accuracy",
           label: "Goal accuracy",
           format: "percent",
-          value: (p: any) =>
+          value: (p) =>
             safeDivide(p.goals, p.shotsOnGoal + p.shotsOffGoal),
         },
-        { key: "owngoals", label: "Owngoals", format: "number", value: (p: any) => p.owngoals },
+        { key: "owngoals", label: "Owngoals", format: "number", value: (p) => p.owngoals },
       ],
     },
     {
       key: "passing",
       label: "Passing",
       metrics: [
-        { key: "assists", label: "Assists", format: "number", value: (p: any) => p.assists },
+        { key: "assists", label: "Assists", format: "number", value: (p) => p.assists },
         {
           key: "preassists",
           label: "Pre-Assists",
           format: "number",
-          value: (p: any) => p.preassists,
+          value: (p) => p.preassists,
         },
-        { key: "passes", label: "Passes", format: "number", value: (p: any) => p.passes },
+        { key: "passes", label: "Passes", format: "number", value: (p) => p.passes },
         {
           key: "passes_per_min",
           label: "Passes per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.passes * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.passes * 60, p.minutesPlayed),
         },
         {
           key: "pass_accuracy",
           label: "Pass accuracy",
           format: "percent",
-          value: (p: any) => safeDivide(p.passes, p.passes + p.misspass),
+          value: (p) => safeDivide(p.passes, p.passes + p.misspass),
         },
-        { key: "keypasses", label: "Keypasses", format: "number", value: (p: any) => p.keypass },
+        { key: "keypasses", label: "Keypasses", format: "number", value: (p) => p.keypass },
         {
           key: "keypass_pct",
           label: "% key passes",
           format: "percent",
-          value: (p: any) => safeDivide(p.keypass, p.passes),
+          value: (p) => safeDivide(p.keypass, p.passes),
         },
         {
           key: "autopasses",
           label: "Autopasses",
           format: "number",
-          value: (p: any) => p.autopass,
+          value: (p) => p.autopass,
         },
         {
           key: "autopass_pct",
           label: "% autopass",
           format: "percent",
-          value: (p: any) => safeDivide(p.autopass, p.kicks),
+          value: (p) => safeDivide(p.autopass, p.kicks),
         },
       ],
     },
@@ -596,51 +797,51 @@ export default async function HomePage() {
           key: "recoveries",
           label: "Recoveries",
           format: "number",
-          value: (p: any) => p.recoveries,
+          value: (p) => p.recoveries,
         },
         {
           key: "recoveries_per_min",
           label: "Recoveries per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.recoveries * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.recoveries * 60, p.minutesPlayed),
         },
         {
           key: "clearances",
           label: "Clearances",
           format: "number",
-          value: (p: any) => p.clearances,
+          value: (p) => p.clearances,
         },
         {
           key: "clearances_per_min",
           label: "Clearances per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.clearances * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.clearances * 60, p.minutesPlayed),
         },
-        { key: "saves", label: "Saves", format: "number", value: (p: any) => p.saves },
+        { key: "saves", label: "Saves", format: "number", value: (p) => p.saves },
         {
           key: "goals_conceded",
           label: "Goals conceded",
           format: "number",
-          value: (p: any) => p.goalsConceded,
+          value: (p) => p.goalsConceded,
         },
         {
           key: "save_pct",
           label: "% shots saved",
           format: "percent",
-          value: (p: any) => safeDivide(p.saves, p.saves + p.goalsConceded),
+          value: (p) => safeDivide(p.saves, p.saves + p.goalsConceded),
         },
         {
           key: "cs",
           label: "Clean sheets",
           format: "number",
-          value: (p: any) => p.cs,
+          value: (p) => p.cs,
           gkOnly: true,
         },
         {
           key: "cs_pct",
           label: "% games with CS",
           format: "percent",
-          value: (p: any) => safeDivide(p.cs, p.matchesPlayed),
+          value: (p) => safeDivide(p.cs, p.matchesPlayed),
           gkOnly: true,
         },
       ],
@@ -649,55 +850,55 @@ export default async function HomePage() {
       key: "progression",
       label: "Progression",
       metrics: [
-        { key: "fwd", label: "Fwd", format: "number", value: (p: any) => p.passesForward },
+        { key: "fwd", label: "Fwd", format: "number", value: (p) => p.passesForward },
         {
           key: "fwd_per_min",
           label: "Fwd per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.passesForward * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.passesForward * 60, p.minutesPlayed),
         },
-        { key: "lat", label: "Lat", format: "number", value: (p: any) => p.passesLateral },
+        { key: "lat", label: "Lat", format: "number", value: (p) => p.passesLateral },
         {
           key: "lat_per_min",
           label: "Lat per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.passesLateral * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.passesLateral * 60, p.minutesPlayed),
         },
         {
           key: "back",
           label: "Back",
           format: "number",
-          value: (p: any) => p.passesBackward,
+          value: (p) => p.passesBackward,
         },
         {
           key: "back_per_min",
           label: "Back per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.passesBackward * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.passesBackward * 60, p.minutesPlayed),
         },
         {
           key: "fwd_back_balance",
           label: "Fwd-Back balance",
           format: "number",
-          value: (p: any) => p.passesForward - p.passesBackward,
+          value: (p) => p.passesForward - p.passesBackward,
         },
         {
           key: "pct_forward",
           label: "% forward",
           format: "percent",
-          value: (p: any) => safeDivide(p.passesForward, p.passes),
+          value: (p) => safeDivide(p.passesForward, p.passes),
         },
         {
           key: "pct_lateral",
           label: "% lateral",
           format: "percent",
-          value: (p: any) => safeDivide(p.passesLateral, p.passes),
+          value: (p) => safeDivide(p.passesLateral, p.passes),
         },
         {
           key: "pct_backward",
           label: "% backward",
           format: "percent",
-          value: (p: any) => safeDivide(p.passesBackward, p.passes),
+          value: (p) => safeDivide(p.passesBackward, p.passes),
         },
       ],
     },
@@ -709,69 +910,69 @@ export default async function HomePage() {
           key: "minutes",
           label: "Minutes",
           format: "time",
-          value: (p: any) => p.minutesPlayed,
+          value: (p) => p.minutesPlayed,
         },
         {
           key: "minutes_per_game",
           label: "Minutes per game",
           format: "time",
-          value: (p: any) => safeDivide(p.minutesPlayed, p.matchesPlayed),
+          value: (p) => safeDivide(p.minutesPlayed, p.matchesPlayed),
         },
-        { key: "starter", label: "Starter", format: "number", value: (p: any) => p.starter },
+        { key: "starter", label: "Starter", format: "number", value: (p) => p.starter },
         {
           key: "substitute",
           label: "Substitute",
           format: "number",
-          value: (p: any) => p.substitute,
+          value: (p) => p.substitute,
         },
         {
           key: "starter_pct",
           label: "% as starter",
           format: "percent",
-          value: (p: any) => safeDivide(p.starter, p.matchesPlayed),
+          value: (p) => safeDivide(p.starter, p.matchesPlayed),
         },
         {
           key: "substitute_pct",
           label: "% as substitute",
           format: "percent",
-          value: (p: any) => safeDivide(p.substitute, p.matchesPlayed),
+          value: (p) => safeDivide(p.substitute, p.matchesPlayed),
         },
-        { key: "kicks", label: "Kicks", format: "number", value: (p: any) => p.kicks },
+        { key: "kicks", label: "Kicks", format: "number", value: (p) => p.kicks },
         {
           key: "kicks_per_min",
           label: "Kicks per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.kicks * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.kicks * 60, p.minutesPlayed),
         },
         {
           key: "misspasses",
           label: "Misspasses",
           format: "number",
-          value: (p: any) => p.misspass,
+          value: (p) => p.misspass,
         },
         {
           key: "misspasses_per_min",
           label: "Misspasses per min",
           format: "decimal",
-          value: (p: any) => safeDivide(p.misspass * 60, p.minutesPlayed),
+          value: (p) => safeDivide(p.misspass * 60, p.minutesPlayed),
         },
       ],
     },
   ]
-  const teamMetricGroups = [
+  const teamMetricGroups: MetricGroup<TeamMetric>[] = [
     {
       key: "impact",
       label: "Impact",
       metrics: [
-        { key: "games", label: "Games", format: "number", value: (t: any) => t.matchesPlayed },
-        { key: "won", label: "Won", format: "number", value: (t: any) => t.matchesWon },
-        { key: "draw", label: "Draw", format: "number", value: (t: any) => t.matchesDraw },
-        { key: "lost", label: "Lost", format: "number", value: (t: any) => t.matchesLost },
+        { key: "games", label: "Games", format: "number", value: (t) => t.matchesPlayed },
+        { key: "won", label: "Won", format: "number", value: (t) => t.matchesWon },
+        { key: "draw", label: "Draw", format: "number", value: (t) => t.matchesDraw },
+        { key: "lost", label: "Lost", format: "number", value: (t) => t.matchesLost },
         {
           key: "win_rate",
           label: "Win rate",
           format: "percent",
-          value: (t: any) => safeDivide(t.matchesWon, t.matchesPlayed),
+          value: (t) => safeDivide(t.matchesWon, t.matchesPlayed),
         },
       ],
     },
@@ -783,25 +984,25 @@ export default async function HomePage() {
           key: "goals_scored",
           label: "Goals scored",
           format: "number",
-          value: (t: any) => t.goalsScored,
+          value: (t) => t.goalsScored,
         },
         {
           key: "shots_on",
           label: "Shots on Goal",
           format: "number",
-          value: (t: any) => t.shotsOnGoal,
+          value: (t) => t.shotsOnGoal,
         },
         {
           key: "shots_off",
           label: "Shots off Goal",
           format: "number",
-          value: (t: any) => t.shotsOffGoal,
+          value: (t) => t.shotsOffGoal,
         },
         {
           key: "on_target_pct",
           label: "% on target",
           format: "percent",
-          value: (t: any) =>
+          value: (t) =>
             safeDivide(t.shotsOnGoal, t.shotsOnGoal + t.shotsOffGoal),
         },
       ],
@@ -810,13 +1011,13 @@ export default async function HomePage() {
       key: "passing",
       label: "Passing",
       metrics: [
-        { key: "passes", label: "Passes", format: "number", value: (t: any) => t.passes },
-        { key: "kicks", label: "Kicks", format: "number", value: (t: any) => t.kicks },
+        { key: "passes", label: "Passes", format: "number", value: (t) => t.passes },
+        { key: "kicks", label: "Kicks", format: "number", value: (t) => t.kicks },
         {
           key: "possession",
           label: "Possession",
           format: "percent",
-          value: (t: any) => safeDivide(t.possessionAvg, 100),
+          value: (t) => safeDivide(t.possessionAvg, 100),
         },
       ],
     },
@@ -828,10 +1029,10 @@ export default async function HomePage() {
           key: "goals_conceded",
           label: "Goals conceded",
           format: "number",
-          value: (t: any) => t.goalsConceded,
+          value: (t) => t.goalsConceded,
         },
-        { key: "saves", label: "Saves", format: "number", value: (t: any) => t.saves },
-        { key: "cs", label: "Clean sheets", format: "number", value: (t: any) => t.cs },
+        { key: "saves", label: "Saves", format: "number", value: (t) => t.saves },
+        { key: "cs", label: "Clean sheets", format: "number", value: (t) => t.cs },
       ],
     },
   ]
@@ -846,7 +1047,7 @@ export default async function HomePage() {
     return Math.round(value).toString()
   }
 
-  const buildTopRanking = (metric: any) => {
+  const buildTopRanking = (metric: PlayerMetric) => {
     const rows = players
       .filter((player) => player.matchesPlayed >= 7)
       .filter((player) => !metric.gkOnly || player.hasGK)
@@ -873,7 +1074,7 @@ export default async function HomePage() {
 
     return rows
   }
-  const buildTeamRanking = (metric: any) => {
+  const buildTeamRanking = (metric: TeamMetric) => {
     const rows = teams
       .map((team) => ({
         id: team.id,
@@ -890,22 +1091,22 @@ export default async function HomePage() {
     return rows
   }
 
-  const rankingsByMetric = metricGroups.reduce<Record<string, any[]>>((acc, group) => {
-    group.metrics.forEach((metric: any) => {
+  const rankingsByMetric = metricGroups.reduce<Record<string, RankingRow[]>>((acc, group) => {
+    group.metrics.forEach((metric) => {
       acc[metric.key] = buildTopRanking(metric)
     })
     return acc
   }, {})
-  const teamRankingsByMetric = teamMetricGroups.reduce<Record<string, any[]>>((acc, group) => {
-    group.metrics.forEach((metric: any) => {
+  const teamRankingsByMetric = teamMetricGroups.reduce<Record<string, RankingRow[]>>((acc, group) => {
+    group.metrics.forEach((metric) => {
       acc[metric.key] = buildTeamRanking(metric)
     })
     return acc
   }, {})
 
   const renderRankingTabs = (
-    groups: typeof metricGroups,
-    rankings: Record<string, any[]>,
+    groups: MetricGroup<PlayerMetric | TeamMetric>[],
+    rankings: Record<string, RankingRow[]>,
     showGapDetails: boolean,
     showTeamRecord: boolean
   ) => (
@@ -1008,15 +1209,14 @@ export default async function HomePage() {
     </Tabs>
   )
 
-  const scoringLeaders = rankingsByMetric.goals || []
-  const latestLeague = await CompetitionModel.findOne({ type: "league", division: 1 })
+  const latestLeague = (await CompetitionModel.findOne({ type: "league", division: 1 })
     .sort({ competition_id: -1 })
     .select({ _id: 1, competition_id: 1, season_id: 1, season: 1 })
-    .lean()
+    .lean()) as CompetitionSummary | null
   const latestLeagueHref = latestLeague
     ? `/competitions/${latestLeague.competition_id ?? latestLeague._id}`
     : "/competitions"
-  const historicMatchesData = historicMatches.map((match: any) => {
+  const historicMatchesData = (historicMatches as HistoricMatchDoc[]).map((match) => {
     const team1 = match.team1_competition_id?.team_id
     const team2 = match.team2_competition_id?.team_id
     return {
@@ -1049,7 +1249,7 @@ export default async function HomePage() {
     })
     .lean()
   const now = new Date()
-  const recentMatches = recentMatchesRaw.map((match: any) => {
+  const recentMatches = (recentMatchesRaw as RecentMatchDoc[]).map((match) => {
     const team1 = match.team1_competition_id?.team_id
     const team2 = match.team2_competition_id?.team_id
     const matchDate = match.date ? new Date(match.date) : null
@@ -1265,3 +1465,4 @@ export default async function HomePage() {
     </div>
   )
 }
+

@@ -1,4 +1,4 @@
-import mongoose from 'mongoose';
+import mongoose, { Mongoose } from 'mongoose';
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
@@ -7,12 +7,13 @@ if (!MONGODB_URI) {
     'Please define the MONGODB_URI environment variable inside .env.local'
   );
 }
+const MONGODB_URI_REQUIRED: string = MONGODB_URI;
 
 // Configuración de caché para desarrollo
 declare global {
   var mongoose: {
-    conn: typeof mongoose | null;
-    promise: Promise<typeof mongoose> | null;
+    conn: Mongoose | null;
+    promise: Promise<Mongoose> | null;
   };
 }
 
@@ -22,7 +23,7 @@ if (!cached) {
   cached = global.mongoose = { conn: null, promise: null };
 }
 
-async function dbConnect() {
+async function dbConnect(): Promise<Mongoose> {
   if (cached.conn) {
     return cached.conn;
   }
@@ -34,7 +35,7 @@ async function dbConnect() {
       socketTimeoutMS: 45000,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI, opts).then((mongoose) => {
+    cached.promise = mongoose.connect(MONGODB_URI_REQUIRED, opts).then((mongoose) => {
       return mongoose;
     });
   }
@@ -48,7 +49,7 @@ async function dbConnect() {
     throw e;
   }
 
-  return cached.conn;
+  return cached.conn as Mongoose;
 }
 
 export default dbConnect; 

@@ -1,13 +1,36 @@
 // lib/utils/competitionFormatter.ts
 import { Document } from "mongoose";
-import { ICompetition } from "../models/Competition";
 
-export function formatCompetition(competition: ICompetition & Document): any {
+type CompetitionDoc = {
+  competition_id?: string | number;
+  name?: string;
+  type: string;
+  status: string;
+  start_date?: string | Date;
+  end_date?: string | Date;
+  image?: string;
+  season_id?: string | number;
+  champion_team_id?: { name?: string };
+  _id?: unknown;
+};
+
+export type FormattedCompetition = {
+  id: string;
+  name: string;
+  type: string;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  image: string;
+  champion?: string;
+};
+
+export function formatCompetition(competition: CompetitionDoc & Document): FormattedCompetition {
   const startDateStr = competition.start_date ? new Date(competition.start_date).toISOString().split("T")[0] : null;
   const endDateStr = competition.end_date ? new Date(competition.end_date).toISOString().split("T")[0] : null;
 
   return {
-    id: competition.competition_id,
+    id: String(competition.competition_id ?? competition._id),
     name: generateCompetitionName(competition),
     type: translateType(competition.type),
     status: translateStatus(competition.status),
@@ -18,7 +41,7 @@ export function formatCompetition(competition: ICompetition & Document): any {
   };
 }
 
-function generateCompetitionName(competition: ICompetition): string {
+function generateCompetitionName(competition: CompetitionDoc): string {
   if (competition.type === "league") {
     return `Season ${competition.season_id} - ${getSeasonName(competition.start_date)} League`;
   }
@@ -46,7 +69,7 @@ function translateType(type: string): string {
   return typeMap[type] || type;
 }
 
-function getSeasonName(date: string | undefined): string {
+function getSeasonName(date: string | Date | undefined): string {
   if (!date) return "";
   const month = new Date(date).getMonth() + 1;
   if (month >= 3 && month <= 5) return "Spring";

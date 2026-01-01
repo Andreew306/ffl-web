@@ -7,14 +7,41 @@ import { Calendar, Users, Target } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
+type CompetitionDoc = {
+  _id: string;
+  type: string;
+  season_id?: string | number;
+  season?: string | number;
+  division?: number;
+  start_date?: Date | string;
+  end_date?: Date | string;
+  image?: string;
+  status?: string;
+  team_count?: number;
+  match_count?: number;
+  champion_team_id?: string;
+  champion_name?: string;
+};
+
+type SeasonGroup = {
+  _id: string;
+  title: string;
+  season?: string | number;
+  competitions: CompetitionDoc[];
+  startDate: Date | string | null;
+  endDate: Date | string | null;
+};
+
+export const revalidate = 60;
+
 export default async function CompetitionsPage() {
   await dbConnect();
 
   const competitions = await Competition.find({
     type: { $in: ["league", "cup", "supercup", "summer_cup", "nations_cup"] },
-  }).lean();
+  }).lean<CompetitionDoc[]>();
 
-  const groupedSeasons: Record<string, any> = {};
+  const groupedSeasons: Record<string, SeasonGroup> = {};
   competitions.forEach((comp) => {
     let key = "";
     if (["league", "cup", "supercup"].includes(comp.type)) {
@@ -33,8 +60,8 @@ export default async function CompetitionsPage() {
       groupedSeasons[key].competitions.push(comp);
 
       if (comp.type === "league" && comp.division === 1) {
-        groupedSeasons[key].startDate = comp.start_date;
-        groupedSeasons[key].endDate = comp.end_date;
+        groupedSeasons[key].startDate = comp.start_date ?? null;
+        groupedSeasons[key].endDate = comp.end_date ?? null;
       }
     } else {
       key = `${comp.type}-${comp._id}`;
@@ -42,14 +69,14 @@ export default async function CompetitionsPage() {
         _id: comp._id,
         title: comp.type === "summer_cup" ? "Summer Cup" : "Nations Cup",
         competitions: [comp],
-        startDate: comp.start_date,
-        endDate: comp.end_date,
+        startDate: comp.start_date ?? null,
+        endDate: comp.end_date ?? null,
       };
     }
   });
 
   const seasonsArray = Object.values(groupedSeasons).sort(
-    (a: any, b: any) => new Date(b.startDate ?? 0).getTime() - new Date(a.startDate ?? 0).getTime()
+    (a, b) => new Date(b.startDate ?? 0).getTime() - new Date(a.startDate ?? 0).getTime()
   );
 
   return (
@@ -65,7 +92,7 @@ export default async function CompetitionsPage() {
       <section className="py-16">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {seasonsArray.map((season: any) => (
+            {seasonsArray.map((season) => (
               <Card
                 key={season._id}
                 className="bg-gradient-to-br from-slate-800 to-slate-900 border-cyan-500/20 hover:border-cyan-500/40 transition-all group"
@@ -101,19 +128,19 @@ export default async function CompetitionsPage() {
                     <div className="flex items-center space-x-2">
                       <Users className="h-4 w-4 text-purple-400" />
                       <span className="text-gray-300">
-                        {season.competitions.reduce((sum: number, c: any) => sum + (c.team_count || 0), 0)} teams
+                        {season.competitions.reduce((sum, c) => sum + (c.team_count || 0), 0)} teams
                       </span>
                     </div>
                     <div className="flex items-center space-x-2">
                       <Target className="h-4 w-4 text-green-400" />
                       <span className="text-gray-300">
-                        {season.competitions.reduce((sum: number, c: any) => sum + (c.match_count || 0), 0)} matches
+                        {season.competitions.reduce((sum, c) => sum + (c.match_count || 0), 0)} matches
                       </span>
                     </div>
                   </div>
 
                   <div className="flex flex-wrap gap-2 text-sm">
-                    {season.competitions.map((c: any, idx: number) => {
+                    {season.competitions.map((c, idx) => {
                       if (!c.champion_team_id && !c.champion_name) return null;
                       let emoji = "";
                       switch (c.type) {
@@ -143,7 +170,7 @@ export default async function CompetitionsPage() {
                   </div>
 
                   <div className={`grid ${season.competitions.length === 1 ? "grid-cols-1" : "grid-cols-2"} gap-2`}>
-                    {orderCompetitions(season.competitions).map((c: any, idx: number) => {
+                    {orderCompetitions(season.competitions).map((c, idx) => {
                       let styles = "";
                       let label = "";
 
@@ -196,11 +223,16 @@ export default async function CompetitionsPage() {
   );
 }
 
-function orderCompetitions(list: any[]) {
-  const order = { div1: 1, div2: 2, cup: 3, supercup: 4, summer_cup: 5, nations_cup: 6 };
-  return list.sort(
-    (a, b) =>
-      (order[a.type === "league" ? `div${a.division}` : a.type] || 99) -
-      (order[b.type === "league" ? `div${b.division}` : b.type] || 99)
-  );
+function orderCompetitions(list: CompetitionDoc[]) {
+  const order: Record<string, number> = {
+    div1: 1,
+    div2: 2,
+    cup: 3,
+    supercup: 4,
+    summer_cup: 5,
+    nations_cup: 6,
+  };
+  const getKey = (comp: CompetitionDoc) =>
+    comp.type === "league" ? `div${comp.division ?? ""}` : comp.type;
+  return list.sort((a, b) => (order[getKey(a)] || 99) - (order[getKey(b)] || 99));
 }

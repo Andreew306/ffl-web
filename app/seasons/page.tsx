@@ -4,6 +4,37 @@ import MatchModel from "@/lib/models/Match"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 import Link from "next/link"
 
+type CompetitionDoc = {
+  _id?: { toString(): string }
+  type?: string
+  season_id?: string | number
+  season?: string | number
+  division?: number
+  start_date?: Date | string
+  end_date?: Date | string
+  image?: string
+}
+
+type TeamCompetitionDoc = {
+  competition_id?: { toString(): string }
+  team_id?: { toString(): string }
+}
+
+type MatchDoc = {
+  competition_id?: { toString(): string }
+}
+
+type SeasonGroup = {
+  key: string
+  type: "season" | "summer_cup" | "nations_cup"
+  title: string
+  seasonNumber?: number
+  competitions: CompetitionDoc[]
+  startDate?: Date | null
+  endDate?: Date | null
+  image?: string
+}
+
 function formatCompetitionLabel(competition: {
   type?: string
   season_id?: string | number
@@ -37,21 +68,21 @@ export default async function SeasonsPage() {
 
   const competitions = await CompetitionModel.find({
     type: { $in: ["league", "cup", "supercup", "summer_cup", "nations_cup"] },
-  }).lean()
+  }).lean<CompetitionDoc[]>()
 
   const competitionIds = competitions.map((item) => item._id).filter(Boolean)
   const teamCompetitions = competitionIds.length
     ? await TeamCompetitionModel.find({ competition_id: { $in: competitionIds } })
         .select("competition_id team_id")
-        .lean()
+        .lean<TeamCompetitionDoc[]>()
     : []
   const matches = competitionIds.length
     ? await MatchModel.find({ competition_id: { $in: competitionIds } })
         .select("competition_id")
-        .lean()
+        .lean<MatchDoc[]>()
     : []
 
-  const teamCountByCompetition = teamCompetitions.reduce((acc, row) => {
+  const teamCountByCompetition = teamCompetitions.reduce<Record<string, Set<string>>>((acc, row) => {
     const competitionId = row.competition_id?.toString()
     const teamId = row.team_id?.toString()
     if (!competitionId || !teamId) return acc
@@ -60,41 +91,25 @@ export default async function SeasonsPage() {
     return acc
   }, {})
 
-  const matchCountByCompetition = matches.reduce((acc, row) => {
+  const matchCountByCompetition = matches.reduce<Record<string, number>>((acc, row) => {
     const competitionId = row.competition_id?.toString()
     if (!competitionId) return acc
     acc[competitionId] = (acc[competitionId] || 0) + 1
     return acc
   }, {})
 
-  const toSeasonNumber = (competition: any) => {
+  const toSeasonNumber = (competition: CompetitionDoc) => {
     const raw = competition.season_id ?? competition.season
     const num = Number(raw)
     return Number.isFinite(num) ? num : null
   }
-  const toYear = (competition: any) => {
-    if (!competition.start_date) return null
-    const year = new Date(competition.start_date).getFullYear()
-    return Number.isFinite(year) ? year : null
-  }
-  const toDate = (value: any) => (value ? new Date(value) : null)
+  const toDate = (value?: Date | string | null) => (value ? new Date(value) : null)
 
-  const seasonGroups: Record<
-    string,
-    {
-      key: string
-      type: "season" | "summer_cup" | "nations_cup"
-      title: string
-      seasonNumber?: number
-      competitions: any[]
-      startDate?: Date | null
-      endDate?: Date | null
-      image?: string
-    }
-  > = {}
+  const seasonGroups: Record<string, SeasonGroup> = {}
 
-  competitions.forEach((competition: any) => {
-    if (["league", "cup", "supercup"].includes(competition.type)) {
+  competitions.forEach((competition) => {
+    const type = competition.type
+    if (type && ["league", "cup", "supercup"].includes(type)) {
       const seasonRaw = competition.season_id ?? competition.season ?? "unknown"
       const seasonKey = `season-${seasonRaw}`
       if (!seasonGroups[seasonKey]) {
@@ -116,11 +131,11 @@ export default async function SeasonsPage() {
       if (start && (!group.startDate || start < group.startDate)) group.startDate = start
       if (end && (!group.endDate || end > group.endDate)) group.endDate = end
       if (!group.image && competition.image) group.image = competition.image
-    } else if (competition.type === "summer_cup" || competition.type === "nations_cup") {
-      const key = `${competition.type}-${competition._id?.toString()}`
+    } else if (type === "summer_cup" || type === "nations_cup") {
+      const key = `${type}-${competition._id?.toString()}`
       seasonGroups[key] = {
         key,
-        type: competition.type,
+        type,
         title: formatCompetitionLabel(competition),
         competitions: [competition],
         startDate: toDate(competition.start_date),
@@ -136,7 +151,7 @@ export default async function SeasonsPage() {
     return bTime - aTime
   })
 
-  const getOptionLabel = (competition: any) => {
+  const getOptionLabel = (competition: CompetitionDoc) => {
     if (competition.type === "league") return `Div ${competition.division ?? "-"}`
     if (competition.type === "cup") return "Cup"
     if (competition.type === "supercup") return "Supercup"
@@ -144,7 +159,7 @@ export default async function SeasonsPage() {
     if (competition.type === "nations_cup") return "Nations Cup"
     return "Competition"
   }
-  const optionOrder = (competition: any) => {
+  const optionOrder = (competition: CompetitionDoc) => {
     if (competition.type === "league") return competition.division ?? 99
     if (competition.type === "cup") return 50
     if (competition.type === "supercup") return 60
@@ -161,7 +176,7 @@ export default async function SeasonsPage() {
               const endDate = card.endDate ? card.endDate.toLocaleDateString("en-GB") : "-"
               const cardImage = card.image || card.competitions?.[0]?.image || ""
               const sortedCompetitions = [...card.competitions].sort(
-                (a: any, b: any) => optionOrder(a) - optionOrder(b)
+                (a, b) => optionOrder(a) - optionOrder(b)
               )
               return (
                 <div
@@ -191,17 +206,16 @@ export default async function SeasonsPage() {
                   <div className="mt-4 space-y-2 text-sm text-slate-300">
                     {(() => {
                       const uniqueTeams = new Set<string>()
-                      sortedCompetitions.forEach((item: any) => {
+                      sortedCompetitions.forEach((item) => {
                         const compId = item._id?.toString()
                         const teamsSet = compId ? teamCountByCompetition[compId] : null
                         if (!teamsSet) return
                         teamsSet.forEach((teamId: string) => uniqueTeams.add(teamId))
                       })
-                      const matchesTotal = sortedCompetitions.reduce(
-                        (sum: number, item: any) =>
-                          sum + (matchCountByCompetition[item._id?.toString()] || 0),
-                        0
-                      )
+                      const matchesTotal = sortedCompetitions.reduce((sum, item) => {
+                        const compId = item._id?.toString()
+                        return sum + (compId ? matchCountByCompetition[compId] || 0 : 0)
+                      }, 0)
                       return (
                         <>
                           <div className="flex items-center justify-between">
@@ -224,7 +238,7 @@ export default async function SeasonsPage() {
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2 text-xs uppercase tracking-[0.2em] text-teal-100">
-                    {sortedCompetitions.map((item: any) => (
+                    {sortedCompetitions.map((item) => (
                       <Link
                         key={item._id?.toString()}
                         href={`/competitions/${item._id?.toString()}`}

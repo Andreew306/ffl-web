@@ -7,10 +7,10 @@ import GoalModel from "@/lib/models/Goal"; // 👈 nuevo
 export async function getMatchData(matchId: string) {
   await connectDB();
 
-  const match = await MatchModel.findById(matchId)
+  const match = (await MatchModel.findById(matchId)
     .populate({ path: "team1_competition_id", populate: { path: "team_id" } })
     .populate({ path: "team2_competition_id", populate: { path: "team_id" } })
-    .lean();
+    .lean()) as { _id?: unknown } | null;
 
   if (!match) return null;
 

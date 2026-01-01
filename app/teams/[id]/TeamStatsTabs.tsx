@@ -152,6 +152,9 @@ function MiniLineChart({
   label: string
   valueSuffix?: string
 }) {
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [hoverX, setHoverX] = useState(0)
+
   if (data.length === 0) {
     return <div className="text-xs text-slate-500">No data yet.</div>
   }
@@ -177,8 +180,6 @@ function MiniLineChart({
     height - padding
   } Z`
 
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [hoverX, setHoverX] = useState(0)
   const hoveredPoint = hoverIndex !== null ? data[hoverIndex] : null
 
   return (
@@ -674,7 +675,7 @@ export default function TeamStatsTabs({
     )
   const perMinuteStat =
     activeChart && filteredSeriesLimited.length
-      ? totalsForChart / (filteredSeriesLimited.length * 90)
+      ? (totalsForChart ?? 0) / (filteredSeriesLimited.length * 90)
       : 0
   const opponentGoals = filteredGoalsByOpponent.reduce<
     Record<string, { name: string; image: string; goals: number; matchIds: Set<string> }>

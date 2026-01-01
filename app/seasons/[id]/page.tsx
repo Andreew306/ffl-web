@@ -1,8 +1,9 @@
 import SeasonDetailPage from "./SeasonDetailPage";
 import { getSeasonData, getCompetitionData } from "@/lib/services/season.service";
 
-export default async function SeasonPage({ params }: { params: { id: string } }) {
-  const seasonId: string = params.id;
+export default async function SeasonPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  const seasonId: string = id;
   console.log("🟢 [SeasonPage] seasonId recibido:", seasonId);
 
   // Obtener todas las competiciones de la temporada

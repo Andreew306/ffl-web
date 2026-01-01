@@ -1,9 +1,9 @@
 'use client'
 import { useEffect, useState } from 'react'
-import SeasonDetailPage from './SeasonDetailPage'
+import SeasonDetailPage, { type SeasonDetail } from './SeasonDetailPage'
 
 export default function DynamicSeasonPage({ seasonId }: { seasonId: string }) {
-  const [seasonData, setSeasonData] = useState<any>(null)
+  const [seasonData, setSeasonData] = useState<SeasonDetail | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {

@@ -16,7 +16,7 @@ export default function ContactPage() {
             Contact
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto">
-            Want to join the league, have questions, or need help? We're here to help.
+            Want to join the league, have questions, or need help? We&apos;re here to help.
           </p>
         </div>
       </section>
@@ -218,7 +218,7 @@ export default function ContactPage() {
             </Card>
             <Card className="bg-gradient-to-br from-slate-800 to-slate-900 border-red-500/20">
               <CardContent className="p-6">
-                <h3 className="text-red-400 font-bold mb-2">What if I can't play a match?</h3>
+                <h3 className="text-red-400 font-bold mb-2">What if I can&apos;t play a match?</h3>
                 <p className="text-gray-300 text-sm">
                   Please notify us at least 24 hours in advance. Teams can use registered substitutes.
                 </p>

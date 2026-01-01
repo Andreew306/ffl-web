@@ -67,6 +67,8 @@ type PlayerRankingRow = {
   goals: number
   assists: number
   preassists: number
+  starter: number
+  substitute: number
   kicks: number
   passes: number
   passesForward: number
@@ -123,6 +125,60 @@ type CompetitionDetailTabsProps = {
   teams: TeamRankingRow[]
 }
 
+type RankingRowBase = {
+  id: string
+  name: string
+  country?: string
+  team?: string
+  value: number
+  goals?: number
+  assists?: number
+  preassists?: number
+  matchesWon?: number
+  matchesDraw?: number
+  matchesLost?: number
+  player?: PlayerRankingRow
+}
+
+type PlayerMetricRow = RankingRowBase & {
+  player: PlayerRankingRow
+}
+
+type PlayerMetric = {
+  key: string
+  label: string
+  format: "number" | "percent" | "decimal" | "time"
+  value: (player: PlayerRankingRow) => number
+  minGames?: number
+  minMinutes?: number
+  minShots?: number
+  minShotsAgainst?: number
+  minPasses?: number
+  minKicks?: number
+  minStarts?: number
+  allowZero?: boolean
+  allowNegative?: boolean
+  gkOnly?: boolean
+  sortDirection?: "asc" | "desc"
+  sortComparator?: (a: PlayerMetricRow, b: PlayerMetricRow) => number
+}
+
+type TeamMetric = {
+  key: string
+  label: string
+  format: "number" | "percent"
+  value: (team: TeamRankingRow) => number
+}
+
+type MetricGroup<TMetric> = {
+  key: string
+  label: string
+  metrics: TMetric[]
+}
+
+type AnyMetric = PlayerMetric | TeamMetric
+type AnyMetricGroup = MetricGroup<AnyMetric>
+
 export default function CompetitionDetailTabs({
   participants,
   standings,
@@ -144,7 +200,7 @@ export default function CompetitionDetailTabs({
     })
   }, [standings])
 
-  const metricGroups = [
+  const metricGroups: MetricGroup<PlayerMetric>[] = [
     {
       key: "impact",
       label: "Impact",
@@ -334,7 +390,7 @@ export default function CompetitionDetailTabs({
           minMinutes: 120,
           allowZero: true,
           sortDirection: "asc",
-          sortComparator: (a: any, b: any) => {
+          sortComparator: (a, b) => {
             if (a.value !== b.value) return a.value - b.value
             if (a.player.minutesPlayed !== b.player.minutesPlayed) {
               return b.player.minutesPlayed - a.player.minutesPlayed
@@ -489,7 +545,7 @@ export default function CompetitionDetailTabs({
     },
   ]
 
-  const teamMetricGroups = [
+  const teamMetricGroups: MetricGroup<TeamMetric>[] = [
     {
       key: "impact",
       label: "Impact",
@@ -556,7 +612,7 @@ export default function CompetitionDetailTabs({
   }
 
   const rankingsByMetric = useMemo(() => {
-    const shouldIncludePlayer = (metric: any, player: PlayerRankingRow, value: number) => {
+    const shouldIncludePlayer = (metric: PlayerMetric, player: PlayerRankingRow, value: number) => {
       if (!Number.isFinite(value)) return false
       if (metric.gkOnly && !player.hasGK) return false
       if (!metric.allowNegative) {
@@ -582,7 +638,7 @@ export default function CompetitionDetailTabs({
       return true
     }
 
-    const buildTopRanking = (metric: any) => {
+    const buildTopRanking = (metric: PlayerMetric) => {
       const rows = players
         .map((player) => {
           const value = Number(metric.value(player))
@@ -613,21 +669,17 @@ export default function CompetitionDetailTabs({
           return (a.value - b.value) * direction
         })
         .slice(0, 30)
-        .map((row) => {
-          const { player, ...rest } = row
-          return rest
-        })
 
       return rows
     }
 
-    return metricGroups.reduce<Record<string, any[]>>((acc, group) => {
-      group.metrics.forEach((metric: any) => {
+    return metricGroups.reduce<Record<string, RankingRowBase[]>>((acc, group) => {
+      group.metrics.forEach((metric) => {
         acc[metric.key] = buildTopRanking(metric)
       })
       return acc
     }, {})
-  }, [players])
+  }, [players, metricGroups])
 
   const topGoalMatches = useMemo(() => {
     return matches
@@ -653,7 +705,7 @@ export default function CompetitionDetailTabs({
   }, [matches])
 
   const teamRankingsByMetric = useMemo(() => {
-    const buildTeamRanking = (metric: any) => {
+    const buildTeamRanking = (metric: TeamMetric) => {
       const rows = teams
         .map((team) => ({
           id: team.id,
@@ -670,17 +722,17 @@ export default function CompetitionDetailTabs({
       return rows
     }
 
-    return teamMetricGroups.reduce<Record<string, any[]>>((acc, group) => {
-      group.metrics.forEach((metric: any) => {
+    return teamMetricGroups.reduce<Record<string, RankingRowBase[]>>((acc, group) => {
+      group.metrics.forEach((metric) => {
         acc[metric.key] = buildTeamRanking(metric)
       })
       return acc
     }, {})
-  }, [teams])
+  }, [teams, teamMetricGroups])
 
   const renderRankingTabs = (
-    groups: typeof metricGroups,
-    rankings: Record<string, any[]>,
+    groups: AnyMetricGroup[],
+    rankings: Record<string, RankingRowBase[]>,
     showGapDetails: boolean,
     showTeamRecord: boolean
   ) => (

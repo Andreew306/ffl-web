@@ -4,6 +4,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Trophy, TrendingUp } from "lucide-react"
 
+export const revalidate = 60
+
 type EloPlayerRow = {
   playerId: string
   nickname?: string
@@ -31,11 +33,10 @@ type EloPlayerSeasonRow = {
 
 export default async function EloPage() {
   const mongoose = await dbConnect()
-  const db = mongoose.connection.db
-
-  if (!db) {
+  if (!mongoose?.connection?.db) {
     throw new Error("Database connection not initialized")
   }
+  const db = mongoose.connection.db
 
   const activeSeason = await db
     .collection("eloseasons")
@@ -53,12 +54,12 @@ export default async function EloPage() {
   let usingSeason = false
 
   if (activeSeason?.seasonId) {
-    const seasonPlayers = await db
+    const seasonPlayers = (await db
       .collection("eloplayerseasons")
       .find({ seasonId: activeSeason.seasonId })
       .sort({ elo: -1 })
       .limit(50)
-      .toArray() as EloPlayerSeasonRow[]
+      .toArray()) as unknown as EloPlayerSeasonRow[]
 
     if (seasonPlayers.length) {
       const discordIds = seasonPlayers

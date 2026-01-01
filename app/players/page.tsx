@@ -9,6 +9,8 @@ import Script from "next/script"
 import { cn } from "@/lib/utils"
 import mongoose from "mongoose"
 
+export const revalidate = 60
+
 const PAGE_SIZE = 30
 
 const STAT_FIELDS = [
@@ -93,26 +95,27 @@ function formatCompetitionLabel(competition: {
   return competition.name || competition.competition_id || "Competition"
 }
 
-export default async function PlayersPage({ searchParams }: { searchParams: SearchParams }) {
-  const page = Math.max(1, Number.parseInt(readParam(searchParams, "page") || "1", 10) || 1)
-  const q = readParam(searchParams, "q")?.trim() || ""
-  const country = readParam(searchParams, "country")?.trim() || "all"
-  const sortRaw = readParam(searchParams, "sort") || "name_asc"
+export default async function PlayersPage({ searchParams }: { searchParams: Promise<SearchParams> }) {
+  const resolvedSearchParams = await searchParams
+  const page = Math.max(1, Number.parseInt(readParam(resolvedSearchParams, "page") || "1", 10) || 1)
+  const q = readParam(resolvedSearchParams, "q")?.trim() || ""
+  const country = readParam(resolvedSearchParams, "country")?.trim() || "all"
+  const sortRaw = readParam(resolvedSearchParams, "sort") || "name_asc"
   const sort = ["name_asc", "name_desc"].includes(sortRaw) ? sortRaw : "name_asc"
-  const competition = readParam(searchParams, "competition")?.trim() || "all"
+  const competition = readParam(resolvedSearchParams, "competition")?.trim() || "all"
 
   const uiRows: { field: string; op: "gte" | "lte" | "eq"; value: string }[] = []
   {
     const indexSet = new Set<number>()
-    Object.keys(searchParams || {}).forEach((key) => {
+    Object.keys(resolvedSearchParams || {}).forEach((key) => {
       const match = key.match(/^(stat|op|val)(\d+)$/)
       if (match?.[2]) indexSet.add(Number.parseInt(match[2], 10))
     })
     const sortedIndexes = Array.from(indexSet).sort((a, b) => a - b)
     sortedIndexes.forEach((idx) => {
-      const field = readParam(searchParams, `stat${idx}`)?.trim() || ""
-      const opRaw = readParam(searchParams, `op${idx}`) || ""
-      const value = readParam(searchParams, `val${idx}`)?.trim() || ""
+      const field = readParam(resolvedSearchParams, `stat${idx}`)?.trim() || ""
+      const opRaw = readParam(resolvedSearchParams, `op${idx}`) || ""
+      const value = readParam(resolvedSearchParams, `val${idx}`)?.trim() || ""
       if (!field && !opRaw && !value) return
       const op: "gte" | "lte" | "eq" = opRaw === "lte" || opRaw === "eq" ? opRaw : "gte"
       uiRows.push({ field, op, value })
@@ -129,9 +132,18 @@ export default async function PlayersPage({ searchParams }: { searchParams: Sear
 
   await dbConnect()
 
-  const competitions = await Competition.find().sort({ start_date: -1 }).lean()
+  const competitions = (await Competition.find().sort({ start_date: -1 }).lean()) as Array<{
+    _id: unknown
+    type?: string
+    season_id?: string | number
+    season?: string | number
+    division?: number
+    start_date?: Date | string
+    name?: string
+    competition_id?: string
+  }>
 
-  const filter: Record<string, any> = {}
+  const filter: Record<string, unknown> = {}
   if (q) filter.player_name = { $regex: q, $options: "i" }
   if (country !== "all") filter.country = country
 
@@ -141,7 +153,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Sear
   const onlyType = isOnlyType ? competition.replace("only_type_", "") : ""
 
   if (competition !== "all" || filters.length > 0) {
-    const pipeline: any[] = [{ $match: {} }]
+    const pipeline: Record<string, unknown>[] = [{ $match: {} }]
 
     pipeline.push({
       $lookup: {
@@ -198,7 +210,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Sear
     })
 
     if (filters.length > 0) {
-      const matchAgg: Record<string, any> = {}
+      const matchAgg: Record<string, Record<string, number>> = {}
       filters.forEach((f) => {
         if (!matchAgg[f.field]) matchAgg[f.field] = {}
         if (f.op === "eq") {
@@ -212,7 +224,9 @@ export default async function PlayersPage({ searchParams }: { searchParams: Sear
 
     pipeline.push({ $project: { _id: 1 } })
 
-    const ids = await PlayerCompetition.aggregate(pipeline)
+    const ids = await PlayerCompetition.aggregate(
+      pipeline as unknown as mongoose.PipelineStage[]
+    )
     const playerIdsFromStats = ids.map((doc) => doc._id?.toString()).filter(Boolean)
     filter._id = { $in: playerIdsFromStats }
   }
@@ -349,7 +363,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Sear
               <option value="only_type_summer_cup">Only summer cup</option>
               <option value="only_type_nations_cup">Only nations cup</option>
               {competitions.map((c) => (
-                <option key={c._id.toString()} value={c._id.toString()}>
+                <option key={String(c._id)} value={String(c._id)}>
                   {formatCompetitionLabel(c)}
                 </option>
               ))}

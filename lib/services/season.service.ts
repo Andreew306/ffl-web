@@ -1,7 +1,5 @@
 // services/season.service.ts
-import mongoose from "mongoose";
 import connectDB from "../db/mongoose";
-import TeamModel from "@/lib/models/Team";
 import CompetitionModel from "@/lib/models/Competition";
 import TeamCompetitionModel from "@/lib/models/TeamCompetition";
 import PlayerCompetitionModel from "@/lib/models/PlayerCompetition";
@@ -12,8 +10,6 @@ import "@/lib/models/Player";
 import "@/lib/models/Team";
 
 
-// 👇 Con solo importar ya queda registrado el modelo en mongoose
-import "@/lib/models/Player";
 
 export async function getSeasonData(seasonId: string) {
     await connectDB();
@@ -32,7 +28,7 @@ export async function getSeasonData(seasonId: string) {
 export async function getCompetitionData(competitionId: string) {
     await connectDB();
 
-    const competition = await CompetitionModel.findOne({ competition_id: competitionId }).lean();
+    const competition = (await CompetitionModel.findOne({ competition_id: competitionId }).lean()) as { _id?: unknown } | null;
     if (!competition) return null;
     const competitionObjectId = competition._id;
 
@@ -48,10 +44,10 @@ export async function getCompetitionData(competitionId: string) {
         .lean();
 
     // Mapear equipos para rellenar nombres y logos
-    const teamCompetitions = await TeamCompetitionModel.find({ competition_id: competitionObjectId })
+    const teamCompetitions = (await TeamCompetitionModel.find({ competition_id: competitionObjectId })
         .populate("team_id")
-        .lean();
-    const teamMap = new Map(teamCompetitions.map(tc => [tc._id.toString(), tc]));
+        .lean()) as Array<{ _id?: { toString(): string }; team_id?: unknown }>;
+    const teamMap = new Map(teamCompetitions.map(tc => [tc._id?.toString() || "", tc]));
 
     const matchesWithTeams = matches.map(match => {
         const t1 = teamMap.get(match.team1_competition_id.toString());
@@ -97,3 +93,4 @@ export async function getCompetitionData(competitionId: string) {
         },
     };
 }
+
