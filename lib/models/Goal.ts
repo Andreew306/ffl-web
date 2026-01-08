@@ -25,6 +25,11 @@ const goalSchema: Schema<IGoal> = new Schema({
 goalSchema.index({ match_id: 1 });
 goalSchema.index({ scorer_id: 1 });
 goalSchema.index({ team_competition_id: 1 });
+goalSchema.index({ assist_id: 1 });
+goalSchema.index({ preassist_id: 1 });
+goalSchema.index({ match_id: 1, scorer_id: 1 });
+goalSchema.index({ match_id: 1, assist_id: 1 });
+goalSchema.index({ match_id: 1, preassist_id: 1 });
 
 const Goal: Model<IGoal> = mongoose.models.Goal || mongoose.model<IGoal>("Goal", goalSchema);
 

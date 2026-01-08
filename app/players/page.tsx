@@ -1,12 +1,21 @@
 import dbConnect from "@/lib/db/mongoose"
 import Player from "@/lib/models/Player"
 import PlayerCompetition from "@/lib/models/PlayerCompetition"
+import TeamCompetition from "@/lib/models/TeamCompetition"
 import Competition from "@/lib/models/Competition"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import Script from "next/script"
-import { cn } from "@/lib/utils"
+import {
+  cn,
+  getFlagBackgroundStyle,
+  getKitTextColor,
+  hashString,
+  isImageUrl,
+  shouldOverlayFlag,
+  normalizeTeamImageUrl,
+} from "@/lib/utils"
 import mongoose from "mongoose"
 
 export const revalidate = 60
@@ -40,6 +49,11 @@ const STAT_FIELDS = [
 ]
 
 type SearchParams = Record<string, string | string[] | undefined>
+type KitDoc = { image?: string; color?: string }
+type TeamCompetitionKitDoc = {
+  _id?: { toString(): string }
+  kits?: KitDoc[]
+}
 
 function getTwemojiUrl(emoji: string) {
   const codePoints = Array.from(emoji).map((c) => c.codePointAt(0)?.toString(16)).join("-")
@@ -57,6 +71,21 @@ function readParam(params: SearchParams, key: string) {
   const raw = params?.[key]
   if (Array.isArray(raw)) return raw[0]
   return raw
+}
+
+function toObjectIdString(value: unknown) {
+  if (typeof value === "string") return value
+  if (!value || typeof value !== "object") return ""
+  const maybeWithId = value as { _id?: { toString?: () => string } }
+  if (maybeWithId._id?.toString) return maybeWithId._id.toString()
+  const maybeToString = value as { toString?: () => string }
+  return maybeToString.toString ? maybeToString.toString() : ""
+}
+
+function pickDeterministicItem<T>(items: T[], seed: string) {
+  if (!items.length) return null
+  const index = hashString(seed) % items.length
+  return items[index] || null
 }
 
 function formatCompetitionLabel(competition: {
@@ -240,6 +269,74 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
     Player.countDocuments(filter),
     Player.distinct("country"),
   ])
+
+  const playerIds = players.map((player) => toObjectIdString(player._id)).filter(Boolean)
+  const playerCompetitionRows = playerIds.length
+    ? await PlayerCompetition.find({ player_id: { $in: playerIds } })
+        .select("player_id team_competition_id")
+        .lean()
+    : []
+  const teamCompetitionIds = Array.from(
+    new Set(
+      playerCompetitionRows
+        .map((row) => toObjectIdString(row.team_competition_id))
+        .filter(Boolean)
+    )
+  )
+  const teamCompetitionRows = teamCompetitionIds.length
+    ? await TeamCompetition.find({ _id: { $in: teamCompetitionIds } })
+        .select("kits")
+        .lean<TeamCompetitionKitDoc[]>()
+    : []
+  const teamCompetitionById = new Map<string, TeamCompetitionKitDoc>()
+  teamCompetitionRows.forEach((row) => {
+    const id = toObjectIdString(row._id)
+    if (!id) return
+    teamCompetitionById.set(id, row)
+  })
+  const playerKitOptions = new Map<string, { image: string; textColor: string }[]>()
+  playerCompetitionRows.forEach((row) => {
+    const playerId = toObjectIdString(row.player_id)
+    const teamCompetitionId = toObjectIdString(row.team_competition_id)
+    if (!playerId || !teamCompetitionId) return
+    const teamCompetition = teamCompetitionById.get(teamCompetitionId)
+    const kitOptions =
+      teamCompetition?.kits
+        ?.map((kit) => ({
+          image: normalizeTeamImageUrl(kit?.image),
+          textColor: getKitTextColor(kit?.color),
+        }))
+        .filter((kit) => Boolean(kit.image)) || []
+    if (!kitOptions.length) return
+    if (!playerKitOptions.has(playerId)) playerKitOptions.set(playerId, [])
+    playerKitOptions.get(playerId)?.push(...kitOptions)
+  })
+  const playerFallbackKit = new Map<string, { image: string; textColor: string }>()
+  const needsGlobalFallback = playerIds.some(
+    (playerId) => !(playerKitOptions.get(playerId) || []).length
+  )
+  const allKitOptions = needsGlobalFallback
+    ? (await TeamCompetition.find({})
+        .select("kits")
+        .lean<TeamCompetitionKitDoc[]>())
+        .flatMap(
+          (row) =>
+            row.kits
+              ?.map((kit) => ({
+                image: normalizeTeamImageUrl(kit?.image),
+                textColor: getKitTextColor(kit?.color),
+              }))
+              .filter((kit) => Boolean(kit.image)) || []
+        )
+    : []
+  playerIds.forEach((playerId) => {
+    const kitOptions = playerKitOptions.get(playerId) || []
+    const picked = pickDeterministicItem(
+      kitOptions.length ? kitOptions : allKitOptions,
+      playerId
+    )
+    if (picked) playerFallbackKit.set(playerId, picked)
+  })
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const clampedPage = Math.min(page, totalPages)
@@ -451,32 +548,96 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {players.map((player) => (
-                <Card
-                  key={player._id?.toString() ?? player.player_id}
-                  className="bg-gradient-to-br from-slate-900 via-slate-900 to-teal-900/60 border border-slate-800/70 hover:border-teal-400/60 transition-all shadow-md shadow-teal-900/20"
-                >
+              {players.map((player) => {
+                const playerId = toObjectIdString(player._id)
+                const kitImage = playerId ? playerFallbackKit.get(playerId)?.image || "" : ""
+                const kitTextColor =
+                  playerId ? playerFallbackKit.get(playerId)?.textColor || "" : ""
+                const avatar = player.avatar || ""
+                const avatarIsImage = isImageUrl(avatar)
+                return (
+                  <Card
+                    key={player._id?.toString() ?? player.player_id}
+                    className="bg-gradient-to-br from-slate-900 via-slate-900 to-teal-900/60 border border-slate-800/70 hover:border-teal-400/60 transition-all shadow-md shadow-teal-900/20"
+                  >
                   <CardContent className="p-6 space-y-6">
                     <div className="flex flex-col items-center text-center space-y-4">
                       <div className="relative">
-                        {player.avatar ? (
+                        {kitImage ? (
+                          <div className="relative h-24 w-24 rounded-full overflow-hidden border border-slate-700 shadow-lg shadow-teal-900/50">
+                            <img
+                              src={kitImage}
+                              alt={player.player_name}
+                              className="h-full w-full object-cover"
+                            />
+                            {avatar ? (
+                              avatarIsImage ? (
+                                <img
+                                  src={avatar}
+                                  alt={player.player_name}
+                                  className="absolute left-1/2 top-1/2 h-48 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full object-contain bg-transparent"
+                                />
+                              ) : (
+                                <div
+                                  className="absolute left-1/2 top-1/2 h-64 w-64 -translate-x-1/2 -translate-y-1/2 rounded-full bg-transparent flex items-center justify-center text-5xl font-semibold"
+                                  style={{ color: kitTextColor || "#ffffff" }}
+                                >
+                                  {avatar}
+                                </div>
+                              )
+                            ) : null}
+                          </div>
+                        ) : avatarIsImage ? (
                           <img
-                            src={player.avatar}
+                            src={avatar}
                             alt={player.player_name}
                             className="h-24 w-24 rounded-full object-cover ring-2 ring-teal-500/60 shadow-lg shadow-teal-900/50"
                           />
+                        ) : avatar ? (
+                          <div
+                            className="h-24 w-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-2xl font-semibold"
+                            style={{ color: kitTextColor || "#ffffff" }}
+                          >
+                            {avatar}
+                          </div>
                         ) : (
                           <div className="h-24 w-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm text-gray-400">
                             No photo
                           </div>
                         )}
-                        {player.country ? (
-                          <img
-                            src={getTwemojiUrl(player.country)}
-                            alt={player.country}
-                            className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full ring-2 ring-slate-900 bg-slate-900"
-                          />
-                        ) : null}
+                        {player.country ? (() => {
+                          const baseStyle = getFlagBackgroundStyle(player.country)
+                          const overlayUrl = shouldOverlayFlag(player.country)
+                            ? getTwemojiUrl(player.country)
+                            : ""
+                          const backgroundImage = overlayUrl
+                            ? baseStyle.backgroundImage
+                              ? `url(${overlayUrl}), ${baseStyle.backgroundImage}`
+                              : `url(${overlayUrl})`
+                            : baseStyle.backgroundImage
+                          const baseSize = baseStyle.backgroundSize || "cover"
+                          const basePosition = baseStyle.backgroundPosition || "center"
+                          const baseRepeat = baseStyle.backgroundRepeat || "no-repeat"
+                          return (
+                            <span
+                              aria-label={player.country}
+                              className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full ring-2 ring-slate-900"
+                              style={{
+                                ...baseStyle,
+                                backgroundImage,
+                                backgroundPosition: overlayUrl
+                                  ? `center, ${basePosition}`
+                                  : basePosition,
+                                backgroundSize: overlayUrl
+                                  ? `cover, ${baseSize}`
+                                  : baseSize,
+                                backgroundRepeat: overlayUrl
+                                  ? `no-repeat, ${baseRepeat}`
+                                  : baseRepeat,
+                              }}
+                            />
+                          )
+                        })() : null}
                       </div>
                       <div className="pt-3 pb-2">
                         <h3 className="text-xl font-semibold">{player.player_name}</h3>
@@ -487,8 +648,9 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
                       <Button className="w-full bg-teal-600 hover:bg-teal-500 text-white">View profile</Button>
                     </Link>
                   </CardContent>
-                </Card>
-              ))}
+                  </Card>
+                )
+              })}
             </div>
           )}
 

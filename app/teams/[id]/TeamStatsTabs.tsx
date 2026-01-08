@@ -2,11 +2,37 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
+import { cn, getFlagBackgroundStyle, isImageUrl, shouldOverlayFlag } from "@/lib/utils"
 
 function getTwemojiUrl(emoji: string) {
   const codePoints = Array.from(emoji).map((c) => c.codePointAt(0)?.toString(16)).join("-")
   return `https://twemoji.maxcdn.com/v/latest/72x72/${codePoints}.png`
+}
+
+function FlagBadge({ country, className }: { country: string; className?: string }) {
+  const baseStyle = getFlagBackgroundStyle(country)
+  const overlayUrl = shouldOverlayFlag(country) ? getTwemojiUrl(country) : ""
+  const backgroundImage = overlayUrl
+    ? baseStyle.backgroundImage
+      ? `url(${overlayUrl}), ${baseStyle.backgroundImage}`
+      : `url(${overlayUrl})`
+    : baseStyle.backgroundImage
+  const baseSize = baseStyle.backgroundSize || "cover"
+  const basePosition = baseStyle.backgroundPosition || "center"
+  const baseRepeat = baseStyle.backgroundRepeat || "no-repeat"
+  return (
+    <span
+      aria-label={country}
+      className={className}
+      style={{
+        ...baseStyle,
+        backgroundImage,
+        backgroundPosition: overlayUrl ? `center, ${basePosition}` : basePosition,
+        backgroundSize: overlayUrl ? `cover, ${baseSize}` : baseSize,
+        backgroundRepeat: overlayUrl ? `no-repeat, ${baseRepeat}` : baseRepeat,
+      }}
+    />
+  )
 }
 
 type TeamStats = {
@@ -110,6 +136,7 @@ type TeamStatsTabsProps = {
     position: string
     matchesPlayed: number
   }[]
+  teamCompetitionKits: Record<string, { image: string; textColor: string }>
 }
 
 const statCards: { key: keyof TeamStats; label: string }[] = [
@@ -267,6 +294,7 @@ export default function TeamStatsTabs({
   concedingScorers,
   matchesByPlayer,
   roster,
+  teamCompetitionKits,
 }: TeamStatsTabsProps) {
   const allTabs = useMemo(
     () => [{ id: "total", label: "Total", stats: totalStats }, ...tabs],
@@ -394,10 +422,14 @@ export default function TeamStatsTabs({
           country: string
           position: string
           matchesPlayed: number
+          kitImage: string
+          kitTextColor: string
+          teamCompetitionId: string
         }
       >
     >((acc, row) => {
       const key = row.playerId || row.playerName
+      const kit = teamCompetitionKits[row.teamCompetitionId]
       if (!acc[key]) {
         acc[key] = {
           playerId: row.playerId,
@@ -406,7 +438,14 @@ export default function TeamStatsTabs({
           country: row.country,
           position: row.position,
           matchesPlayed: 0,
+          kitImage: kit?.image || "",
+          kitTextColor: kit?.textColor || "",
+          teamCompetitionId: row.teamCompetitionId,
         }
+      } else if (!acc[key].kitImage && kit?.image) {
+        acc[key].kitImage = kit.image
+        acc[key].kitTextColor = kit.textColor || ""
+        acc[key].teamCompetitionId = row.teamCompetitionId
       }
       acc[key].matchesPlayed += Number(row.matchesPlayed) || 0
       return acc
@@ -950,25 +989,66 @@ export default function TeamStatsTabs({
                 >
                   <div className="flex items-center gap-3">
                     <div className="relative">
-                      {player.playerAvatar ? (
-                        <img
-                          src={player.playerAvatar}
-                          alt={player.playerName}
-                          className="h-9 w-9 rounded-full object-cover border border-slate-800"
-                        />
-                      ) : (
-                        <div className="h-9 w-9 rounded-full border border-slate-800 bg-slate-900/60" />
-                      )}
+                      {(() => {
+                        const avatar = player.playerAvatar || ""
+                        const avatarIsImage = isImageUrl(avatar)
+                        return (
+                          <div
+                            className={cn(
+                              "relative h-9 w-9 rounded-full flex items-center justify-center",
+                              player.kitImage ? "border border-slate-800 shadow-md" : "border border-slate-800 bg-slate-900/60"
+                            )}
+                            style={
+                              player.kitImage
+                                ? {
+                                    backgroundImage: `url(${player.kitImage})`,
+                                    backgroundSize: "cover",
+                                    backgroundPosition: "center",
+                                  }
+                                : undefined
+                            }
+                          >
+                            {avatar ? (
+                              avatarIsImage ? (
+                                <img
+                                  src={avatar}
+                                  alt={player.playerName}
+                                  className="h-7 w-7 rounded-full object-contain"
+                                />
+                              ) : (
+                                <span
+                                  className="text-xs font-semibold"
+                                  style={{ color: player.kitTextColor || "#ffffff" }}
+                                >
+                                  {avatar}
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] text-slate-200">
+                                {getInitials(player.playerName)}
+                              </span>
+                            )}
+                          </div>
+                        )
+                      })()}
                       {player.country ? (
-                        <img
-                          src={getTwemojiUrl(player.country)}
-                          alt={player.country}
-                          className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full ring-2 ring-slate-900 bg-slate-900"
+                        <FlagBadge
+                          country={player.country}
+                          className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full ring-2 ring-slate-900"
                         />
                       ) : null}
                     </div>
                     <div>
-                      <div className="font-semibold text-slate-100">{player.playerName}</div>
+                      {player.playerId ? (
+                        <Link
+                          href={`/players/${player.playerId}`}
+                          className="font-semibold text-slate-100 hover:text-teal-200"
+                        >
+                          {player.playerName}
+                        </Link>
+                      ) : (
+                        <div className="font-semibold text-slate-100">{player.playerName}</div>
+                      )}
                     </div>
                   </div>
                   <div className="text-slate-300">{player.position || "-"}</div>
@@ -1161,45 +1241,92 @@ export default function TeamStatsTabs({
                               : ""
                         )}
                       >
-                        {players.map((player) => (
-                          <div
-                            key={player.playerId}
-                            className="group relative flex h-7 w-7 items-center justify-center rounded-full border border-slate-800 bg-slate-900/70 text-[10px] text-slate-200"
-                          >
-                            {player.playerAvatar ? (
-                              <img
-                                src={player.playerAvatar}
-                                alt={player.playerName}
-                                className="h-6 w-6 rounded-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-[9px]">{getInitials(player.playerName)}</span>
-                            )}
-                            {player.country ? (
-                              <img
-                                src={getTwemojiUrl(player.country)}
-                                alt=""
-                                className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border border-slate-900 bg-slate-950"
-                              />
-                            ) : null}
-                            <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1 text-[10px] text-slate-200 shadow-lg group-hover:flex">
-                              {player.playerAvatar ? (
-                                <img
-                                  src={player.playerAvatar}
-                                  alt={player.playerName}
-                                  className="h-5 w-5 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[9px]">
-                                  {getInitials(player.playerName)}
-                                </div>
+                        {players.map((player) => {
+                          const avatar = player.playerAvatar || ""
+                          const avatarIsImage = isImageUrl(avatar)
+                          return (
+                            <div
+                              key={player.playerId}
+                              className={cn(
+                                "group relative flex h-7 w-7 items-center justify-center rounded-full text-[10px] text-slate-200",
+                                player.kitImage
+                                  ? "border border-slate-800 shadow-md"
+                                  : "border border-slate-800 bg-slate-900/70"
                               )}
-                              <span className="whitespace-nowrap">
-                                {player.playerName} - {slot.key}
-                              </span>
+                              style={
+                                player.kitImage
+                                  ? {
+                                      backgroundImage: `url(${player.kitImage})`,
+                                      backgroundSize: "cover",
+                                      backgroundPosition: "center",
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {avatar ? (
+                                avatarIsImage ? (
+                                  <img
+                                    src={avatar}
+                                    alt={player.playerName}
+                                    className="h-6 w-6 rounded-full object-contain"
+                                  />
+                                ) : (
+                                  <span
+                                    className="text-[9px] font-semibold"
+                                    style={{ color: player.kitTextColor || "#ffffff" }}
+                                  >
+                                    {avatar}
+                                  </span>
+                                )
+                              ) : null}
+                              {player.country ? (
+                                <FlagBadge
+                                  country={player.country}
+                                  className="absolute -bottom-1 -right-1 h-3 w-3 rounded-full border border-slate-900"
+                                />
+                              ) : null}
+                              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden -translate-x-1/2 items-center gap-2 rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1 text-[10px] text-slate-200 shadow-lg group-hover:flex">
+                                <div
+                                  className={cn(
+                                    "flex h-5 w-5 items-center justify-center rounded-full",
+                                    player.kitImage
+                                      ? "border border-slate-800 shadow-sm"
+                                      : "bg-slate-800"
+                                  )}
+                                  style={
+                                    player.kitImage
+                                      ? {
+                                          backgroundImage: `url(${player.kitImage})`,
+                                          backgroundSize: "cover",
+                                          backgroundPosition: "center",
+                                        }
+                                      : undefined
+                                  }
+                                >
+                                  {avatar ? (
+                                    avatarIsImage ? (
+                                      <img
+                                        src={avatar}
+                                        alt={player.playerName}
+                                        className="h-4 w-4 rounded-full object-contain"
+                                      />
+                                    ) : (
+                                      <span
+                                        className="text-[9px] font-semibold"
+                                        style={{ color: player.kitTextColor || "#ffffff" }}
+                                      >
+                                        {avatar}
+                                      </span>
+                                    )
+                                  ) : null}
+                                </div>
+                                <span className="whitespace-nowrap">
+                                  {player.playerName} - {slot.key}
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     </div>
                   )

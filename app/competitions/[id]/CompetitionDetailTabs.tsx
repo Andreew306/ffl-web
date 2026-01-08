@@ -1,9 +1,14 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { cn, formatMinutesSeconds } from "@/lib/utils"
+import { useEffect, useMemo, useState } from "react"
+import {
+  cn,
+  formatMinutesSeconds,
+  getFlagBackgroundStyle,
+  isImageUrl,
+  shouldOverlayFlag,
+} from "@/lib/utils"
 import Link from "next/link"
-import Image from "next/image"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 function getTwemojiUrl(emoji: string) {
@@ -12,6 +17,32 @@ function getTwemojiUrl(emoji: string) {
     .map((c) => c.codePointAt(0)?.toString(16))
     .join("-")
   return `https://twemoji.maxcdn.com/v/latest/72x72/${codePoints}.png`
+}
+
+function FlagBadge({ country, className }: { country: string; className?: string }) {
+  const baseStyle = getFlagBackgroundStyle(country)
+  const overlayUrl = shouldOverlayFlag(country) ? getTwemojiUrl(country) : ""
+  const backgroundImage = overlayUrl
+    ? baseStyle.backgroundImage
+      ? `url(${overlayUrl}), ${baseStyle.backgroundImage}`
+      : `url(${overlayUrl})`
+    : baseStyle.backgroundImage
+  const baseSize = baseStyle.backgroundSize || "cover"
+  const basePosition = baseStyle.backgroundPosition || "center"
+  const baseRepeat = baseStyle.backgroundRepeat || "no-repeat"
+  return (
+    <span
+      aria-label={country}
+      className={className}
+      style={{
+        ...baseStyle,
+        backgroundImage,
+        backgroundPosition: overlayUrl ? `center, ${basePosition}` : basePosition,
+        backgroundSize: overlayUrl ? `cover, ${baseSize}` : baseSize,
+        backgroundRepeat: overlayUrl ? `no-repeat, ${baseRepeat}` : baseRepeat,
+      }}
+    />
+  )
 }
 
 type Participant = {
@@ -59,6 +90,9 @@ type PlayerRankingRow = {
   name: string
   country: string
   team: string
+  avatar?: string
+  kitImage?: string
+  kitTextColor?: string
   matchesPlayed: number
   matchesWon: number
   matchesDraw: number
@@ -189,9 +223,28 @@ export default function CompetitionDetailTabs({
 }: CompetitionDetailTabsProps) {
   const tabs = ["Teams", "Standings", "Matches", "Stats"] as const
   const [activeTab, setActiveTab] = useState<(typeof tabs)[number]>("Teams")
+  const [matchesPage, setMatchesPage] = useState(1)
 
   const safeDivide = (numerator: number, denominator: number) =>
     denominator > 0 ? numerator / denominator : 0
+
+  useEffect(() => {
+    if (activeTab === "Matches") {
+      setMatchesPage(1)
+    }
+  }, [activeTab])
+
+  const matchesPerPage = 7
+  const matchesTotalPages = Math.max(1, Math.ceil(matches.length / matchesPerPage))
+  const matchesPageClamped = Math.min(matchesPage, matchesTotalPages)
+  const matchesStart = (matchesPageClamped - 1) * matchesPerPage
+  const matchesPageItems = matches.slice(matchesStart, matchesStart + matchesPerPage)
+
+  useEffect(() => {
+    if (matchesPage > matchesTotalPages) {
+      setMatchesPage(matchesTotalPages)
+    }
+  }, [matchesPage, matchesTotalPages])
 
   const tableRows = useMemo(() => {
     return standings.map((row, index) => {
@@ -781,18 +834,42 @@ export default function CompetitionDetailTabs({
                             className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/70 p-3 transition-colors hover:bg-slate-900/90"
                           >
                             <div className="flex items-center gap-3">
-                              <div className="relative h-8 w-8 rounded-full bg-teal-500/20 text-teal-200 flex items-center justify-center text-xs font-semibold tracking-wide">
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-950/60 text-[11px] font-semibold text-slate-200">
                                 {idx + 1}
-                                {row.country ? (
-                                  <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-slate-900/90 p-0.5">
-                                    <Image
-                                      src={getTwemojiUrl(row.country)}
-                                      alt={row.country}
-                                      width={12}
-                                      height={12}
-                                      className="h-3 w-3"
+                              </div>
+                              <div
+                                className="relative h-8 w-8 rounded-full bg-teal-500/20 text-teal-200 flex items-center justify-center text-xs font-semibold tracking-wide"
+                                style={
+                                  row.player?.kitImage
+                                    ? {
+                                        backgroundImage: `url(${row.player.kitImage})`,
+                                        backgroundSize: "cover",
+                                        backgroundPosition: "center",
+                                      }
+                                    : undefined
+                                }
+                              >
+                                {row.player?.avatar ? (
+                                  isImageUrl(row.player.avatar) ? (
+                                    <img
+                                      src={row.player.avatar}
+                                      alt={row.name}
+                                      className="h-7 w-7 rounded-full object-contain"
                                     />
-                                  </span>
+                                  ) : (
+                                    <span
+                                      className="text-[10px] font-semibold"
+                                      style={{ color: row.player.kitTextColor || "#ffffff" }}
+                                    >
+                                      {row.player.avatar}
+                                    </span>
+                                  )
+                                ) : null}
+                                {row.country ? (
+                                  <FlagBadge
+                                    country={row.country}
+                                    className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full"
+                                  />
                                 ) : null}
                               </div>
                               <div>
@@ -930,7 +1007,7 @@ export default function CompetitionDetailTabs({
 
       {activeTab === "Matches" ? (
         <div className="space-y-3">
-          {matches.map((match) => (
+          {matchesPageItems.map((match) => (
             <Link
               key={match.id}
               href={`/matches/${match.id}`}
@@ -971,6 +1048,41 @@ export default function CompetitionDetailTabs({
               </div>
             </Link>
           ))}
+          {matchesTotalPages > 1 ? (
+            <div className="flex items-center justify-between pt-2 text-xs text-slate-400">
+              <button
+                type="button"
+                onClick={() => setMatchesPage((prev) => Math.max(1, prev - 1))}
+                disabled={matchesPageClamped === 1}
+                className={cn(
+                  "rounded-full border border-slate-800 px-3 py-1 uppercase tracking-[0.2em] transition",
+                  matchesPageClamped === 1
+                    ? "cursor-not-allowed text-slate-600"
+                    : "text-slate-300 hover:border-teal-400/50 hover:text-teal-200"
+                )}
+              >
+                Prev
+              </button>
+              <span>
+                Page {matchesPageClamped} of {matchesTotalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() =>
+                  setMatchesPage((prev) => Math.min(matchesTotalPages, prev + 1))
+                }
+                disabled={matchesPageClamped === matchesTotalPages}
+                className={cn(
+                  "rounded-full border border-slate-800 px-3 py-1 uppercase tracking-[0.2em] transition",
+                  matchesPageClamped === matchesTotalPages
+                    ? "cursor-not-allowed text-slate-600"
+                    : "text-slate-300 hover:border-teal-400/50 hover:text-teal-200"
+                )}
+              >
+                Next
+              </button>
+            </div>
+          ) : null}
         </div>
       ) : null}
 

@@ -17,6 +17,16 @@ const nextConfig: NextConfig = {
         hostname: 'twemoji.maxcdn.com',
         pathname: '/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'i.ibb.co',
+        pathname: '/**',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ibb.co',
+        pathname: '/**',
+      },
     ],
   },
   // Otras configuraciones...

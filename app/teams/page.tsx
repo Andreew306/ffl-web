@@ -4,7 +4,7 @@ import TeamCompetition from "@/lib/models/TeamCompetition"
 import Competition from "@/lib/models/Competition"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { cn } from "@/lib/utils"
+import { cn, getFlagBackgroundStyle, normalizeTeamImageUrl, shouldOverlayFlag } from "@/lib/utils"
 import mongoose from "mongoose"
 import Script from "next/script"
 
@@ -378,44 +378,73 @@ export default async function TeamsPage({ searchParams }: { searchParams: Promis
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {teams.map((team) => (
-                <Link
-                  key={team._id?.toString() ?? team.team_id}
-                  href={`/teams/${team.team_id}`}
-                  className="group rounded-2xl border border-slate-800/70 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-900/60 p-6 shadow-md shadow-teal-900/20 transition hover:border-teal-400/60"
-                >
-                  <div className="flex flex-col items-center text-center space-y-4">
-                    <div className="relative">
-                      {team.image ? (
-                        <img
-                          src={team.image}
-                          alt={team.teamName || team.team_name || "Team"}
-                          className="h-24 w-24 object-contain"
-                        />
-                      ) : (
-                        <div className="h-24 w-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm text-gray-400">
-                          No logo
-                        </div>
-                      )}
-                      {team.country ? (
-                        <img
-                          src={getTwemojiUrl(team.country)}
-                          alt={team.country}
-                          className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full ring-2 ring-slate-900 bg-slate-900"
-                        />
-                      ) : null}
+              {teams.map((team) => {
+                const teamImage = normalizeTeamImageUrl(team.image)
+                return (
+                  <Link
+                    key={team._id?.toString() ?? team.team_id}
+                    href={`/teams/${team.team_id}`}
+                    className="group rounded-2xl border border-slate-800/70 bg-gradient-to-br from-slate-900 via-slate-900 to-teal-900/60 p-6 shadow-md shadow-teal-900/20 transition hover:border-teal-400/60"
+                  >
+                    <div className="flex flex-col items-center text-center space-y-4">
+                      <div className="relative">
+                        {teamImage ? (
+                          <img
+                            src={teamImage}
+                            alt={team.teamName || team.team_name || "Team"}
+                            className="h-24 w-24 object-contain"
+                          />
+                        ) : (
+                          <div className="h-24 w-24 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-sm text-gray-400">
+                            No logo
+                          </div>
+                        )}
+                        {team.country ? (() => {
+                          const baseStyle = getFlagBackgroundStyle(team.country)
+                          const overlayUrl = shouldOverlayFlag(team.country)
+                            ? getTwemojiUrl(team.country)
+                            : ""
+                          const backgroundImage = overlayUrl
+                            ? baseStyle.backgroundImage
+                              ? `url(${overlayUrl}), ${baseStyle.backgroundImage}`
+                              : `url(${overlayUrl})`
+                            : baseStyle.backgroundImage
+                          const baseSize = baseStyle.backgroundSize || "cover"
+                          const basePosition = baseStyle.backgroundPosition || "center"
+                          const baseRepeat = baseStyle.backgroundRepeat || "no-repeat"
+                          return (
+                            <span
+                              aria-label={team.country}
+                              className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full ring-2 ring-slate-900"
+                              style={{
+                                ...baseStyle,
+                                backgroundImage,
+                                backgroundPosition: overlayUrl
+                                  ? `center, ${basePosition}`
+                                  : basePosition,
+                                backgroundSize: overlayUrl
+                                  ? `cover, ${baseSize}`
+                                  : baseSize,
+                                backgroundRepeat: overlayUrl
+                                  ? `no-repeat, ${baseRepeat}`
+                                  : baseRepeat,
+                              }}
+                            />
+                          )
+                        })() : null}
+                      </div>
+                      <div className="space-y-2">
+                        <h2 className="text-xl font-semibold">
+                          {team.teamName || team.team_name || "Team"}
+                        </h2>
+                      </div>
+                      <span className="text-sm text-teal-200/80 group-hover:text-teal-200">
+                        View team
+                      </span>
                     </div>
-                    <div className="space-y-2">
-                      <h2 className="text-xl font-semibold">
-                        {team.teamName || team.team_name || "Team"}
-                      </h2>
-                    </div>
-                    <span className="text-sm text-teal-200/80 group-hover:text-teal-200">
-                      View team
-                    </span>
-                  </div>
-                </Link>
-              ))}
+                  </Link>
+                )
+              })}
             </div>
           )}
 

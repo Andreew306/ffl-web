@@ -7,6 +7,7 @@ import PlayerMatchStatsModel from "@/lib/models/PlayerMatchStats"
 import CompetitionDetailTabs from "./CompetitionDetailTabs"
 import { notFound } from "next/navigation"
 import "@/lib/models/Team"
+import { getKitTextColor, hashString, normalizeTeamImageUrl } from "@/lib/utils"
 
 type CompetitionDoc = {
   _id: string
@@ -61,8 +62,10 @@ type PlayerTotalsRow = {
   playerId?: unknown
   playerName?: string
   country?: string
+  avatar?: string
   teamName?: string
   teamAltName?: string
+  teamCompetitionId?: unknown
   matchesPlayed?: number
   matchesWon?: number
   matchesDraw?: number
@@ -123,6 +126,15 @@ type ParticipantRow = {
   name: string
   image: string
   country: string
+}
+
+const toObjectIdString = (value: unknown) => {
+  if (typeof value === "string") return value
+  if (!value || typeof value !== "object") return ""
+  const maybeWithId = value as { _id?: { toString?: () => string } }
+  if (maybeWithId._id?.toString) return maybeWithId._id.toString()
+  const maybeToString = value as { toString?: () => string }
+  return maybeToString.toString ? maybeToString.toString() : ""
 }
 
 type StandingStat = {
@@ -348,8 +360,10 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
             playerId: "$_id",
             playerName: "$player.player_name",
             country: "$player.country",
+            avatar: "$player.avatar",
             teamName: "$team.teamName",
             teamAltName: "$team.team_name",
+            teamCompetitionId: "$teamCompetitionId",
             matchesPlayed: 1,
             matchesWon: 1,
             matchesDraw: 1,
@@ -513,7 +527,7 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
       acc[teamId] = {
         id: teamId,
         name: team.teamName || team.team_name || "Team",
-        image: team.image || "",
+        image: normalizeTeamImageUrl(team.image),
         country: team.country || "",
       }
     }
@@ -539,7 +553,7 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
         acc[teamId] = {
           id: teamId,
           name: meta?.teamName || meta?.team_name || "Team",
-          image: meta?.image || "",
+          image: normalizeTeamImageUrl(meta?.image),
           matchesPlayed: 0,
           matchesWon: 0,
           matchesDraw: 0,
@@ -623,8 +637,8 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
         date: match.date ? new Date(match.date).toLocaleDateString("en-GB") : "",
         teamA: teamA?.teamName || teamA?.team_name || "Team A",
         teamB: teamB?.teamName || teamB?.team_name || "Team B",
-        teamAImage: teamA?.image || "",
-        teamBImage: teamB?.image || "",
+        teamAImage: normalizeTeamImageUrl(teamA?.image),
+        teamBImage: normalizeTeamImageUrl(teamB?.image),
         scoreA: match.score_team1 ?? match.scoreTeam1,
         scoreB: match.score_team2 ?? match.scoreTeam2,
       },
@@ -649,11 +663,12 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
   const safeDivide = (numerator: number, denominator: number) =>
     denominator > 0 ? numerator / denominator : 0
 
-  const players = (playerTotalsRaw as PlayerTotalsRow[]).map((row) => ({
+  const playersRaw = (playerTotalsRaw as PlayerTotalsRow[]).map((row) => ({
     id: row.playerId?.toString() || "",
     name: row.playerName || "Player",
     country: row.country || "",
     team: row.teamName || row.teamAltName || "Team",
+    avatar: row.avatar || "",
     matchesPlayed: Number(row.matchesPlayed ?? 0),
     matchesWon: Number(row.matchesWon ?? 0),
     matchesDraw: Number(row.matchesDraw ?? 0),
@@ -690,6 +705,85 @@ export default async function CompetitionPage({ params }: { params: Promise<{ id
     MVP: Number(row.MVP ?? 0),
     hasGK: Boolean(row.hasGK),
   }))
+  const playerIds = playersRaw.map((row) => row.id).filter(Boolean)
+  const playerCompetitionRows = playerIds.length
+    ? await PlayerCompetitionModel.find({
+        team_competition_id: { $in: teamCompetitionObjectIds },
+        player_id: { $in: playerIds },
+      })
+        .select("player_id team_competition_id")
+        .lean()
+    : []
+  const teamCompetitionIds = Array.from(
+    new Set(
+      playerCompetitionRows
+        .map((row) => toObjectIdString(row.team_competition_id))
+        .filter(Boolean)
+    )
+  )
+  const teamCompetitionRows = teamCompetitionIds.length
+    ? await TeamCompetitionModel.find({ _id: { $in: teamCompetitionIds } })
+        .select("kits")
+        .lean<{ _id?: { toString(): string }; kits?: { image?: string; color?: string }[] }[]>()
+    : []
+  const teamCompetitionById = new Map<string, { kits?: { image?: string; color?: string }[] }>()
+  teamCompetitionRows.forEach((row) => {
+    const id = row._id?.toString()
+    if (!id) return
+    teamCompetitionById.set(id, row)
+  })
+  const playerKitOptions = new Map<string, { image: string; textColor: string }[]>()
+  playerCompetitionRows.forEach((row) => {
+    const playerId = toObjectIdString(row.player_id)
+    const teamCompetitionId = toObjectIdString(row.team_competition_id)
+    if (!playerId || !teamCompetitionId) return
+    const teamCompetition = teamCompetitionById.get(teamCompetitionId)
+    const kitOptions =
+      teamCompetition?.kits
+        ?.map((kit) => ({
+          image: normalizeTeamImageUrl(kit?.image),
+          textColor: getKitTextColor(kit?.color),
+        }))
+        .filter((kit) => Boolean(kit.image)) || []
+    if (!kitOptions.length) return
+    if (!playerKitOptions.has(playerId)) playerKitOptions.set(playerId, [])
+    playerKitOptions.get(playerId)?.push(...kitOptions)
+  })
+  const needsGlobalFallback = playerIds.some(
+    (playerId) => !(playerKitOptions.get(playerId) || []).length
+  )
+  const allKitOptions = needsGlobalFallback
+    ? (await TeamCompetitionModel.find({})
+        .select("kits")
+        .lean<{ kits?: { image?: string; color?: string }[] }[]>()).flatMap(
+        (row) =>
+          row.kits
+            ?.map((kit) => ({
+              image: normalizeTeamImageUrl(kit?.image),
+              textColor: getKitTextColor(kit?.color),
+            }))
+            .filter((kit) => Boolean(kit.image)) || []
+      )
+    : []
+  const pickDeterministicItem = <T,>(items: T[], seed: string) => {
+    if (!items.length) return null
+    const index = hashString(seed) % items.length
+    return items[index] || null
+  }
+  const playerFallbackKit = new Map<string, { image: string; textColor: string }>()
+  playerIds.forEach((playerId) => {
+    const kitOptions = playerKitOptions.get(playerId) || []
+    const picked = pickDeterministicItem(kitOptions.length ? kitOptions : allKitOptions, playerId)
+    if (picked) playerFallbackKit.set(playerId, picked)
+  })
+  const players = playersRaw.map((row) => {
+    const kit = playerFallbackKit.get(row.id)
+    return {
+      ...row,
+      kitImage: kit?.image || "",
+      kitTextColor: kit?.textColor || "",
+    }
+  })
   const teams = (teamTotalsRaw as TeamTotalsRow[]).map((row) => ({
     id: row.teamId?.toString() || "",
     name: row.teamName || row.teamAltName || "Team",

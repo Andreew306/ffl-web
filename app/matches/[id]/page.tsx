@@ -4,12 +4,19 @@ import TeamMatchStatsModel from "@/lib/models/TeamMatchStats";
 import PlayerMatchStatsModel from "@/lib/models/PlayerMatchStats";
 import "@/lib/models/PlayerCompetition";
 import "@/lib/models/Player";
+import TeamCompetitionModel from "@/lib/models/TeamCompetition";
 import GoalModel from "@/lib/models/Goal";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { formatMinutesSeconds } from "@/lib/utils";
+import {
+  formatMinutesSeconds,
+  getKitTextColor,
+  hashString,
+  isImageUrl,
+  normalizeTeamImageUrl,
+} from "@/lib/utils";
 import { notFound } from "next/navigation";
 
 type TeamRef = {
@@ -54,7 +61,12 @@ type PlayerStatDoc = {
   substitute?: number;
   team_competition_id?: { _id?: { toString(): string } } | string;
   player_competition_id?: {
-    player_id?: { player_name?: string; playerName?: string; country?: string };
+    player_id?: {
+      player_name?: string;
+      playerName?: string;
+      country?: string;
+      avatar?: string;
+    };
   };
   player_match_stats_id?: string | number;
   won?: number;
@@ -88,6 +100,12 @@ type PlayerStatDoc = {
   goalsConceded?: number;
   cs?: number;
   owngoals?: number;
+};
+
+type KitDoc = { image?: string; color?: string };
+type TeamCompetitionKitDoc = {
+  _id?: { toString(): string };
+  kits?: KitDoc[];
 };
 
 type GoalDoc = {
@@ -124,6 +142,21 @@ function formatPercent(value: unknown) {
   return `${num.toFixed(1)}%`;
 }
 
+function toObjectIdString(value: unknown) {
+  if (typeof value === "string") return value;
+  if (!value || typeof value !== "object") return "";
+  const maybeWithId = value as { _id?: { toString?: () => string } };
+  if (maybeWithId._id?.toString) return maybeWithId._id.toString();
+  const maybeToString = value as { toString?: () => string };
+  return maybeToString.toString ? maybeToString.toString() : "";
+}
+
+function pickDeterministicItem<T>(items: T[], seed: string) {
+  if (!items.length) return null;
+  const index = hashString(seed) % items.length;
+  return items[index] || null;
+}
+
 function getTeamStatValue(team: TeamStatDoc | undefined, key: string) {
   if (!team) return 0;
   const direct = team[key];
@@ -137,6 +170,43 @@ function normalizeStatValue(value: unknown) {
   if (typeof value === "boolean") return value ? 1 : 0;
   const num = Number(value);
   return Number.isFinite(num) ? num : 0;
+}
+
+function GoalIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7l3 2-1 3h-4l-1-3 3-2z" />
+      <path d="M7.5 12.5l-2 2m11-2l2 2m-9.5 2.5l1.5 3m4-3l-1.5 3" />
+    </svg>
+  );
+}
+
+function AssistIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className={className}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 14c4 0 6-2 8-4l3 3c1 1 2 1 4 1h3v4H3v-4z" />
+      <path d="M11 10l1-3" />
+    </svg>
+  );
 }
 
 export default async function MatchDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -190,6 +260,48 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
 
   const team1CompetitionId = match.team1_competition_id?._id?.toString() || "";
   const team2CompetitionId = match.team2_competition_id?._id?.toString() || "";
+  const teamCompetitionIds = [team1CompetitionId, team2CompetitionId].filter(Boolean);
+  const teamCompetitionRows = teamCompetitionIds.length
+    ? await TeamCompetitionModel.find({ _id: { $in: teamCompetitionIds } })
+        .select("kits")
+        .lean<TeamCompetitionKitDoc[]>()
+    : [];
+  const teamCompetitionKitOptions = new Map<string, { image: string; textColor: string }[]>();
+  teamCompetitionRows.forEach((row) => {
+    const id = toObjectIdString(row._id);
+    if (!id) return;
+    const kitOptions =
+      row.kits
+        ?.map((kit) => ({
+          image: normalizeTeamImageUrl(kit?.image),
+          textColor: getKitTextColor(kit?.color),
+        }))
+        .filter((kit) => Boolean(kit.image)) || [];
+    if (!kitOptions.length) return;
+    teamCompetitionKitOptions.set(id, kitOptions);
+  });
+  const needsGlobalFallback = teamCompetitionIds.some(
+    (id) => !(teamCompetitionKitOptions.get(id) || []).length
+  );
+  const allKitOptions = needsGlobalFallback
+    ? (await TeamCompetitionModel.find({})
+        .select("kits")
+        .lean<TeamCompetitionKitDoc[]>()).flatMap(
+        (row) =>
+          row.kits
+            ?.map((kit) => ({
+              image: normalizeTeamImageUrl(kit?.image),
+              textColor: getKitTextColor(kit?.color),
+            }))
+            .filter((kit) => Boolean(kit.image)) || []
+      )
+    : [];
+  const teamKitByCompetitionId = new Map<string, { image: string; textColor: string }>();
+  teamCompetitionIds.forEach((id) => {
+    const kitOptions = teamCompetitionKitOptions.get(id) || [];
+    const picked = pickDeterministicItem(kitOptions.length ? kitOptions : allKitOptions, id);
+    if (picked) teamKitByCompetitionId.set(id, picked);
+  });
   const goalsByTeam = goals.reduce(
     (
       acc: {
@@ -302,6 +414,11 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
     return teamId === team2CompetitionId;
   });
 
+  const getPlayerTeamId = (player: PlayerStatDoc) =>
+    typeof player.team_competition_id === "string"
+      ? player.team_competition_id
+      : player.team_competition_id?._id?.toString() || "";
+
   const buildLineupSlots = (players: PlayerStatDoc[], side: "home" | "away") => {
     const positionMap = new Map<string, PlayerStatDoc[]>();
     players.forEach((player) => {
@@ -334,6 +451,10 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
       assists: number;
       avg: number;
       substituted: boolean;
+      kitImage: string;
+      kitTextColor: string;
+      avatar: string;
+      avatarIsImage: boolean;
     }[] = [];
     rows.forEach((row) => {
       const rowPlayers: PlayerStatDoc[] = [];
@@ -349,6 +470,9 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
           player.player_competition_id?.player_id?.playerName ||
           "-";
         const position = player.position || "-";
+        const teamId = getPlayerTeamId(player);
+        const kit = teamKitByCompetitionId.get(teamId);
+        const avatar = player.player_competition_id?.player_id?.avatar || "";
         let x = row.x;
         let y = ((index + 1) / (count + 1)) * 100;
         if (position === "LW") y = 22;
@@ -378,6 +502,10 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
           avg: Number(player.avg ?? 0),
           substituted:
             Number(player.minutesPlayed ?? player.minutes_played ?? 0) < maxMinutesPlayed - 20,
+          kitImage: kit?.image || "",
+          kitTextColor: kit?.textColor || "",
+          avatar,
+          avatarIsImage: isImageUrl(avatar),
         });
       });
     });
@@ -387,10 +515,6 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
 
   const homeLineup = buildLineupSlots(team1Starters, "home");
   const awayLineup = buildLineupSlots(team2Starters, "away");
-  const getPlayerTeamId = (player: PlayerStatDoc) =>
-    typeof player.team_competition_id === "string"
-      ? player.team_competition_id
-      : player.team_competition_id?._id?.toString() || "";
   const team1Players = playerStats.filter(
     (player) => getPlayerTeamId(player) === team1CompetitionId
   );
@@ -404,13 +528,16 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
         <div className="rounded-3xl bg-gradient-to-br from-slate-900/90 via-slate-900/70 to-slate-950/80 px-6 py-6 shadow-[0_20px_40px_rgba(15,23,42,0.35)]">
           <div className="mx-auto grid max-w-3xl gap-5 md:grid-cols-3 md:items-center">
             <div className="flex items-center gap-4">
-              <div className="rounded-full bg-slate-950/60 p-2">
+              <div className="p-2">
                 <Image
-                  src={match.team1_competition_id?.team_id?.image || "/placeholder.svg"}
+                  src={
+                    normalizeTeamImageUrl(match.team1_competition_id?.team_id?.image) ||
+                    "/placeholder.svg"
+                  }
                   alt={match.team1_competition_id?.team_id?.team_name || "Team 1"}
-                  width={72}
-                  height={72}
-                  className="rounded-full"
+                  width={144}
+                  height={144}
+                  className="object-contain"
                 />
               </div>
               <div>
@@ -438,13 +565,16 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                   {match.team2_competition_id?.team_id?.team_name || "Team 2"}
                 </p>
               </div>
-              <div className="rounded-full bg-slate-950/60 p-2">
+              <div className="p-2">
                 <Image
-                  src={match.team2_competition_id?.team_id?.image || "/placeholder.svg"}
+                  src={
+                    normalizeTeamImageUrl(match.team2_competition_id?.team_id?.image) ||
+                    "/placeholder.svg"
+                  }
                   alt={match.team2_competition_id?.team_id?.team_name || "Team 2"}
-                  width={72}
-                  height={72}
-                  className="rounded-full"
+                  width={144}
+                  height={144}
+                  className="object-contain"
                 />
               </div>
             </div>
@@ -550,9 +680,8 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
 
         <TabsContent value="teamStats">
           <div className="rounded-2xl bg-slate-800/60 p-4">
-            <div className="relative">
-              <div className="mx-auto w-full max-w-7xl">
-                <div className="relative aspect-[21/9] w-full rounded-2xl bg-slate-700/60 shadow-inner">
+            <div className="mx-auto w-full max-w-none lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)] lg:items-start lg:gap-4">
+              <div className="relative aspect-[21/9] w-full rounded-2xl bg-slate-700/60 shadow-inner">
               <div className="absolute inset-2 rounded-xl border border-white/25" />
               <div className="absolute left-1/2 top-2 bottom-2 w-px -translate-x-1/2 bg-white/20" />
               <div className="absolute left-1/2 top-1/2 h-28 w-28 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/20" />
@@ -577,8 +706,36 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                   className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
                   style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
                 >
-                  <div className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-sky-400 text-[11px] font-semibold text-slate-900">
-                    {slot.position}
+                  <div
+                    className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-full text-[11px] font-semibold ${
+                      slot.kitImage ? "border border-slate-800 shadow-lg" : "bg-sky-400"
+                    }`}
+                    style={
+                      slot.kitImage
+                        ? {
+                            backgroundImage: `url(${slot.kitImage})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }
+                        : undefined
+                    }
+                  >
+                    {slot.avatar ? (
+                      slot.avatarIsImage ? (
+                        <img
+                          src={slot.avatar}
+                          alt={slot.name}
+                          className="h-10 w-10 rounded-full object-contain"
+                        />
+                      ) : (
+                        <span
+                          className="text-sm font-semibold"
+                          style={{ color: slot.kitTextColor || "#ffffff" }}
+                        >
+                          {slot.avatar}
+                        </span>
+                      )
+                    ) : null}
                     {slot.assists > 0 && (
                       <span className="absolute -left-3.5 -top-1 rounded-full bg-slate-800/90 px-1.5 text-[10px] font-semibold text-white ring-1 ring-white/10 shadow-sm">
                         🥾{slot.assists}
@@ -610,8 +767,36 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                   className="absolute -translate-x-1/2 -translate-y-1/2 text-center"
                   style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
                 >
-                  <div className="relative mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-white text-[11px] font-semibold text-slate-900">
-                    {slot.position}
+                  <div
+                    className={`relative mx-auto flex h-10 w-10 items-center justify-center rounded-full text-[11px] font-semibold ${
+                      slot.kitImage ? "border border-slate-800 shadow-lg" : "bg-white"
+                    }`}
+                    style={
+                      slot.kitImage
+                        ? {
+                            backgroundImage: `url(${slot.kitImage})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }
+                        : undefined
+                    }
+                  >
+                    {slot.avatar ? (
+                      slot.avatarIsImage ? (
+                        <img
+                          src={slot.avatar}
+                          alt={slot.name}
+                          className="h-10 w-10 rounded-full object-contain"
+                        />
+                      ) : (
+                        <span
+                          className="text-sm font-semibold"
+                          style={{ color: slot.kitTextColor || "#ffffff" }}
+                        >
+                          {slot.avatar}
+                        </span>
+                      )
+                    ) : null}
                     {slot.assists > 0 && (
                       <span className="absolute -left-3.5 -top-1 rounded-full bg-slate-800/90 px-1.5 text-[10px] font-semibold text-white ring-1 ring-white/10 shadow-sm">
                         🥾{slot.assists}
@@ -637,11 +822,14 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                 </div>
               ))}
             </div>
-                <aside className="mt-4 w-full max-w-sm rounded-2xl bg-slate-900/60 p-4 text-white lg:mt-0 lg:w-80 lg:absolute lg:right-0 lg:top-0 lg:h-full">
-                <h4 className="text-xs uppercase tracking-[0.3em] text-slate-400">Substitutes</h4>
+            <aside className="mt-4 w-full text-white lg:mt-0">
+              <div className="w-full rounded-2xl border border-slate-800/70 bg-slate-900/60 p-4">
+                <div className="text-[11px] uppercase tracking-[0.3em] text-slate-300">
+                  Substitutes
+                </div>
                 {substitutes.length ? (
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div>
+                  <div className="mt-3 grid grid-cols-2 gap-6 text-sm">
+                    <div className="pr-6">
                       <div className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
                         {match.team1_competition_id?.team_id?.team_name || "Team 1"}
                       </div>
@@ -651,9 +839,37 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                             player.player_competition_id?.player_id?.player_name ||
                             player.player_competition_id?.player_id?.playerName ||
                             "-";
+                          const goals = Number(player.goals ?? 0);
+                          const assists = Number(player.assists ?? 0);
+                          const hasHighlights = goals > 0 || assists > 0;
                           return (
-                            <li key={String(player._id ?? name)} className="truncate">
-                              {name}
+                            <li
+                              key={String(player._id ?? name)}
+                              className="flex items-center justify-between gap-2"
+                            >
+                              <span className="truncate">{name}</span>
+                              {hasHighlights ? (
+                                <span className="flex shrink-0 items-center gap-2 text-[11px] text-slate-300">
+                                  {goals > 0 ? (
+                                    <span
+                                      className="flex items-center gap-1"
+                                      title={`${goals} goal${goals === 1 ? "" : "s"}`}
+                                    >
+                                      <GoalIcon className="h-3 w-3 text-slate-200" />
+                                      <span>{goals}</span>
+                                    </span>
+                                  ) : null}
+                                  {assists > 0 ? (
+                                    <span
+                                      className="flex items-center gap-1"
+                                      title={`${assists} assist${assists === 1 ? "" : "s"}`}
+                                    >
+                                      <AssistIcon className="h-3 w-3 text-slate-200" />
+                                      <span>{assists}</span>
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ) : null}
                             </li>
                           );
                         })}
@@ -662,7 +878,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                         )}
                       </ul>
                     </div>
-                    <div>
+                    <div className="pl-6 border-l border-slate-800/60">
                       <div className="text-[10px] uppercase tracking-[0.3em] text-slate-400">
                         {match.team2_competition_id?.team_id?.team_name || "Team 2"}
                       </div>
@@ -672,9 +888,37 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                             player.player_competition_id?.player_id?.player_name ||
                             player.player_competition_id?.player_id?.playerName ||
                             "-";
+                          const goals = Number(player.goals ?? 0);
+                          const assists = Number(player.assists ?? 0);
+                          const hasHighlights = goals > 0 || assists > 0;
                           return (
-                            <li key={String(player._id ?? name)} className="truncate">
-                              {name}
+                            <li
+                              key={String(player._id ?? name)}
+                              className="flex items-center justify-between gap-2"
+                            >
+                              <span className="truncate">{name}</span>
+                              {hasHighlights ? (
+                                <span className="flex shrink-0 items-center gap-2 text-[11px] text-slate-300">
+                                  {goals > 0 ? (
+                                    <span
+                                      className="flex items-center gap-1"
+                                      title={`${goals} goal${goals === 1 ? "" : "s"}`}
+                                    >
+                                      <GoalIcon className="h-3 w-3 text-slate-200" />
+                                      <span>{goals}</span>
+                                    </span>
+                                  ) : null}
+                                  {assists > 0 ? (
+                                    <span
+                                      className="flex items-center gap-1"
+                                      title={`${assists} assist${assists === 1 ? "" : "s"}`}
+                                    >
+                                      <AssistIcon className="h-3 w-3 text-slate-200" />
+                                      <span>{assists}</span>
+                                    </span>
+                                  ) : null}
+                                </span>
+                              ) : null}
                             </li>
                           );
                         })}
@@ -687,8 +931,8 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                 ) : (
                   <p className="mt-3 text-sm text-slate-400">No substitutes</p>
                 )}
-                </aside>
               </div>
+            </aside>
             </div>
           </div>
         </TabsContent>
@@ -721,7 +965,7 @@ export default async function MatchDetailPage({ params }: { params: Promise<{ id
                   </span>
                 </div>
                 <div
-                  className={`mt-3 overflow-x-auto rounded-xl border bg-slate-900/40 ${
+                  className={`mt-3 overflow-x-auto rounded-xl border bg-slate-900/40 thin-scrollbar ${
                     group.accent === "red"
                       ? "border-rose-500/30"
                       : "border-sky-500/30"

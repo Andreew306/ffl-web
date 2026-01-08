@@ -52,6 +52,7 @@ type StatsTab = {
 }
 
 type PlayerStatsTabsProps = {
+  playerId: string
   tabs: StatsTab[]
   totalStats: Stats
   matchSeries: {
@@ -140,6 +141,30 @@ type PlayerStatsTabsProps = {
     matchId: string
     cs: number
   }[]
+}
+
+type GraphData = {
+  goalsByOpponent: PlayerStatsTabsProps["goalsByOpponent"]
+  assistsByPlayer: PlayerStatsTabsProps["assistsByPlayer"]
+  preassistsByPlayer: PlayerStatsTabsProps["preassistsByPlayer"]
+  goalsByTeam: PlayerStatsTabsProps["goalsByTeam"]
+  assistsByTeam: PlayerStatsTabsProps["assistsByTeam"]
+  preassistsByTeam: PlayerStatsTabsProps["preassistsByTeam"]
+  kicksByOpponent: PlayerStatsTabsProps["kicksByOpponent"]
+  goalsConcededByOpponent: PlayerStatsTabsProps["goalsConcededByOpponent"]
+  gkPartners: PlayerStatsTabsProps["gkPartners"]
+}
+
+const emptyGraphData: GraphData = {
+  goalsByOpponent: [],
+  assistsByPlayer: [],
+  preassistsByPlayer: [],
+  goalsByTeam: [],
+  assistsByTeam: [],
+  preassistsByTeam: [],
+  kicksByOpponent: [],
+  goalsConcededByOpponent: [],
+  gkPartners: [],
 }
 
 const statCards: { key: keyof Stats; label: string }[] = [
@@ -406,6 +431,17 @@ export default function PlayerStatsTabs({
   const [assistsTeamPage, setAssistsTeamPage] = useState(1)
   const [preassistsTeamPage, setPreassistsTeamPage] = useState(1)
   const activeTab = allTabs.find((tab) => tab.id === activeId) || allTabs[0]
+  const graphData: GraphData = {
+    goalsByOpponent,
+    assistsByPlayer,
+    preassistsByPlayer,
+    goalsByTeam,
+    assistsByTeam,
+    preassistsByTeam,
+    kicksByOpponent,
+    goalsConcededByOpponent,
+    gkPartners,
+  }
 
   useEffect(() => {
     if (activeTab?.seasonFilters) {
@@ -497,42 +533,45 @@ export default function PlayerStatsTabs({
     (matchListPageClamped - 1) * matchListPageSize,
     matchListPageClamped * matchListPageSize
   )
+  const graphSource = graphData ?? emptyGraphData
+  const graphReady = true
+
   const filteredGoalOpponents =
     activeTab?.id === "total"
-      ? goalsByOpponent
-      : goalsByOpponent.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.goalsByOpponent
+      : graphSource.goalsByOpponent.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredAssistPlayers =
     activeTab?.id === "total"
-      ? assistsByPlayer
-      : assistsByPlayer.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.assistsByPlayer
+      : graphSource.assistsByPlayer.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredPreassistPlayers =
     activeTab?.id === "total"
-      ? preassistsByPlayer
-      : preassistsByPlayer.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.preassistsByPlayer
+      : graphSource.preassistsByPlayer.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredGoalsByTeam =
     activeTab?.id === "total"
-      ? goalsByTeam
-      : goalsByTeam.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.goalsByTeam
+      : graphSource.goalsByTeam.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredAssistsByTeam =
     activeTab?.id === "total"
-      ? assistsByTeam
-      : assistsByTeam.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.assistsByTeam
+      : graphSource.assistsByTeam.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredPreassistsByTeam =
     activeTab?.id === "total"
-      ? preassistsByTeam
-      : preassistsByTeam.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.preassistsByTeam
+      : graphSource.preassistsByTeam.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredKicksOpponents =
     activeTab?.id === "total"
-      ? kicksByOpponent
-      : kicksByOpponent.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.kicksByOpponent
+      : graphSource.kicksByOpponent.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredConcededOpponents =
     activeTab?.id === "total"
-      ? goalsConcededByOpponent
-      : goalsConcededByOpponent.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.goalsConcededByOpponent
+      : graphSource.goalsConcededByOpponent.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const filteredGkPartners =
     activeTab?.id === "total"
-      ? gkPartners
-      : gkPartners.filter((item) => seriesIds.includes(item.playerCompetitionId))
+      ? graphSource.gkPartners
+      : graphSource.gkPartners.filter((item) => seriesIds.includes(item.playerCompetitionId))
   const chartData =
     activeChart &&
     filteredSeries
@@ -1352,10 +1391,10 @@ export default function PlayerStatsTabs({
                             <img
                               src={match.teamAImage}
                               alt={match.teamA}
-                              className="h-10 w-10 rounded-full object-cover border border-slate-700"
+                              className="h-10 w-10 object-contain"
                             />
                           ) : (
-                            <div className="h-10 w-10 rounded-full border border-slate-800 bg-slate-900/60" />
+                            <div className="h-10 w-10" />
                           )}
                           <span className="truncate">{match.teamA}</span>
                         </div>
@@ -1368,10 +1407,10 @@ export default function PlayerStatsTabs({
                             <img
                               src={match.teamBImage}
                               alt={match.teamB}
-                              className="h-10 w-10 rounded-full object-cover border border-slate-700"
+                              className="h-10 w-10 object-contain"
                             />
                           ) : (
-                            <div className="h-10 w-10 rounded-full border border-slate-800 bg-slate-900/60" />
+                            <div className="h-10 w-10" />
                           )}
                         </div>
                       </div>
@@ -1443,7 +1482,7 @@ export default function PlayerStatsTabs({
               </div>
             ))}
           </div>
-          {activeChart && chartData ? (
+          {activeChart && graphReady && chartData ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 <span>{activeChartLabel}</span>
@@ -1454,7 +1493,7 @@ export default function PlayerStatsTabs({
               </div>
             </div>
           ) : null}
-          {activeChart === "shotsOnGoal" && shotsOffGoalChartData ? (
+          {activeChart === "shotsOnGoal" && graphReady && shotsOffGoalChartData ? (
             <div className="mt-4 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 <span>Shots off goal</span>
@@ -1791,7 +1830,7 @@ export default function PlayerStatsTabs({
               ) : null}
             </div>
           ) : null}
-          {activeChart === "goals" && (opponentGoalsList.length || goalsByTeamList.length) ? (
+          {activeChart === "goals" && graphReady && (opponentGoalsList.length || goalsByTeamList.length) ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
@@ -1972,7 +2011,7 @@ export default function PlayerStatsTabs({
               )}
             </div>
           ) : null}
-          {activeChart === "assists" && (assistsByPlayerList.length || assistsByTeamList.length) ? (
+          {activeChart === "assists" && graphReady && (assistsByPlayerList.length || assistsByTeamList.length) ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
@@ -2150,7 +2189,7 @@ export default function PlayerStatsTabs({
               )}
             </div>
           ) : null}
-          {activeChart === "preassists" && (preassistsByPlayerList.length || preassistsByTeamList.length) ? (
+          {activeChart === "preassists" && graphReady && (preassistsByPlayerList.length || preassistsByTeamList.length) ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="text-[10px] uppercase tracking-[0.2em] text-slate-400">
@@ -2328,7 +2367,7 @@ export default function PlayerStatsTabs({
               )}
             </div>
           ) : null}
-          {activeChart === "keypass" && assistComboList.length ? (
+          {activeChart === "keypass" && graphReady && assistComboList.length ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 <span>Assisted players</span>
@@ -2406,7 +2445,7 @@ export default function PlayerStatsTabs({
               ) : null}
             </div>
           ) : null}
-          {activeChart === "cs" && gkPartnerList.length ? (
+          {activeChart === "cs" && graphReady && gkPartnerList.length ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 <span>Goalkeepers with clean sheets</span>
@@ -2479,7 +2518,7 @@ export default function PlayerStatsTabs({
               ) : null}
             </div>
           ) : null}
-          {activeChart === "goalsConceded" && concededOpponentsList.length ? (
+          {activeChart === "goalsConceded" && graphReady && concededOpponentsList.length ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 <span>Goals conceded by opponent</span>
@@ -2557,7 +2596,7 @@ export default function PlayerStatsTabs({
               ) : null}
             </div>
           ) : null}
-          {activeChart === "kicks" && kicksOpponentsList.length ? (
+          {activeChart === "kicks" && graphReady && kicksOpponentsList.length ? (
             <div className="mt-6 rounded-xl border border-slate-800 bg-slate-950/60 px-4 py-4">
               <div className="flex items-center justify-between text-[10px] uppercase tracking-[0.2em] text-slate-400">
                 <span>Kicks by opponent</span>

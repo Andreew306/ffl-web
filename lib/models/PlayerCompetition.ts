@@ -84,6 +84,10 @@ const playerCompetitionSchema = new Schema<IPlayerCompetition>({
   MVP: { type: Number, default: 0 },
 });
 
+playerCompetitionSchema.index({ player_id: 1 });
+playerCompetitionSchema.index({ team_competition_id: 1 });
+playerCompetitionSchema.index({ player_competition_id: 1 });
+
 const PlayerCompetitionModel =
   models.PlayerCompetition ||
   mongoose.model<IPlayerCompetition>("PlayerCompetition", playerCompetitionSchema);

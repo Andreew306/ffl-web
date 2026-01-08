@@ -6,7 +6,7 @@ import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Menu, Trophy, Users, Calendar, ImageIcon, TrendingUp } from "lucide-react"
+import { Menu, Trophy, Users, Calendar, ImageIcon, TrendingUp, Medal } from "lucide-react"
 
 function DiscordIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -26,6 +26,7 @@ export function Navigation() {
     { href: "/teams", label: "Teams", icon: Users },
     { href: "/players", label: "Players", icon: ImageIcon },
     { href: "/elo", label: "Elo", icon: TrendingUp },
+    { href: "/hall-of-fame", label: "Hall of Fame", icon: Medal },
     { href: "https://discord.gg/n26a4FsAtT", label: "Discord", icon: DiscordIcon, external: true },
   ]
 

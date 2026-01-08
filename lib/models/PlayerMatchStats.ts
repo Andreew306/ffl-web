@@ -59,6 +59,11 @@ const playerMatchStatsSchema = new Schema<IPlayerMatchStats>({
   MVP: { type: Number, default: 0 },
 });
 
+playerMatchStatsSchema.index({ player_competition_id: 1 });
+playerMatchStatsSchema.index({ team_competition_id: 1 });
+playerMatchStatsSchema.index({ match_id: 1 });
+playerMatchStatsSchema.index({ match_id: 1, team_competition_id: 1, position: 1 });
+
 const PlayerMatchStatsModel = models.PlayerMatchStats || mongoose.model<IPlayerMatchStats>("PlayerMatchStats", playerMatchStatsSchema);
 
 export default PlayerMatchStatsModel;

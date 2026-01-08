@@ -11,10 +11,18 @@ import MatchModel from "@/lib/models/Match"
 import CompetitionModel from "@/lib/models/Competition"
 import PlayerCompetitionModel from "@/lib/models/PlayerCompetition"
 import PlayerMatchStatsModel from "@/lib/models/PlayerMatchStats"
-import HistoricMatches from "@/components/historic-matches"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { formatMinutesSeconds } from "@/lib/utils"
+import {
+  formatMinutesSeconds,
+  getFlagBackgroundStyle,
+  getKitTextColor,
+  hashString,
+  isImageUrl,
+  normalizeTeamImageUrl,
+  shouldOverlayFlag,
+} from "@/lib/utils"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
+import HistoricMatchesClient from "@/components/historic-matches-client"
 
 export const revalidate = 60
 
@@ -34,6 +42,8 @@ type PlayerTotalsRow = {
   playerId?: unknown
   playerName?: string
   country?: string
+  teamCompetitionId?: unknown
+  avatar?: string
   teamName?: string
   teamAltName?: string
   matchesPlayed?: number
@@ -96,6 +106,10 @@ type PlayerRow = {
   name: string
   country: string
   team: string
+  teamCompetitionId?: string
+  avatar: string
+  kitImage: string
+  kitTextColor: string
   matchesPlayed: number
   matchesWon: number
   matchesDraw: number
@@ -159,6 +173,9 @@ type RankingRow = {
   country: string
   team?: string
   value: number
+  avatar?: string
+  kitImage?: string
+  kitTextColor?: string
   goals?: number
   assists?: number
   preassists?: number
@@ -215,6 +232,15 @@ type CompetitionSummary = {
   competition_id?: number | string
   season_id?: number | string
   season?: number | string
+}
+
+const toObjectIdString = (value: unknown) => {
+  if (typeof value === "string") return value
+  if (!value || typeof value !== "object") return ""
+  const maybeWithId = value as { _id?: { toString?: () => string } }
+  if (maybeWithId._id?.toString) return maybeWithId._id.toString()
+  const maybeToString = value as { toString?: () => string }
+  return maybeToString.toString ? maybeToString.toString() : ""
 }
 
 function getTwemojiUrl(emoji: string) {
@@ -543,6 +569,7 @@ export default async function HomePage() {
         playerId: "$_id",
         playerName: "$player.player_name",
         country: "$player.country",
+        avatar: "$player.avatar",
         teamName: "$team.teamName",
         teamAltName: "$team.team_name",
         matchesPlayed: 1,
@@ -577,6 +604,7 @@ export default async function HomePage() {
         TOTW: 1,
         MVP: 1,
         hasGK: 1,
+        teamCompetitionId: "$teamCompetitionId",
       },
     },
   ])
@@ -599,11 +627,15 @@ export default async function HomePage() {
   const safeDivide = (numerator: number, denominator: number) =>
     denominator > 0 ? numerator / denominator : 0
 
-  const players: PlayerRow[] = (playerTotalsRaw as PlayerTotalsRow[]).map((row) => ({
+  const playersRaw: PlayerRow[] = (playerTotalsRaw as PlayerTotalsRow[]).map((row) => ({
     id: row.playerId?.toString() || "",
     name: row.playerName || "Player",
     country: row.country || "",
     team: row.teamName || row.teamAltName || "Team",
+    teamCompetitionId: row.teamCompetitionId?.toString() || "",
+    avatar: row.avatar || "",
+    kitImage: "",
+    kitTextColor: "",
     matchesPlayed: Number(row.matchesPlayed ?? 0),
     matchesWon: Number(row.matchesWon ?? 0),
     matchesDraw: Number(row.matchesDraw ?? 0),
@@ -640,6 +672,83 @@ export default async function HomePage() {
     MVP: Number(row.MVP ?? 0),
     hasGK: Boolean(row.hasGK),
   }))
+
+  const playerIds = playersRaw.map((row) => row.id).filter(Boolean)
+  const playerCompetitionRows = playerIds.length
+    ? await PlayerCompetitionModel.find({ player_id: { $in: playerIds } })
+        .select("player_id team_competition_id")
+        .lean()
+    : []
+  const teamCompetitionIds = Array.from(
+    new Set(
+      playerCompetitionRows
+        .map((row) => toObjectIdString(row.team_competition_id))
+        .filter(Boolean)
+    )
+  )
+  const teamCompetitionRows = teamCompetitionIds.length
+    ? await TeamCompetitionModel.find({ _id: { $in: teamCompetitionIds } })
+        .select("kits")
+        .lean<{ _id?: { toString(): string }; kits?: { image?: string; color?: string }[] }[]>()
+    : []
+  const teamCompetitionById = new Map<string, { kits?: { image?: string; color?: string }[] }>()
+  teamCompetitionRows.forEach((row) => {
+    const id = row._id?.toString()
+    if (!id) return
+    teamCompetitionById.set(id, row)
+  })
+  const playerKitOptions = new Map<string, { image: string; textColor: string }[]>()
+  playerCompetitionRows.forEach((row) => {
+    const playerId = toObjectIdString(row.player_id)
+    const teamCompetitionId = toObjectIdString(row.team_competition_id)
+    if (!playerId || !teamCompetitionId) return
+    const teamCompetition = teamCompetitionById.get(teamCompetitionId)
+    const kitOptions =
+      teamCompetition?.kits
+        ?.map((kit) => ({
+          image: normalizeTeamImageUrl(kit?.image),
+          textColor: getKitTextColor(kit?.color),
+        }))
+        .filter((kit) => Boolean(kit.image)) || []
+    if (!kitOptions.length) return
+    if (!playerKitOptions.has(playerId)) playerKitOptions.set(playerId, [])
+    playerKitOptions.get(playerId)?.push(...kitOptions)
+  })
+  const needsGlobalFallback = playerIds.some(
+    (playerId) => !(playerKitOptions.get(playerId) || []).length
+  )
+  const allKitOptions = needsGlobalFallback
+    ? (await TeamCompetitionModel.find({})
+        .select("kits")
+        .lean<{ kits?: { image?: string; color?: string }[] }[]>()).flatMap(
+        (row) =>
+          row.kits
+            ?.map((kit) => ({
+              image: normalizeTeamImageUrl(kit?.image),
+              textColor: getKitTextColor(kit?.color),
+            }))
+            .filter((kit) => Boolean(kit.image)) || []
+      )
+    : []
+  const pickDeterministicItem = <T,>(items: T[], seed: string) => {
+    if (!items.length) return null
+    const index = hashString(seed) % items.length
+    return items[index] || null
+  }
+  const playerFallbackKit = new Map<string, { image: string; textColor: string }>()
+  playerIds.forEach((playerId) => {
+    const kitOptions = playerKitOptions.get(playerId) || []
+    const picked = pickDeterministicItem(kitOptions.length ? kitOptions : allKitOptions, playerId)
+    if (picked) playerFallbackKit.set(playerId, picked)
+  })
+  const players: PlayerRow[] = playersRaw.map((row) => {
+    const kit = playerFallbackKit.get(row.id)
+    return {
+      ...row,
+      kitImage: kit?.image || "",
+      kitTextColor: kit?.textColor || "",
+    }
+  })
   const teams: TeamRow[] = (teamTotalsRaw as TeamTotalsRow[]).map((row) => ({
     id: row.teamId?.toString() || "",
     name: row.teamName || row.teamAltName || "Team",
@@ -1058,6 +1167,9 @@ export default async function HomePage() {
           country: player.country,
           team: player.team,
           value: metric.value(player),
+          avatar: player.avatar,
+          kitImage: player.kitImage,
+          kitTextColor: player.kitTextColor,
         }
         if (metric.key === "gap") {
           return {
@@ -1155,19 +1267,70 @@ export default async function HomePage() {
                           className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-900/70 p-3 transition-colors hover:bg-slate-900/90"
                         >
                           <div className="flex items-center gap-3">
-                            <div className="relative h-8 w-8 rounded-full bg-teal-500/20 text-teal-200 flex items-center justify-center text-xs font-semibold tracking-wide">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/10 bg-slate-950/60 text-[11px] font-semibold text-slate-200">
                               {idx + 1}
-                              {row.country ? (
-                                <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full bg-slate-900/90 p-0.5">
-                                  <Image
-                                    src={getTwemojiUrl(row.country)}
-                                    alt={row.country}
-                                    width={12}
-                                    height={12}
-                                    className="h-3 w-3"
+                            </div>
+                            <div
+                              className="relative h-8 w-8 rounded-full bg-teal-500/20 text-teal-200 flex items-center justify-center text-xs font-semibold tracking-wide"
+                              style={
+                                row.kitImage
+                                  ? {
+                                      backgroundImage: `url(${row.kitImage})`,
+                                      backgroundSize: "cover",
+                                      backgroundPosition: "center",
+                                    }
+                                  : undefined
+                              }
+                            >
+                              {row.avatar ? (
+                                isImageUrl(row.avatar) ? (
+                                  <img
+                                    src={row.avatar}
+                                    alt={row.name}
+                                    className="h-7 w-7 rounded-full object-contain"
                                   />
-                                </span>
+                                ) : (
+                                  <span
+                                    className="text-[10px] font-semibold"
+                                    style={{ color: row.kitTextColor || "#ffffff" }}
+                                  >
+                                    {row.avatar}
+                                  </span>
+                                )
                               ) : null}
+                              {row.country ? (() => {
+                                const baseStyle = getFlagBackgroundStyle(row.country)
+                                const overlayUrl = shouldOverlayFlag(row.country)
+                                  ? getTwemojiUrl(row.country)
+                                  : ""
+                                const backgroundImage = overlayUrl
+                                  ? baseStyle.backgroundImage
+                                    ? `url(${overlayUrl}), ${baseStyle.backgroundImage}`
+                                    : `url(${overlayUrl})`
+                                  : baseStyle.backgroundImage
+                                const baseSize = baseStyle.backgroundSize || "cover"
+                                const basePosition = baseStyle.backgroundPosition || "center"
+                                const baseRepeat = baseStyle.backgroundRepeat || "no-repeat"
+                                return (
+                                  <span
+                                    aria-label={row.country}
+                                    className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full"
+                                    style={{
+                                      ...baseStyle,
+                                      backgroundImage,
+                                      backgroundPosition: overlayUrl
+                                        ? `center, ${basePosition}`
+                                        : basePosition,
+                                      backgroundSize: overlayUrl
+                                        ? `cover, ${baseSize}`
+                                        : baseSize,
+                                      backgroundRepeat: overlayUrl
+                                        ? `no-repeat, ${baseRepeat}`
+                                        : baseRepeat,
+                                    }}
+                                  />
+                                )
+                              })() : null}
                             </div>
                             <div>
                               <p className="text-white font-medium">{row.name}</p>
@@ -1223,8 +1386,8 @@ export default async function HomePage() {
       id: match._id?.toString() || "",
       team1Name: team1?.teamName || team1?.team_name || "Team A",
       team2Name: team2?.teamName || team2?.team_name || "Team B",
-      team1Image: team1?.image || "/placeholder.svg?height=40&width=40",
-      team2Image: team2?.image || "/placeholder.svg?height=40&width=40",
+      team1Image: normalizeTeamImageUrl(team1?.image) || "/placeholder.svg?height=40&width=40",
+      team2Image: normalizeTeamImageUrl(team2?.image) || "/placeholder.svg?height=40&width=40",
       score1: Number(match.score_team1 ?? match.scoreTeam1 ?? 0),
       score2: Number(match.score_team2 ?? match.scoreTeam2 ?? 0),
       date: match.date ? new Date(match.date).toLocaleDateString("es-ES") : "-",
@@ -1347,7 +1510,7 @@ export default async function HomePage() {
                   </div>
                 </div>
                 <div className="mt-6 space-y-4">
-                  <HistoricMatches matches={historicMatchesData} />
+                  <HistoricMatchesClient matches={historicMatchesData} />
                 </div>
               </div>
             </div>

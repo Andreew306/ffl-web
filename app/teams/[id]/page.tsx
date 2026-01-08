@@ -14,6 +14,13 @@ import "@/lib/models/PlayerCompetition"
 import "@/lib/models/Goal"
 import { notFound } from "next/navigation"
 import TeamStatsTabs from "./TeamStatsTabs"
+import {
+  getFlagBackgroundStyle,
+  getKitTextColor,
+  hashString,
+  normalizeTeamImageUrl,
+  shouldOverlayFlag,
+} from "@/lib/utils"
 
 type TeamRef = {
   _id?: { toString(): string }
@@ -36,6 +43,7 @@ type TeamCompetitionRow = {
   _id?: { toString(): string }
   team_competition_id?: string | number
   competition_id?: CompetitionRef
+  kits?: { image?: string; color?: string }[]
   matches_played?: number
   matchesPlayed?: number
   matches_won?: number
@@ -128,6 +136,12 @@ const toObjectIdString = (value: unknown) => {
   if (maybeWithId._id?.toString) return maybeWithId._id.toString()
   const maybeToString = value as { toString?: () => string }
   return maybeToString.toString ? maybeToString.toString() : ""
+}
+
+const pickDeterministicItem = <T,>(items: T[], seed: string) => {
+  if (!items.length) return null
+  const index = hashString(seed) % items.length
+  return items[index] || null
 }
 
 function getTwemojiUrl(emoji: string) {
@@ -224,10 +238,36 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   if (!team) {
     return notFound()
   }
+  const teamImage = normalizeTeamImageUrl(team.image)
 
   const teamCompetitions = await TeamCompetitionModel.find({ team_id: team._id })
     .populate("competition_id")
     .lean<TeamCompetitionRow[]>()
+
+  const teamCompetitionKitOptions = new Map<string, { image: string; textColor: string }[]>()
+  const allKitOptions: { image: string; textColor: string }[] = []
+  teamCompetitions.forEach((row) => {
+    const id = row._id?.toString()
+    if (!id) return
+    const kitOptions =
+      row.kits
+        ?.map((kit) => ({
+          image: normalizeTeamImageUrl(kit?.image),
+          textColor: getKitTextColor(kit?.color),
+        }))
+        .filter((kit) => Boolean(kit.image)) || []
+    if (!kitOptions.length) return
+    teamCompetitionKitOptions.set(id, kitOptions)
+    allKitOptions.push(...kitOptions)
+  })
+  const teamCompetitionKits: Record<string, { image: string; textColor: string }> = {}
+  teamCompetitions.forEach((row) => {
+    const id = row._id?.toString()
+    if (!id) return
+    const kitOptions = teamCompetitionKitOptions.get(id) || []
+    const picked = pickDeterministicItem(kitOptions.length ? kitOptions : allKitOptions, id)
+    if (picked) teamCompetitionKits[id] = picked
+  })
 
   const buildStatsFromRow = (row: TeamCompetitionRow) => ({
     matchesPlayed: row.matches_played ?? row.matchesPlayed ?? 0,
@@ -425,6 +465,13 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
         })
         .lean<TeamMatchStatRow[]>()
     : []
+  const teamMatchIds = Array.from(
+    new Set(
+      matchStatsRows
+        .map((row) => toObjectIdString(row.match_id))
+        .filter((id): id is string => Boolean(id))
+    )
+  )
   const playerMatchStatsRows = teamCompetitionObjectIds.length
     ? await PlayerMatchStatsModel.find({ team_competition_id: { $in: teamCompetitionObjectIds } })
         .populate({
@@ -467,8 +514,8 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
         match?.team2_competition_id?.team_id?.teamName ||
         match?.team2_competition_id?.team_id?.team_name ||
         "Team B"
-      const teamAImage = match?.team1_competition_id?.team_id?.image || ""
-      const teamBImage = match?.team2_competition_id?.team_id?.image || ""
+      const teamAImage = normalizeTeamImageUrl(match?.team1_competition_id?.team_id?.image)
+      const teamBImage = normalizeTeamImageUrl(match?.team2_competition_id?.team_id?.image)
       const scoreA = Number(match?.score_team1 ?? 0)
       const scoreB = Number(match?.score_team2 ?? 0)
       const isTeam1 = team1CompetitionId && team1CompetitionId === teamCompetitionId
@@ -532,7 +579,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
         teamCompetitionId,
         opponentId: opponent?._id?.toString() || "",
         opponentName: opponent?.teamName || opponent?.team_name || "Team",
-        opponentImage: opponent?.image || "",
+        opponentImage: normalizeTeamImageUrl(opponent?.image),
         matchId: match._id?.toString() || "",
         goalsScored: readMatchStat(row, "goals_scored", "goalsScored"),
       }
@@ -558,7 +605,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
         teamCompetitionId,
         opponentId: opponent?._id?.toString() || "",
         opponentName: opponent?.teamName || opponent?.team_name || "Team",
-        opponentImage: opponent?.image || "",
+        opponentImage: normalizeTeamImageUrl(opponent?.image),
         matchId: match._id?.toString() || "",
         goalsConceded: readMatchStat(row, "goals_conceded", "goalsConceded"),
       }
@@ -588,8 +635,9 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   const teamCompetitionIds = teamCompetitionObjectIds
     .filter((id): id is { toString(): string } => Boolean(id))
     .map((id) => id.toString())
-  const concededScorerGoals = teamCompetitionIds.length
-    ? await GoalModel.find({ match_id: { $ne: null } })
+  const teamCompetitionIdSet = new Set(teamCompetitionIds)
+  const concededScorerGoals = teamMatchIds.length
+    ? await GoalModel.find({ match_id: { $in: teamMatchIds } })
         .populate({ path: "scorer_id", populate: { path: "player_id" } })
         .populate({
           path: "match_id",
@@ -612,7 +660,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
       if (!team1 || !team2) return null
       const opponentTeamCompetitionId =
         scoringTeamCompetitionId === team1 ? team2 : scoringTeamCompetitionId === team2 ? team1 : ""
-      if (!opponentTeamCompetitionId || !teamCompetitionIds.includes(opponentTeamCompetitionId)) return null
+      if (!opponentTeamCompetitionId || !teamCompetitionIdSet.has(opponentTeamCompetitionId)) return null
       return {
         teamCompetitionId: opponentTeamCompetitionId,
         playerId: scorer._id?.toString() || "",
@@ -622,15 +670,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
       }
     })
     .filter(isNotNull)
-  const playerMatchStatsForTeam = teamCompetitionObjectIds.length
-    ? await PlayerMatchStatsModel.find({ team_competition_id: { $in: teamCompetitionObjectIds } })
-        .populate({
-          path: "player_competition_id",
-          populate: { path: "player_id" },
-        })
-        .lean<PlayerMatchStatRow[]>()
-    : []
-  const matchesByPlayer = playerMatchStatsForTeam
+  const matchesByPlayer = playerMatchStatsRows
     .map((row) => {
       const player =
         typeof row.player_competition_id === "string"
@@ -676,24 +716,44 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(20,184,166,0.18),_transparent_55%)]" />
           <div className="relative flex flex-col md:flex-row items-center md:items-end gap-6 p-8 md:p-10">
             <div className="shrink-0 relative">
-              {team.image ? (
+              {teamImage ? (
                 <img
-                  src={team.image}
+                  src={teamImage}
                   alt={team.teamName || team.team_name || "Team"}
-                  className="h-32 w-32 md:h-36 md:w-36 object-cover rounded-full border-2 border-slate-700 shadow-lg shadow-teal-900/30"
+                  className="h-32 w-32 md:h-36 md:w-36 object-contain drop-shadow-[0_10px_25px_rgba(15,23,42,0.35)]"
                 />
               ) : (
                 <div className="h-32 w-32 md:h-36 md:w-36 rounded-full bg-slate-800 border-2 border-slate-700 flex items-center justify-center text-sm text-gray-400">
                   No logo
                 </div>
               )}
-              {team.country ? (
-                <img
-                  src={getTwemojiUrl(team.country)}
-                  alt={team.country}
-                  className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full ring-2 ring-slate-900 bg-slate-900"
-                />
-              ) : null}
+              {team.country ? (() => {
+                const baseStyle = getFlagBackgroundStyle(team.country)
+                const overlayUrl = shouldOverlayFlag(team.country)
+                  ? getTwemojiUrl(team.country)
+                  : ""
+                const backgroundImage = overlayUrl
+                  ? baseStyle.backgroundImage
+                    ? `url(${overlayUrl}), ${baseStyle.backgroundImage}`
+                    : `url(${overlayUrl})`
+                  : baseStyle.backgroundImage
+                const baseSize = baseStyle.backgroundSize || "cover"
+                const basePosition = baseStyle.backgroundPosition || "center"
+                const baseRepeat = baseStyle.backgroundRepeat || "no-repeat"
+                return (
+                  <span
+                    aria-label={team.country}
+                    className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full ring-2 ring-slate-900"
+                    style={{
+                      ...baseStyle,
+                      backgroundImage,
+                      backgroundPosition: overlayUrl ? `center, ${basePosition}` : basePosition,
+                      backgroundSize: overlayUrl ? `cover, ${baseSize}` : baseSize,
+                      backgroundRepeat: overlayUrl ? `no-repeat, ${baseRepeat}` : baseRepeat,
+                    }}
+                  />
+                )
+              })() : null}
             </div>
             <div className="flex-1 text-center md:text-left space-y-3">
               <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Team</p>
@@ -718,6 +778,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           concedingScorers={concedingScorers}
           matchesByPlayer={matchesByPlayer}
           roster={roster}
+          teamCompetitionKits={teamCompetitionKits}
         />
       </div>
     </div>
