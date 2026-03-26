@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, type SVGProps } from "react"
+import { useEffect, useRef, useState, type SVGProps } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
-import { Menu, Trophy, Users, Calendar, ImageIcon, TrendingUp, Medal } from "lucide-react"
+import { AuthControls } from "@/components/auth/auth-controls"
+import { ChevronDown, Gamepad2, Grid3X3, HandCoins, LayoutTemplate, ListOrdered, Menu, Scale, Swords, Trophy, TrendingUp, Users, Calendar, ImageIcon, Medal, Keyboard } from "lucide-react"
 
 function DiscordIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -18,17 +19,53 @@ function DiscordIcon(props: SVGProps<SVGSVGElement>) {
 
 export function Navigation() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isMinigamesOpen, setIsMinigamesOpen] = useState(false)
+  const [isMobileMinigamesOpen, setIsMobileMinigamesOpen] = useState(false)
   const pathname = usePathname()
+  const minigamesRef = useRef<HTMLDivElement | null>(null)
 
   const navItems = [
     { href: "/", label: "Home", icon: Trophy },
     { href: "/seasons", label: "Competitions", icon: Calendar },
     { href: "/teams", label: "Teams", icon: Users },
     { href: "/players", label: "Players", icon: ImageIcon },
-    { href: "/elo", label: "Elo", icon: TrendingUp },
     { href: "/hall-of-fame", label: "Hall of Fame", icon: Medal },
     { href: "https://discord.gg/n26a4FsAtT", label: "Discord", icon: DiscordIcon, external: true },
   ]
+  const minigameItems = [
+    { href: "/elo", label: "Elo", icon: TrendingUp },
+    { href: "/fantasy", label: "Fantasy", icon: Swords },
+    { href: "/betball", label: "BetBall", icon: HandCoins },
+    { href: "/tic-tac-toe", label: "Tic Tac Toe", icon: Grid3X3 },
+    { href: "/wordle", label: "Wordle", icon: Keyboard },
+    { href: "/ideal-7", label: "Ideal 7", icon: LayoutTemplate },
+    { href: "/tier-list", label: "Tier List", icon: ListOrdered },
+    { href: "/compare", label: "Head2Head", icon: Scale },
+  ]
+  const isMinigamesActive =
+    pathname?.startsWith("/elo")
+    || pathname?.startsWith("/fantasy")
+    || pathname?.startsWith("/betball")
+    || pathname?.startsWith("/tic-tac-toe")
+    || pathname?.startsWith("/wordle")
+    || pathname?.startsWith("/ideal-7")
+    || pathname?.startsWith("/tier-list")
+    || pathname?.startsWith("/compare")
+
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (!minigamesRef.current) return
+      if (!minigamesRef.current.contains(event.target as Node)) {
+        setIsMinigamesOpen(false)
+      }
+    }
+
+    document.addEventListener("mousedown", handleClickOutside)
+    return () => document.removeEventListener("mousedown", handleClickOutside)
+  }, [])
+
+  const primaryNavItems = navItems.filter((item) => item.label !== "Discord")
+  const discordNavItem = navItems.find((item) => item.label === "Discord")
 
   return (
     <nav className="relative left-0 right-0 top-12 z-50">
@@ -48,7 +85,7 @@ export function Navigation() {
               </Link>
 
               <div className="hidden md:flex items-center gap-5 rounded-full border border-white/5 bg-slate-900/50 px-4 py-3">
-                {navItems.map((item) => {
+                {primaryNavItems.map((item) => {
                   const isExternal = Boolean(item.external)
                   const isActive = !isExternal
                     && (item.href === "/"
@@ -77,6 +114,76 @@ export function Navigation() {
                     </Link>
                   )
                 })}
+                <div ref={minigamesRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setIsMinigamesOpen((value) => !value)}
+                    className={`group relative flex items-center gap-2 rounded-full px-4 py-2.5 text-base font-semibold transition-all ${
+                      isMinigamesActive || isMinigamesOpen
+                        ? "bg-white/10 text-white shadow-[0_8px_20px_rgba(15,23,42,0.35)]"
+                        : "text-slate-300 hover:text-white hover:bg-white/5"
+                    }`}
+                  >
+                    <Gamepad2 className="h-5 w-5" />
+                    <span>Minigames</span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isMinigamesOpen ? "rotate-180" : ""}`} />
+                    <span className="pointer-events-none absolute inset-x-3 -bottom-1 h-px origin-left scale-x-0 bg-gradient-to-r from-teal-300/0 via-teal-300/80 to-teal-300/0 transition-transform duration-300 group-hover:scale-x-100" />
+                  </button>
+
+                  {isMinigamesOpen ? (
+                    <div className="absolute left-0 top-[calc(100%+12px)] z-50 min-w-[200px] rounded-2xl border border-white/10 bg-slate-950/95 p-2 shadow-[0_24px_60px_rgba(2,6,23,0.45)] backdrop-blur-xl">
+                      {minigameItems.map((item) => {
+                        const isActive = pathname?.startsWith(item.href)
+                        return (
+                          <Link
+                            key={item.href}
+                            href={item.href}
+                            onClick={() => setIsMinigamesOpen(false)}
+                            className={`flex items-center rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${
+                              isActive
+                                ? "bg-white/10 text-white"
+                                : "text-slate-300 hover:bg-white/5 hover:text-white"
+                            }`}
+                          >
+                            <item.icon className="mr-3 h-4 w-4" />
+                            {item.label}
+                          </Link>
+                        )
+                      })}
+                    </div>
+                  ) : null}
+                </div>
+                {discordNavItem ? (() => {
+                  const item = discordNavItem
+                  const isExternal = Boolean(item.external)
+                  const isActive = !isExternal
+                    && (item.href === "/"
+                      ? pathname === "/"
+                      : pathname?.startsWith(item.href))
+                  const className = `group relative flex items-center gap-2 rounded-full px-4 py-2.5 text-base font-semibold transition-all ${
+                    isActive
+                      ? "bg-white/10 text-white shadow-[0_8px_20px_rgba(15,23,42,0.35)]"
+                      : "text-slate-300 hover:text-white hover:bg-white/5"
+                  }`
+                  const iconClassName = isExternal ? "h-5 w-5 fill-current" : "h-5 w-5"
+
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      aria-current={isActive ? "page" : undefined}
+                      className={className}
+                      prefetch={!isExternal}
+                      target={isExternal ? "_blank" : undefined}
+                      rel={isExternal ? "noreferrer" : undefined}
+                    >
+                      <item.icon className={iconClassName} />
+                      <span>{item.label}</span>
+                      <span className="pointer-events-none absolute inset-x-3 -bottom-1 h-px origin-left scale-x-0 bg-gradient-to-r from-teal-300/0 via-teal-300/80 to-teal-300/0 transition-transform duration-300 group-hover:scale-x-100" />
+                    </Link>
+                  )
+                })() : null}
+                <AuthControls />
               </div>
 
               <Sheet open={isOpen} onOpenChange={setIsOpen}>
@@ -119,6 +226,49 @@ export function Navigation() {
                         </Link>
                       )
                     })}
+                    <div className="rounded-xl border border-white/5 bg-white/5">
+                      <button
+                        type="button"
+                        onClick={() => setIsMobileMinigamesOpen((value) => !value)}
+                        className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-base font-medium transition-colors ${
+                          isMinigamesActive
+                            ? "text-white"
+                            : "text-slate-300 hover:bg-white/10 hover:text-white"
+                        }`}
+                      >
+                        <span className="flex items-center gap-3">
+                          <Gamepad2 className="h-6 w-6" />
+                          <span>Minigames</span>
+                        </span>
+                        <ChevronDown className={`h-5 w-5 transition-transform ${isMobileMinigamesOpen ? "rotate-180" : ""}`} />
+                      </button>
+                      {isMobileMinigamesOpen ? (
+                        <div className="space-y-2 px-3 pb-3">
+                          {minigameItems.map((item) => {
+                            const isActive = pathname?.startsWith(item.href)
+                            return (
+                              <Link
+                                key={item.href}
+                                href={item.href}
+                                className={`flex items-center rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                                  isActive
+                                    ? "bg-teal-500/10 text-white"
+                                    : "text-slate-300 hover:bg-white/10 hover:text-white"
+                                }`}
+                                onClick={() => {
+                                  setIsOpen(false)
+                                  setIsMobileMinigamesOpen(false)
+                                }}
+                              >
+                                <item.icon className="mr-3 h-4 w-4" />
+                                {item.label}
+                              </Link>
+                            )
+                          })}
+                        </div>
+                      ) : null}
+                    </div>
+                    <AuthControls mobile />
                   </div>
                 </SheetContent>
               </Sheet>
