@@ -9,6 +9,7 @@ export interface IUser extends Document {
   discordId: string
   discordAvatar?: string | null
   discordName?: string | null
+  discordSyncedAt?: Date | null
   playerId?: mongoose.Types.ObjectId | null
   betballCoins: number
   fantasyCoins: number
@@ -28,6 +29,7 @@ const userSchema = new Schema<IUser>(
     discordId: { type: String, required: true, unique: true, index: true },
     discordAvatar: { type: String, default: null },
     discordName: { type: String, default: null },
+    discordSyncedAt: { type: Date, default: null },
     playerId: { type: Schema.Types.ObjectId, ref: "Player", default: null },
     betballCoins: { type: Number, default: 100 },
     fantasyCoins: { type: Number, default: 10000 },

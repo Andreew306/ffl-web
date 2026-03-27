@@ -6,7 +6,7 @@ import FantasyMarketBoard from "@/components/fantasy/fantasy-market-board"
 import FantasyOpenRosterBoard from "@/components/fantasy/fantasy-open-roster-board"
 import FantasyRosterBoard from "@/components/fantasy/fantasy-roster-board"
 import FantasyLeagueHome from "@/components/fantasy/fantasy-league-home"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getFantasyLeagueDetail } from "@/lib/services/fantasy.service"
 

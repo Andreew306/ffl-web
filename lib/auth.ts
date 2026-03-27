@@ -142,8 +142,19 @@ async function inferPlayerIdFromDiscord(discordId: string) {
 export async function syncDiscordUser(discordId: string, discordAvatar?: string | null) {
   await dbConnect()
 
-  const { roles, displayName } = await fetchDiscordRoles(discordId)
   const existingUser = await UserModel.findOne({ discordId })
+  const now = new Date()
+  const syncedRecently =
+    existingUser?.discordSyncedAt &&
+    now.getTime() - existingUser.discordSyncedAt.getTime() < 1000 * 60 * 60 * 24
+  const avatarChanged =
+    Boolean(discordAvatar) && discordAvatar !== existingUser?.discordAvatar
+
+  if (existingUser && syncedRecently && !avatarChanged) {
+    return existingUser
+  }
+
+  const { roles, displayName } = await fetchDiscordRoles(discordId)
   const playerId = existingUser?.playerId ?? (await inferPlayerIdFromDiscord(discordId))
   const existingRoles = normalizeRoles(existingUser?.roles)
   const mergedRolesById = new Map(existingRoles.map((role) => [role.id, role]))
@@ -162,6 +173,7 @@ export async function syncDiscordUser(discordId: string, discordAvatar?: string 
         ...(discordAvatar ? { discordAvatar } : {}),
         ...(displayName ? { discordName: displayName } : {}),
         ...(playerId ? { playerId } : {}),
+        discordSyncedAt: now,
       },
       $setOnInsert: {
         discordId,

@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useMemo, useState, useTransition } from "react"
-import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
 import { ArrowDownRight, ArrowUpRight, BadgeDollarSign, Clock3, Gavel, Sparkles, X } from "lucide-react"

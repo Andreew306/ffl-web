@@ -412,15 +412,6 @@ function extractSeasonValue(rawSeason: string | number | null | undefined) {
   return match ? Number.parseInt(match[0], 10) : -1
 }
 
-function toMadridDateLabel(value: Date | string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    timeZone: "Europe/Madrid",
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(value))
-}
-
 function toMadridDateKey(value: Date | string) {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
@@ -2054,7 +2045,7 @@ async function assignRandomRoster(
 
   const priceByPlayerId = new Map(prices.map((price) => [price.playerObjectId.toString(), price]))
   await FantasyRosterSlotModel.insertMany(
-    availablePlayers.map((player, index) => {
+    availablePlayers.map((player) => {
       const price = priceByPlayerId.get(player._id.toString())
       const currentValue = price?.price ?? 10
 

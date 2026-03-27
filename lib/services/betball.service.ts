@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { unstable_cache } from "next/cache"
 import dbConnect from "@/lib/db/mongoose"
 import CompetitionModel from "@/lib/models/Competition"
 import MatchModel from "@/lib/models/Match"
@@ -514,7 +515,7 @@ async function getLatestLeagueCompetitionRows() {
     .sort((a, b) => Number(a.division ?? 99) - Number(b.division ?? 99))
 }
 
-export async function getBetBallData(): Promise<BetBallCompetition[]> {
+async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
   await dbConnect()
 
   const competitions = await getLatestLeagueCompetitionRows()
@@ -714,6 +715,12 @@ export async function getBetBallData(): Promise<BetBallCompetition[]> {
 
   return [...competitionMap.values()].filter((competition) => competition.weeks.length > 0)
 }
+
+export const getBetBallData = unstable_cache(
+  async () => getBetBallDataInternal(),
+  ["betball:data"],
+  { revalidate: 3600 }
+)
 
 export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMatchDetail | null> {
   await dbConnect()

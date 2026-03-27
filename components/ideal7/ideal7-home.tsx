@@ -21,11 +21,6 @@ type FormationKey =
 
 type ThemeKey = "champion" | "obsidian" | "emerald" | "ruby" | "diamond" | "gold" | "silver"
 
-type SlotPoint = {
-  x: number
-  y: number
-}
-
 const formations: Array<{ id: FormationKey; label: string }> = [
   { id: "1-3-2-1", label: "1-3-2-1" },
   { id: "1-3-1-2", label: "1-3-1-2" },

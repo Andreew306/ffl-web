@@ -277,7 +277,7 @@ function BadgeIcon({ badgeKey, done }: { badgeKey: string; done: boolean }) {
     case "globetrotter":
       return <path fill="none" stroke={c.stroke} strokeWidth="1.35" strokeLinecap="round" strokeLinejoin="round" d="M -9,0 A 9,9 0 1 0 9,0 A 9,9 0 1 0 -9,0 M -9,0 L 9,0 M 0,-9 A 4,9 0 1 0 0,9 A 4,9 0 1 0 0,-9" />
     case "opening-strike":
-      return <text x="0" y="4" textAnchor="middle" fontSize="10" fill={c.fill} fontFamily="system-ui,sans-serif" fontWeight="700">0'</text>
+      return <text x="0" y="4" textAnchor="middle" fontSize="10" fill={c.fill} fontFamily="system-ui,sans-serif" fontWeight="700">0’</text>
     case "silent-genius":
       return <path fill="none" stroke={c.stroke} strokeWidth="1.45" strokeLinecap="round" strokeLinejoin="round" d="M -10,4 Q -3,-6 2,-1 Q 6,3 10,-2 M 3,-5 L 10,-2 L 5,4" />
     case "late-hero":

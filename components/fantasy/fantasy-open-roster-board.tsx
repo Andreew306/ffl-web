@@ -92,71 +92,6 @@ function FlagBadge({ country, className }: { country: string; className?: string
   )
 }
 
-function getPointsForFormation(formation: string) {
-  switch (formation) {
-    case "1-3-2-1":
-      return [
-        { x: 50, y: 80 },
-        { x: 22, y: 30 },
-        { x: 50, y: 30 },
-        { x: 78, y: 30 },
-        { x: 35, y: 52 },
-        { x: 65, y: 52 },
-        { x: 50, y: 68 },
-      ]
-    case "1-3-1-2":
-      return [
-        { x: 50, y: 80 },
-        { x: 22, y: 32 },
-        { x: 50, y: 32 },
-        { x: 78, y: 32 },
-        { x: 50, y: 52 },
-        { x: 38, y: 68 },
-        { x: 62, y: 68 },
-      ]
-    case "1-2-1-3":
-      return [
-        { x: 50, y: 80 },
-        { x: 35, y: 58 },
-        { x: 65, y: 58 },
-        { x: 50, y: 46 },
-        { x: 22, y: 30 },
-        { x: 50, y: 30 },
-        { x: 78, y: 30 },
-      ]
-    case "1-2-2-2":
-      return [
-        { x: 50, y: 80 },
-        { x: 35, y: 60 },
-        { x: 65, y: 60 },
-        { x: 35, y: 44 },
-        { x: 65, y: 44 },
-        { x: 38, y: 28 },
-        { x: 62, y: 28 },
-      ]
-    case "1-1-2-3":
-      return [
-        { x: 50, y: 80 },
-        { x: 50, y: 60 },
-        { x: 35, y: 46 },
-        { x: 65, y: 46 },
-        { x: 22, y: 30 },
-        { x: 50, y: 30 },
-        { x: 78, y: 30 },
-      ]
-    default:
-      return [
-        { x: 50, y: 80 },
-        { x: 50, y: 62 },
-        { x: 22, y: 46 },
-        { x: 50, y: 46 },
-        { x: 78, y: 46 },
-        { x: 38, y: 28 },
-        { x: 62, y: 28 },
-      ]
-  }
-}
-
 function getOpenFormationSlots(formation: string): SlotGroup[] {
   const [gkRaw, defRaw, midRaw, attRaw] = formation.split("-").map((value) => Number.parseInt(value, 10))
   const gk = Number.isFinite(gkRaw) ? gkRaw : 1
@@ -286,11 +221,6 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
   const activeWeek = useMemo(
     () => weeks.find((entry) => entry.week === selectedWeek) ?? weeks[0] ?? null,
     [selectedWeek, weeks]
-  )
-
-  const points = useMemo(
-    () => getPointsForFormation((activeWeek?.formation as FormationKey) || "1-2-1-3"),
-    [activeWeek?.formation]
   )
 
   const formationSlots = useMemo(

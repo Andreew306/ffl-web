@@ -21,21 +21,6 @@ function formatMatchDate(value: string) {
   }).format(new Date(value))
 }
 
-function TeamBadge({ image, name }: { image?: string; name: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-slate-900/70">
-        {image ? (
-          <Image src={image} alt={name} width={30} height={30} className="h-7 w-7 object-contain" />
-        ) : (
-          <span className="text-sm font-semibold text-slate-300">{name.slice(0, 2).toUpperCase()}</span>
-        )}
-      </div>
-      <span className="text-sm font-semibold text-white sm:text-base">{name}</span>
-    </div>
-  )
-}
-
 function FflCoin({ value }: { value: number }) {
   return (
     <div className="inline-flex items-center gap-3 rounded-[22px] border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_30%,rgba(34,211,238,0.22),transparent_40%),linear-gradient(135deg,#11253a_0%,#0a1220_55%,#0c1d2c_100%)] px-4 py-3 shadow-[0_16px_40px_rgba(2,6,23,0.34)]">

@@ -156,6 +156,7 @@ function normalizeComparePosition(position?: string | null): ComparePosition | n
   }
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function buildCompetitionLabel(competition: RawCompetition) {
   const season = extractSeasonValue(competition.season ?? competition.season_id)
   const year = Number(competition.year ?? 0)

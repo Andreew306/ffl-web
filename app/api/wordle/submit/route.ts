@@ -46,7 +46,7 @@ export async function POST(request: Request) {
   }
 
   const dateKey = toMadridDateKey()
-  let existing = await WordleResultModel.findOne({ dateKey, userId: user._id })
+  const existing = await WordleResultModel.findOne({ dateKey, userId: user._id })
 
   if (existing && existing.version !== WORDLE_VERSION) {
     existing.version = WORDLE_VERSION
