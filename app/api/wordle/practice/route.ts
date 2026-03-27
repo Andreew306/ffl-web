@@ -14,9 +14,10 @@ function randomIndex(max: number) {
 export async function GET() {
   await dbConnect()
 
-  const eligiblePlayers = await PlayerCompetitionModel.aggregate<
-    Array<{ _id: string; matchesPlayed: number }>
-  >([
+  const eligiblePlayers = await PlayerCompetitionModel.aggregate<{
+    _id: string
+    matchesPlayed: number
+  }>([
     {
       $group: {
         _id: "$player_id",
