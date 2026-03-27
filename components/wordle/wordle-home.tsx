@@ -983,12 +983,13 @@ function WordlePractice() {
               { key: "country", label: "Nationality" },
               { key: "position", label: "Position" },
             ].map((hint) => {
-              const owned =
+              const owned = Boolean(
                 (hint.key === "team" && hints.teamName)
                 || (hint.key === "exact" && hints.exactLetter)
                 || (hint.key === "present" && hints.presentLetter)
                 || (hint.key === "country" && hints.country)
                 || (hint.key === "position" && hints.position)
+              )
               return (
                 <button
                   key={hint.key}
