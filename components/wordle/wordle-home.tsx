@@ -525,12 +525,13 @@ export function WordleHome({ daily, leaderboard }: Props) {
                     { key: "country", label: "Nationality", cost: 10 },
                     { key: "position", label: "Position", cost: 5 },
                   ].map((hint) => {
-                    const owned =
+                    const owned = Boolean(
                       (hint.key === "team" && hints.teamImage)
                       || (hint.key === "exact" && hints.exactLetter)
                       || (hint.key === "present" && hints.presentLetter)
                       || (hint.key === "country" && hints.country)
                       || (hint.key === "position" && hints.position)
+                    )
                     const disabled = owned || dailyCompleted || !canBuyHints
                     return (
                       <button
