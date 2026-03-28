@@ -655,11 +655,17 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
                             <button
                               type="button"
                               onClick={async () => {
-                                await fetch("/api/tictactoe/challenge/respond", {
+                                const response = await fetch("/api/tictactoe/challenge/respond", {
                                   method: "POST",
                                   headers: { "Content-Type": "application/json" },
                                   body: JSON.stringify({ challengeId: entry.id, action: "accept" }),
                                 })
+                                if (!response.ok) return
+                                const payload = await response.json() as { gameId?: string }
+                                if (payload.gameId) {
+                                  window.location.href = `/tic-tac-toe/online/${payload.gameId}`
+                                  return
+                                }
                               }}
                               className="rounded-full border border-emerald-300/30 bg-emerald-400/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-50 hover:bg-emerald-400/25"
                             >

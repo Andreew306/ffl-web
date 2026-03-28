@@ -66,6 +66,23 @@ export type TicTacToePageData = {
   rivals: TicTacToeRivalEntry[]
 }
 
+export type TicTacToeOnlineGameSummary = {
+  gameId: string
+  status: "pending" | "active" | "finished"
+  difficulty?: "easy" | "medium" | "hard" | null
+  createdAt: Date
+  turnSeconds?: number | null
+  turnExpiresAt?: Date | null
+  currentTurnUserId?: string | null
+  yourUserId: string
+  opponent: {
+    userId: string
+    displayName: string
+    avatar?: string
+  }
+  isYourTurn: boolean
+}
+
 type TeamDoc = {
   _id: mongoose.Types.ObjectId
   team_id?: number
@@ -209,6 +226,74 @@ async function getUserMetaMap(userIds: mongoose.Types.ObjectId[]) {
       ]
     })
   )
+}
+
+export async function getTicTacToeOnlineGameSummary(gameId: string, discordId: string | null): Promise<TicTacToeOnlineGameSummary | null> {
+  if (!discordId || !mongoose.Types.ObjectId.isValid(gameId)) {
+    return null
+  }
+
+  await dbConnect()
+  const currentUser = await UserModel.findOne({ discordId })
+    .select("_id discordId")
+    .lean<{ _id: mongoose.Types.ObjectId; discordId: string } | null>()
+
+  if (!currentUser?._id) {
+    return null
+  }
+
+  const game = await TicTacToeGameModel.findOne({
+    _id: new mongoose.Types.ObjectId(gameId),
+    mode: "online",
+    $or: [{ createdByUserId: currentUser._id }, { opponentUserId: currentUser._id }],
+  })
+    .select("_id status difficulty createdByUserId opponentUserId currentTurnUserId turnExpiresAt turnSeconds createdAt")
+    .lean<{
+      _id: mongoose.Types.ObjectId
+      status: "pending" | "active" | "finished"
+      difficulty?: "easy" | "medium" | "hard" | null
+      createdByUserId?: mongoose.Types.ObjectId | null
+      opponentUserId?: mongoose.Types.ObjectId | null
+      currentTurnUserId?: mongoose.Types.ObjectId | null
+      turnExpiresAt?: Date | null
+      turnSeconds?: number | null
+      createdAt: Date
+    } | null>()
+
+  if (!game) {
+    return null
+  }
+
+  const opponentId = String(game.createdByUserId) === String(currentUser._id)
+    ? game.opponentUserId
+    : game.createdByUserId
+
+  const metaMap = await getUserMetaMap(
+    [currentUser._id, opponentId].filter((value): value is mongoose.Types.ObjectId => Boolean(value))
+  )
+  const opponentMeta = opponentId ? metaMap.get(String(opponentId)) : null
+
+  const opponentDisplayName =
+    opponentMeta?.playerName ||
+    opponentMeta?.teamName ||
+    "Opponent"
+
+  return {
+    gameId: game._id.toString(),
+    status: game.status,
+    difficulty: game.difficulty ?? null,
+    createdAt: game.createdAt,
+    turnSeconds: game.turnSeconds ?? null,
+    turnExpiresAt: game.turnExpiresAt ?? null,
+    currentTurnUserId: game.currentTurnUserId?.toString() ?? null,
+    yourUserId: currentUser._id.toString(),
+    opponent: {
+      userId: opponentId?.toString() ?? "",
+      displayName: opponentDisplayName,
+      avatar: opponentMeta?.avatar,
+    },
+    isYourTurn: game.currentTurnUserId?.toString() === currentUser._id.toString(),
+  }
 }
 
 async function grantPendingOnlineRewards() {

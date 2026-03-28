@@ -67,7 +67,7 @@ export async function POST(request: Request) {
   const difficulty = ONLINE_DIFFICULTIES[Math.floor(Math.random() * ONLINE_DIFFICULTIES.length)]
   const firstTurn = Math.random() > 0.5 ? challenge.fromUserId : challenge.toUserId
 
-  await TicTacToeGameModel.create({
+  const game = await TicTacToeGameModel.create({
     mode: "online",
     status: "active",
     difficulty,
@@ -81,5 +81,5 @@ export async function POST(request: Request) {
     picks: [],
   })
 
-  return NextResponse.json({ ok: true, status: "accepted" })
+  return NextResponse.json({ ok: true, status: "accepted", gameId: String(game._id) })
 }
