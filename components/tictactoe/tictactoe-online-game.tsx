@@ -22,6 +22,12 @@ type OnlinePick = {
   option: TicTacToeCellOption
 }
 
+type SearchResult = {
+  playerObjectId: string
+  playerName: string
+  avatar?: string
+}
+
 type OnlineState = {
   gameId: string
   status: "pending" | "active" | "finished"
@@ -124,6 +130,9 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
   const [error, setError] = useState("")
   const [selectedCell, setSelectedCell] = useState<OnlineCell | null>(null)
   const [search, setSearch] = useState("")
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [pickError, setPickError] = useState("")
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
 
   const fetchState = async (silent = false) => {
@@ -181,12 +190,37 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
     return map
   }, [state?.picks])
 
-  const filteredOptions = useMemo(() => {
-    if (!selectedCell) return []
-    const query = search.trim().toLowerCase()
-    if (!query) return []
-    return selectedCell.options.filter((option) => option.playerName.toLowerCase().includes(query))
-  }, [selectedCell, search])
+  useEffect(() => {
+    if (!selectedCell) {
+      setSearchResults([])
+      setSearchLoading(false)
+      setPickError("")
+      return
+    }
+    const query = search.trim()
+    if (!query) {
+      setSearchResults([])
+      setSearchLoading(false)
+      return
+    }
+
+    setSearchLoading(true)
+    const timeout = window.setTimeout(async () => {
+      try {
+        const response = await fetch(`/api/tictactoe/players?q=${encodeURIComponent(query)}`)
+        if (!response.ok) {
+          setSearchResults([])
+          return
+        }
+        const payload = await response.json() as { players?: SearchResult[] }
+        setSearchResults(payload.players ?? [])
+      } finally {
+        setSearchLoading(false)
+      }
+    }, 250)
+
+    return () => window.clearTimeout(timeout)
+  }, [search, selectedCell])
 
   const canPlay = state?.status === "active" && state.isYourTurn
   const turnLabel = state?.status === "finished"
@@ -304,6 +338,8 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
                               if (!canPlay || pick) return
                               setSelectedCell(cell)
                               setSearch("")
+                              setSearchResults([])
+                              setPickError("")
                             }}
                             className={cn(
                               "group min-h-[112px] rounded-[22px] border bg-emerald-500/10 p-3 text-left transition hover:border-cyan-300/25 hover:bg-emerald-500/15",
@@ -389,23 +425,39 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value)
+                  setPickError("")
                 }}
                 placeholder="Search player"
                 className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
               />
             </div>
 
+            {pickError ? (
+              <div className="mt-4 rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                {pickError}
+              </div>
+            ) : null}
+
             <div className="mt-5 max-h-[320px] space-y-3 overflow-y-auto pr-2">
               {!search.trim() ? (
                 <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/50 px-4 py-6 text-center text-sm text-slate-400">
                   Start typing to search players.
                 </div>
-              ) : filteredOptions.length ? filteredOptions.map((option) => (
+              ) : searchLoading ? (
+                <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-6 text-center text-sm text-slate-400">
+                  Searching...
+                </div>
+              ) : searchResults.length ? searchResults.map((option) => (
                 <button
                   key={option.playerObjectId}
                   type="button"
                   onClick={async () => {
                     if (!selectedCell) return
+                    const isValid = selectedCell.options.some((candidate) => candidate.playerObjectId === option.playerObjectId)
+                    if (!isValid) {
+                      setPickError("This player is not valid.")
+                      return
+                    }
                     await fetch(`/api/tictactoe/online/${game.gameId}/pick`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
@@ -417,6 +469,8 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
                     })
                     setSelectedCell(null)
                     setSearch("")
+                    setSearchResults([])
+                    setPickError("")
                     void fetchState(true)
                   }}
                   className="w-full text-left"
