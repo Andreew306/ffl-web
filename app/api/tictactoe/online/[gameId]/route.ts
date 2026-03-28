@@ -141,6 +141,7 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
   return NextResponse.json({
     gameId: game._id.toString(),
     status: game.status,
+    result: game.result ?? null,
     difficulty: game.difficulty ?? null,
     rows: game.rows.map((row: TicTacToeRow) => row.country || ""),
     columns: game.columns.map((column: TicTacToeColumn) => ({
@@ -151,6 +152,7 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     cells,
     picks,
     currentTurnUserId: game.currentTurnUserId?.toString() ?? null,
+    winnerUserId: game.winnerUserId?.toString() ?? null,
     yourUserId: currentUser._id.toString(),
     isYourTurn: String(game.currentTurnUserId) === String(currentUser._id),
     turnSeconds: game.turnSeconds ?? 30,

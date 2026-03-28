@@ -25,12 +25,14 @@ type OnlinePick = {
 type OnlineState = {
   gameId: string
   status: "pending" | "active" | "finished"
+  result?: "win" | "draw" | null
   difficulty?: string | null
   rows: string[]
   columns: Array<{ id: string; name: string; image?: string }>
   cells: OnlineCell[]
   picks: OnlinePick[]
   currentTurnUserId: string | null
+  winnerUserId?: string | null
   yourUserId: string
   isYourTurn: boolean
   turnSeconds: number
@@ -196,6 +198,9 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
   const formattedTimeLeft = timeLeft === null
     ? "--:--"
     : `${Math.floor(timeLeft / 60).toString().padStart(2, "0")}:${(timeLeft % 60).toString().padStart(2, "0")}`
+  const isWinner = state?.status === "finished" && state?.result === "win" && state?.winnerUserId === state?.yourUserId
+  const isLoser = state?.status === "finished" && state?.result === "win" && state?.winnerUserId !== state?.yourUserId
+  const isDraw = state?.status === "finished" && state?.result === "draw"
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -331,6 +336,37 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
           ) : null}
         </div>
       </div>
+
+      {state?.status === "finished" ? (
+        <div className="pointer-events-none fixed inset-x-0 top-28 z-[130] flex justify-center px-4">
+          <div
+            className={cn(
+              "animate-[fadeInOut_2.8s_ease-in-out_forwards] rounded-full border px-6 py-3 shadow-[0_20px_60px_rgba(4,120,87,0.35)]",
+              isWinner
+                ? "border-emerald-300/25 bg-[linear-gradient(135deg,rgba(16,185,129,0.95),rgba(6,95,70,0.95))]"
+                : isLoser
+                  ? "border-rose-300/25 bg-[linear-gradient(135deg,rgba(244,63,94,0.95),rgba(159,18,57,0.95))]"
+                  : "border-cyan-300/25 bg-[linear-gradient(135deg,rgba(34,211,238,0.9),rgba(14,116,144,0.9))]"
+            )}
+          >
+            <div className="flex items-center gap-3 text-white">
+              <span className="text-2xl">{isWinner ? "🏆" : isLoser ? "⚔️" : "🤝"}</span>
+              <div>
+                <div className="text-[10px] uppercase tracking-[0.35em] text-white/70">
+                  {isWinner ? "Victory" : isLoser ? "Defeat" : "Draw"}
+                </div>
+                <div className="text-base font-semibold">
+                  {isWinner
+                    ? "You won +10 FFL coins"
+                    : isLoser
+                      ? "Your opponent won"
+                      : "Match ended in a draw"}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {selectedCell ? (
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/80 px-4 backdrop-blur-sm">
