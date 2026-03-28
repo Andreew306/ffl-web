@@ -72,8 +72,8 @@ export async function POST(request: Request, context: { params: Promise<{ gameId
 
   if (
     game.picks.some(
-      (pick: { playerObjectId?: { toString?: () => string } }) =>
-        pick.playerObjectId?.toString() === playerObjectId
+      (pick: { playerObjectId?: unknown }) =>
+        pick.playerObjectId?.toString?.() === playerObjectId
     )
   ) {
     return NextResponse.json({ error: "Player already used." }, { status: 400 })
