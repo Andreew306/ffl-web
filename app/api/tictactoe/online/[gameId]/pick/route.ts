@@ -66,7 +66,7 @@ export async function POST(request: Request, context: { params: Promise<{ gameId
     return NextResponse.json({ error: "Not your turn." }, { status: 403 })
   }
 
-  if (game.picks.some((pick) => pick.row === row && pick.col === col)) {
+  if (game.picks.some((pick: { row: number; col: number }) => pick.row === row && pick.col === col)) {
     return NextResponse.json({ error: "Cell already filled." }, { status: 400 })
   }
 
