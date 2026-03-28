@@ -70,7 +70,12 @@ export async function POST(request: Request, context: { params: Promise<{ gameId
     return NextResponse.json({ error: "Cell already filled." }, { status: 400 })
   }
 
-  if (game.picks.some((pick) => pick.playerObjectId?.toString() === playerObjectId)) {
+  if (
+    game.picks.some(
+      (pick: { playerObjectId?: { toString?: () => string } }) =>
+        pick.playerObjectId?.toString() === playerObjectId
+    )
+  ) {
     return NextResponse.json({ error: "Player already used." }, { status: 400 })
   }
 
