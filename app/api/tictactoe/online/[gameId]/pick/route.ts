@@ -90,7 +90,7 @@ export async function POST(request: Request, context: { params: Promise<{ gameId
     .map((column: { teamId?: unknown }) => new mongoose.Types.ObjectId(column.teamId?.toString?.()))
 
   const { teamCountryPlayers } = await getTicTacToeTeamCountryPlayers(teamIds)
-  const key = `${rowHeader.country}::${columnHeader.teamId.toString()}`
+  const key = `${columnHeader.teamId.toString()}::${rowHeader.country}`
   const options = teamCountryPlayers.get(key) ?? []
   const option = options.find((entry) => entry.playerObjectId === playerObjectId)
 

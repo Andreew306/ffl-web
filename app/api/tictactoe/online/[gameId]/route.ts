@@ -81,7 +81,7 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     const country = row.country || ""
     return game.columns.map((column: TicTacToeColumn, colIndex: number) => {
       const teamId = column.teamId?.toString() ?? ""
-      const key = `${country}::${teamId}`
+      const key = `${teamId}::${country}`
       const rawOptions = teamCountryPlayers.get(key) ?? []
       const options = rawOptions.filter((option) => !usedPlayers.has(option.playerObjectId))
       return {
@@ -109,7 +109,7 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     const column = game.columns[pick.col]
     const country = row?.country || pick.country || ""
     const teamId = column?.teamId?.toString() ?? ""
-    const rawOptions = teamCountryPlayers.get(`${country}::${teamId}`) ?? []
+    const rawOptions = teamCountryPlayers.get(`${teamId}::${country}`) ?? []
     const matched = rawOptions.find((option) => option.playerObjectId === pick.playerObjectId?.toString())
     return {
       row: pick.row,

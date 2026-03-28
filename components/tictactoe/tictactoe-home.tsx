@@ -377,12 +377,16 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
           onlineUsers?: OnlineUser[]
           incoming?: IncomingChallenge[]
           outgoing?: OutgoingChallenge[]
+          activeGameId?: string | null
         }
         if (!mounted) return
         setOnlineUsers(data.onlineUsers ?? [])
         setIncomingChallenges(data.incoming ?? [])
         setOutgoingChallenges(data.outgoing ?? [])
         setOnlineError("")
+        if (data.activeGameId && mode === "online") {
+          window.location.href = `/tic-tac-toe/online/${data.activeGameId}`
+        }
     } catch {
       if (!mounted) return
       setOnlineError("Unable to load online players.")
@@ -395,7 +399,7 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
       mounted = false
       window.clearInterval(interval)
     }
-  }, [])
+  }, [mode])
 
   useEffect(() => {
     if (!showWinBanner) return

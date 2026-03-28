@@ -7,6 +7,7 @@ import UserModel from "@/lib/models/User"
 import PlayerModel from "@/lib/models/Player"
 import TicTacToePresenceModel from "@/lib/models/TicTacToePresence"
 import TicTacToeChallengeModel from "@/lib/models/TicTacToeChallenge"
+import TicTacToeGameModel from "@/lib/models/TicTacToeGame"
 
 const ONLINE_WINDOW_SECONDS = 75
 
@@ -123,5 +124,14 @@ export async function POST() {
     onlineUsers,
     incoming,
     outgoing,
+    activeGameId: activeGame?._id?.toString() ?? null,
   })
 }
+  const activeGame = await TicTacToeGameModel.findOne({
+    mode: "online",
+    status: "active",
+    $or: [{ createdByUserId: user._id }, { opponentUserId: user._id }],
+  })
+    .select("_id createdAt")
+    .sort({ createdAt: -1 })
+    .lean<{ _id: mongoose.Types.ObjectId } | null>()
