@@ -135,7 +135,7 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     gameId: game._id.toString(),
     status: game.status,
     difficulty: game.difficulty ?? null,
-    rows: game.rows.map((row) => row.country || ""),
+    rows: game.rows.map((row: TicTacToeRow) => row.country || ""),
     columns: game.columns.map((column: TicTacToeColumn) => ({
       id: column.teamId?.toString() ?? "",
       name: column.teamName ?? "Unknown team",
