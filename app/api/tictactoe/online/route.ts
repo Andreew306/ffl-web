@@ -120,13 +120,6 @@ export async function POST() {
       ...metaMap.get(String(entry.toUserId)),
     }))
 
-  return NextResponse.json({
-    onlineUsers,
-    incoming,
-    outgoing,
-    activeGameId: activeGame?._id?.toString() ?? null,
-  })
-}
   const activeGame = await TicTacToeGameModel.findOne({
     mode: "online",
     status: "active",
@@ -135,3 +128,11 @@ export async function POST() {
     .select("_id createdAt")
     .sort({ createdAt: -1 })
     .lean<{ _id: mongoose.Types.ObjectId } | null>()
+
+  return NextResponse.json({
+    onlineUsers,
+    incoming,
+    outgoing,
+    activeGameId: activeGame?._id?.toString() ?? null,
+  })
+}
