@@ -546,13 +546,13 @@ function ObjectiveBadge({ objective }: { objective: ProfileObjective }) {
     <div
       className={[
         "group relative h-[92px] rounded-[16px] border p-1.5 transition-all duration-300",
-        done ? `${style.accent} bg-slate-950/85 ${style.glow}` : "border-white/8 bg-slate-950/35 opacity-60",
+        done ? `${style.accent} bg-slate-950/85 ${style.glow}` : "border-white/8 bg-slate-950/35",
       ].join(" ")}
     >
       <div className={`absolute inset-0 rounded-[14px] bg-gradient-to-b ${style.frame} ${done ? "opacity-95" : "opacity-14"} transition-opacity`} />
-      <div className="absolute inset-[2px] rounded-[12px] border border-white/10 bg-[radial-gradient(circle_at_50%_24%,rgba(255,255,255,0.18),rgba(2,6,23,0.96))]" />
+      <div className={`absolute inset-[2px] rounded-[12px] border border-white/10 ${done ? "bg-[radial-gradient(circle_at_50%_24%,rgba(255,255,255,0.18),rgba(2,6,23,0.96))]" : "bg-[radial-gradient(circle_at_50%_24%,rgba(255,255,255,0.12),rgba(2,6,23,0.96))]"}`} />
 
-      <div className="relative grid h-full grid-rows-[1fr_24px] overflow-hidden rounded-[12px] px-1 pt-1 pb-1">
+      <div className={`relative grid h-full grid-rows-[1fr_24px] overflow-hidden rounded-[12px] px-1 pt-1 pb-1 ${done ? "" : "text-slate-400/90 opacity-60"}`}>
         <div className="-translate-y-0.5 flex items-end justify-center">
           <svg viewBox="-16 -16 32 32" className={`${getIconClass(objective.category, objective.key)} overflow-visible`}>
             <CategoryIcon category={objective.category} badgeKey={objective.key} done={done} />
@@ -560,17 +560,17 @@ function ObjectiveBadge({ objective }: { objective: ProfileObjective }) {
         </div>
 
         <div className="flex items-end justify-center px-1 text-center">
-          <div className={`line-clamp-2 text-[8px] font-semibold leading-[1.02] ${done ? "text-white" : "text-slate-300"}`}>
+          <div className={`line-clamp-2 text-[8px] font-semibold leading-[1.02] ${done ? "text-white" : "text-slate-300/80"}`}>
             {objective.label}
           </div>
         </div>
       </div>
 
-      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-3 w-56 -translate-x-1/2 opacity-0 transition-all duration-200 group-hover:translate-y-1 group-hover:opacity-100">
-        <div className="rounded-2xl border border-white/10 bg-slate-950/90 px-4 py-3 text-[11px] text-slate-200 shadow-[0_12px_30px_rgba(4,12,26,0.55)] backdrop-blur">
-          <div className="text-xs font-semibold text-white">{objective.label}</div>
-          <div className="mt-1 text-[10px] uppercase tracking-[0.28em] text-slate-400">{objective.category}</div>
-          <div className="mt-2 text-[11px] leading-relaxed text-slate-300">{objective.description}</div>
+      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-3 w-60 -translate-x-1/2 opacity-0 transition-all duration-200 group-hover:translate-y-1 group-hover:opacity-100">
+        <div className="rounded-2xl border border-white/30 bg-slate-900 px-4 py-3 text-[12px] text-white shadow-[0_18px_40px_rgba(2,6,23,0.85)]">
+          <div className="text-sm font-semibold text-white">{objective.label}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.3em] text-slate-200">{objective.category}</div>
+          <div className="mt-2 text-[12px] leading-relaxed text-slate-100">{objective.description}</div>
         </div>
       </div>
     </div>
@@ -609,7 +609,7 @@ export function ObjectivesMap({ objectives }: ObjectivesMapProps) {
         </div>
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-4 md:p-5">
+      <div className="relative mt-6 overflow-visible rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-4 md:p-5">
         <div className="grid grid-cols-[96px_repeat(14,minmax(0,1fr))] gap-2">
           {rows.map((row) => (
             <div key={row.label} className="contents">

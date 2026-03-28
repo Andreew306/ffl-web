@@ -80,9 +80,9 @@ export default async function ProfilePage() {
     return (
       <div className="min-h-screen bg-slate-950 px-4 py-10 text-white">
         <div className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-slate-900/70 p-8 text-center">
-          <h1 className="text-3xl font-semibold">Perfil no disponible</h1>
+          <h1 className="text-3xl font-semibold">Profile unavailable</h1>
           <p className="mt-4 text-slate-300">
-            La cuenta ha iniciado sesion, pero no se ha podido inicializar el usuario interno.
+            The account signed in, but we could not initialize the internal user.
           </p>
         </div>
       </div>
@@ -134,7 +134,7 @@ export default async function ProfilePage() {
                 {profile.player ? (
                   <Button asChild className="mt-5 bg-teal-500 text-slate-950 hover:bg-teal-400">
                     <Link href={`/players/${profile.player.playerId}`}>
-                      Ver perfil publico
+                      View public profile
                     </Link>
                   </Button>
                 ) : null}
@@ -146,7 +146,7 @@ export default async function ProfilePage() {
                   Player
                 </div>
                 <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  {profile.player?.name || "Cuenta de Discord vinculada"}
+                  {profile.player?.name || "Discord account linked"}
                 </h1>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-slate-200">
@@ -214,15 +214,15 @@ export default async function ProfilePage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-2xl">
                 <UserCircle2 className="h-6 w-6 text-amber-300" />
-                Cuenta sin jugador vinculado
+                No player linked
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-slate-200">
               <p>
-                El login con Discord ya funciona, pero esta cuenta todavia no esta enlazada a un jugador de la base de datos. El sistema intenta enlazarlo automaticamente con el `discordId` de Elo cuando la coincidencia es unica.
+                Discord login works, but this account is not linked to a player in the database yet. The system tries to auto-link using the Elo `discordId` when the match is unique.
               </p>
               <p>
-                Si no aparece tu jugador, necesitareis asociar manualmente el `playerId` de este usuario en la coleccion `users`.
+                If your player does not appear, you will need to manually attach this user's `playerId` in the `users` collection.
               </p>
             </CardContent>
           </Card>

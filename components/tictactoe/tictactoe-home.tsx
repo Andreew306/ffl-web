@@ -210,6 +210,28 @@ function RivalCard({ rivals }: { rivals: TicTacToeRivalEntry[] }) {
 
 type SearchableCellOption = TicTacToeCellOption & { isValidForCell?: boolean }
 
+type OnlineUser = {
+  userId: string
+  displayName: string
+  avatar?: string
+}
+
+type IncomingChallenge = {
+  id: string
+  fromUserId: string
+  displayName?: string
+  avatar?: string
+  expiresAt?: string
+}
+
+type OutgoingChallenge = {
+  id: string
+  toUserId: string
+  displayName?: string
+  avatar?: string
+  expiresAt?: string
+}
+
 type TicTacToeHomeProps = TicTacToePageData
 
 const difficultyLabels: Record<TicTacToeDifficulty, string> = {
@@ -244,6 +266,10 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
   const [search, setSearch] = useState("")
   const [searchError, setSearchError] = useState("")
   const [showWinBanner, setShowWinBanner] = useState(false)
+  const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([])
+  const [incomingChallenges, setIncomingChallenges] = useState<IncomingChallenge[]>([])
+  const [outgoingChallenges, setOutgoingChallenges] = useState<OutgoingChallenge[]>([])
+  const [onlineError, setOnlineError] = useState("")
 
   const boardPool = boards[difficulty] ?? []
   const board = boardPool.length
@@ -339,6 +365,37 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
       setShowWinBanner(true)
     }
   }, [hasWon])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function refreshOnline() {
+      try {
+        const response = await fetch("/api/tictactoe/online", { method: "POST" })
+        if (!response.ok) return
+        const data = await response.json() as {
+          onlineUsers?: OnlineUser[]
+          incoming?: IncomingChallenge[]
+          outgoing?: OutgoingChallenge[]
+        }
+        if (!mounted) return
+        setOnlineUsers(data.onlineUsers ?? [])
+        setIncomingChallenges(data.incoming ?? [])
+        setOutgoingChallenges(data.outgoing ?? [])
+        setOnlineError("")
+      } catch (error) {
+        if (!mounted) return
+        setOnlineError("Unable to load online players.")
+      }
+    }
+
+    refreshOnline()
+    const interval = window.setInterval(refreshOnline, 20000)
+    return () => {
+      mounted = false
+      window.clearInterval(interval)
+    }
+  }, [])
 
   useEffect(() => {
     if (!showWinBanner) return
@@ -524,7 +581,97 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
             <section className="mt-8 grid gap-6 xl:grid-cols-3">
               <StatCard title="Top wins" icon={<Trophy className="h-4 w-4" />} entries={topWins} emptyText="No finished online games yet." valueLabel="wins" />
               <StatCard title="Most games" icon={<Grid3X3 className="h-4 w-4" />} entries={mostGames} emptyText="No online activity yet." valueLabel="games" />
-              <RivalCard rivals={rivals} />
+              <div className="rounded-[28px] border border-white/10 bg-slate-900/60 p-5">
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.34em] text-slate-500">
+                  <Users className="h-4 w-4" />
+                  Online players
+                </div>
+                <div className="mt-4 space-y-3">
+                  {onlineError ? (
+                    <div className="rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                      {onlineError}
+                    </div>
+                  ) : null}
+                  {onlineUsers.length ? onlineUsers.map((entry) => {
+                    const pending = outgoingChallenges.some((challenge) => challenge.toUserId === entry.userId)
+                    return (
+                      <div key={entry.userId} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3">
+                        <div className="flex items-center gap-3">
+                          <UserAvatar avatar={entry.avatar} label={entry.displayName} />
+                          <div className="text-sm font-semibold text-white">{entry.displayName}</div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (pending) return
+                            await fetch("/api/tictactoe/challenge", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ targetUserId: entry.userId }),
+                            })
+                          }}
+                          className={cn(
+                            "rounded-full px-3 py-2 text-xs font-semibold uppercase tracking-[0.3em] transition",
+                            pending
+                              ? "cursor-default border border-white/10 bg-white/5 text-slate-400"
+                              : "border border-cyan-300/30 bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/20"
+                          )}
+                        >
+                          {pending ? "Pending" : "Challenge"}
+                        </button>
+                      </div>
+                    )
+                  }) : (
+                    <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/50 px-4 py-8 text-center text-sm text-slate-500">
+                      No online players yet.
+                    </div>
+                  )}
+                </div>
+
+                {incomingChallenges.length ? (
+                  <div className="mt-6">
+                    <div className="text-[10px] uppercase tracking-[0.32em] text-slate-500">Requests</div>
+                    <div className="mt-3 space-y-3">
+                      {incomingChallenges.map((entry) => (
+                        <div key={entry.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3">
+                          <div className="flex items-center gap-3">
+                            <UserAvatar avatar={entry.avatar} label={entry.displayName || "Rival"} />
+                            <div className="text-sm font-semibold text-white">{entry.displayName ?? "Rival"}</div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await fetch("/api/tictactoe/challenge/respond", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ challengeId: entry.id, action: "decline" }),
+                                })
+                              }}
+                              className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-slate-300 hover:bg-white/10 hover:text-white"
+                            >
+                              Decline
+                            </button>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                await fetch("/api/tictactoe/challenge/respond", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ challengeId: entry.id, action: "accept" }),
+                                })
+                              }}
+                              className="rounded-full border border-emerald-300/30 bg-emerald-400/15 px-3 py-2 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-50 hover:bg-emerald-400/25"
+                            >
+                              Accept
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
             </section>
           )}
         </div>

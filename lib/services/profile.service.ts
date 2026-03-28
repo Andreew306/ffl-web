@@ -105,83 +105,83 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
   ...createMilestoneObjectives(
     "Matches", "matchesPlayed", [1, 5, 10, 25, 50, 75, 100],
     (t) => t === 1 ? "Debut" : t === 5 ? "Getting Started" : t === 10 ? "Regular" : t === 25 ? "Established" : t === 50 ? "Veteran" : t === 75 ? "Mainstay" : "Centurion",
-    (t) => t === 1 ? "Juega tu primer partido oficial." : t === 5 ? "Juega 5 partidos oficiales." : t === 10 ? "Juega 10 partidos oficiales." : t === 25 ? "Juega 25 partidos oficiales." : t === 50 ? "Juega 50 partidos oficiales." : t === 75 ? "Juega 75 partidos oficiales." : "Juega 100 partidos oficiales."
+    (t) => t === 1 ? "Play your first official match." : t === 5 ? "Play 5 official matches." : t === 10 ? "Play 10 official matches." : t === 25 ? "Play 25 official matches." : t === 50 ? "Play 50 official matches." : t === 75 ? "Play 75 official matches." : "Play 100 official matches."
   ),
   ...createMilestoneObjectives(
     "Goals", "goals", [1, 5, 10, 25, 50, 100, 250],
     (t) => t === 1 ? "First Strike" : t === 5 ? "Finisher" : t === 10 ? "Goalscorer" : t === 25 ? "Striker" : t === 50 ? "Sharpshoot" : t === 100 ? "Deadly" : "Fusion Scorer",
-    (t) => t === 1 ? "Marca tu primer gol oficial." : t === 5 ? "Marca 5 goles oficiales." : t === 10 ? "Marca 10 goles oficiales." : t === 25 ? "Marca 25 goles oficiales." : t === 50 ? "Marca 50 goles oficiales." : t === 100 ? "Marca 100 goles oficiales." : "Marca 250 goles oficiales."
+    (t) => t === 1 ? "Score your first official goal." : t === 5 ? "Score 5 official goals." : t === 10 ? "Score 10 official goals." : t === 25 ? "Score 25 official goals." : t === 50 ? "Score 50 official goals." : t === 100 ? "Score 100 official goals." : "Score 250 official goals."
   ),
   ...createMilestoneObjectives(
     "Seasons", "seasonsPlayed", [1, 3, 5, 7, 10],
     (t) => t === 1 ? "First Season" : t === 3 ? "Seasoned" : t === 10 ? "Mr. Unemployed" : `${t} Seasons`,
-    (t) => t === 1 ? "Juega tu primera season oficial." : t === 3 ? "Juega 3 seasons oficiales distintas." : t === 10 ? "Juega 10 seasons oficiales distintas." : `Juega ${t} seasons oficiales distintas.`
+    (t) => t === 1 ? "Play your first official season." : t === 3 ? "Play 3 different official seasons." : t === 10 ? "Play 10 different official seasons." : `Play ${t} different official seasons.`
   ),
   ...createMilestoneObjectives(
     "Teams", "teamsPlayed", [1, 3, 5, 7, 10],
     (t) => t === 1 ? "First Team" : `${t} Teams`,
-    (t) => t === 1 ? "Juega en tu primer team." : `Juega en ${t} teams diferentes.`
+    (t) => t === 1 ? "Play for your first team." : `Play for ${t} different teams.`
   ),
   ...createMilestoneObjectives(
     "Assists", "assists", [1, 5, 10, 25, 50, 100, 250],
     (t) => t === 1 ? "Provider" : t === 5 ? "Creator" : t === 10 ? "Playmaker" : t === 25 ? "Architect" : t === 50 ? "Visionary" : t === 100 ? "Mastermind" : "Fusion Assister",
-    (t) => t === 1 ? "Reparte tu primera asistencia oficial." : t === 5 ? "Reparte 5 asistencias oficiales." : t === 10 ? "Reparte 10 asistencias oficiales." : t === 25 ? "Reparte 25 asistencias oficiales." : t === 50 ? "Reparte 50 asistencias oficiales." : t === 100 ? "Reparte 100 asistencias oficiales." : "Reparte 250 asistencias oficiales."
+    (t) => t === 1 ? "Deliver your first official assist." : t === 5 ? "Deliver 5 official assists." : t === 10 ? "Deliver 10 official assists." : t === 25 ? "Deliver 25 official assists." : t === 50 ? "Deliver 50 official assists." : t === 100 ? "Deliver 100 official assists." : "Deliver 250 official assists."
   ),
   ...createMilestoneObjectives(
     "Wins", "matchesWon", [1, 5, 10, 25, 50, 75, 100],
     (t) => t === 1 ? "Winner" : t === 5 ? "Contender" : t === 10 ? "Competitor" : t === 25 ? "Closer" : t === 50 ? "Champion" : t === 75 ? "Dominant" : "Dynasty",
-    (t) => t === 1 ? "Consigue tu primera victoria oficial." : t === 5 ? "Consigue 5 victorias oficiales." : t === 10 ? "Consigue 10 victorias oficiales." : t === 25 ? "Consigue 25 victorias oficiales." : t === 50 ? "Consigue 50 victorias oficiales." : t === 75 ? "Consigue 75 victorias oficiales." : "Consigue 100 victorias oficiales."
+    (t) => t === 1 ? "Get your first official win." : t === 5 ? "Get 5 official wins." : t === 10 ? "Get 10 official wins." : t === 25 ? "Get 25 official wins." : t === 50 ? "Get 50 official wins." : t === 75 ? "Get 75 official wins." : "Get 100 official wins."
   ),
   // ── Awards ──────────────────────────────────────────────────────────────────
   ...createMilestoneObjectives(
     "MVP", "mvp", [1, 5, 10, 15, 20, 25, 30],
     (t) => t === 1 ? "Star" : t === 5 ? "Showman" : t === 10 ? "Franchise" : t === 15 ? "Superstar" : t === 20 ? "Icon" : t === 25 ? "Legend" : "Immortal",
-    (t) => t === 1 ? "Logra tu primer MVP oficial." : t === 5 ? "Logra 5 MVP oficiales." : t === 10 ? "Logra 10 MVP oficiales." : t === 15 ? "Logra 15 MVP oficiales." : t === 20 ? "Logra 20 MVP oficiales." : t === 25 ? "Logra 25 MVP oficiales." : "Logra 30 MVP oficiales."
+    (t) => t === 1 ? "Earn your first official MVP." : t === 5 ? "Earn 5 official MVPs." : t === 10 ? "Earn 10 official MVPs." : t === 15 ? "Earn 15 official MVPs." : t === 20 ? "Earn 20 official MVPs." : t === 25 ? "Earn 25 official MVPs." : "Earn 30 official MVPs."
   ),
   ...createMilestoneObjectives(
     "TOTW", "totw", [1, 5, 10, 15, 20, 25, 30],
     (t) => t === 1 ? "Call-Up" : t === 5 ? "Recognized" : t === 10 ? "Standout" : t === 15 ? "Elite" : t === 20 ? "Top Class" : t === 25 ? "World Class" : "Hall of Fame",
-    (t) => t === 1 ? "Entra en el Equipo de la Semana." : t === 5 ? "Entra 5 veces en el Equipo de la Semana." : t === 10 ? "Entra 10 veces en el Equipo de la Semana." : t === 15 ? "Entra 15 veces en el Equipo de la Semana." : t === 20 ? "Entra 20 veces en el Equipo de la Semana." : t === 25 ? "Entra 25 veces en el Equipo de la Semana." : "Entra 30 veces en el Equipo de la Semana."
+    (t) => t === 1 ? "Make the Team of the Week." : t === 5 ? "Make the Team of the Week 5 times." : t === 10 ? "Make the Team of the Week 10 times." : t === 15 ? "Make the Team of the Week 15 times." : t === 20 ? "Make the Team of the Week 20 times." : t === 25 ? "Make the Team of the Week 25 times." : "Make the Team of the Week 30 times."
   ),
   // ── Defensive ───────────────────────────────────────────────────────────────
   ...createMilestoneObjectives(
     "CS", "cleanSheets", [1, 5, 10, 25, 50, 75, 100],
     (t) => t === 1 ? "Clean Sheet" : t === 5 ? "Safe Hands" : t === 10 ? "Solid" : t === 25 ? "Reliable" : t === 50 ? "Guardian" : t === 75 ? "Fortress" : "Fusion Keeper",
-    (t) => t === 1 ? "Consigue tu primer clean sheet oficial." : t === 5 ? "Consigue 5 clean sheets oficiales." : t === 10 ? "Consigue 10 clean sheets oficiales." : t === 25 ? "Consigue 25 clean sheets oficiales." : t === 50 ? "Consigue 50 clean sheets oficiales." : t === 75 ? "Consigue 75 clean sheets oficiales." : "Consigue 100 clean sheets oficiales."
+    (t) => t === 1 ? "Get your first official clean sheet." : t === 5 ? "Get 5 official clean sheets." : t === 10 ? "Get 10 official clean sheets." : t === 25 ? "Get 25 official clean sheets." : t === 50 ? "Get 50 official clean sheets." : t === 75 ? "Get 75 official clean sheets." : "Get 100 official clean sheets."
   ),
   // ── Technical ───────────────────────────────────────────────────────────────
   ...createMilestoneObjectives(
     "Kicks", "kicks", [100, 500, 1000, 2500, 5000, 7500, 10000],
     (t) => t === 100 ? "First Touch" : t === 500 ? "Involved" : t === 1000 ? "Busy Feet" : t === 2500 ? "Ball Magnet" : t === 5000 ? "Ever-Present" : t === 7500 ? "Everywhere" : "Omnipresent",
-    (t) => `Acumula ${t} kicks totales.`
+    (t) => `Accumulate ${t} total kicks.`
   ),
   // ── Sub-branches from Goals ──────────────────────────────────────────────────
   ...createMilestoneObjectives(
     "Braces", "braces", [1, 5, 10, 15, 20, 25, 30],
     (t) => t === 1 ? "First Brace" : `${t} Braces`,
-    (t) => t === 1 ? "Marca 2 goles en un mismo partido." : `Marca 2+ goles en ${t} partidos distintos.`
+    (t) => t === 1 ? "Score 2 goals in a single match." : `Score 2+ goals in ${t} different matches.`
   ),
   ...createMilestoneObjectives(
     "HatTricks", "hatTricks", [1, 5, 10, 15, 20, 25, 30],
     (t) => t === 1 ? "Hat-Trick" : `${t} Hat-Tricks`,
-    (t) => t === 1 ? "Marca 3 goles en un mismo partido." : `Marca 3+ goles en ${t} partidos distintos.`
+    (t) => t === 1 ? "Score 3 goals in a single match." : `Score 3+ goals in ${t} different matches.`
   ),
   ...createMilestoneObjectives(
     "Pokers", "pokers", [1, 5, 10, 15, 20, 25, 30],
     (t) => t === 1 ? "Poker" : `${t} Pokers`,
-    (t) => t === 1 ? "Marca 4 o más goles en un mismo partido." : `Marca 4+ goles en ${t} partidos distintos.`
+    (t) => t === 1 ? "Score 4 or more goals in a single match." : `Score 4+ goals in ${t} different matches.`
   ),
   // ── Sub-branch from Assists ──────────────────────────────────────────────────
   ...createMilestoneObjectives(
     "PreAssists", "preassists", [1, 5, 10, 25, 50, 100, 250],
     (t) => t === 1 ? "First Pre-Assist" : `${t} Pre-Assists`,
-    (t) => t === 1 ? "Reparte tu primera pre-asistencia oficial." : `Reparte ${t} pre-asistencias oficiales.`
+    (t) => t === 1 ? "Deliver your first official pre-assist." : `Deliver ${t} official pre-assists.`
   ),
   {
     key: "one-club-man",
     category: "Badges",
     label: "One Club Man",
-    description: "Juega 5 seasons diferentes con el mismo team.",
+    description: "Play 5 different seasons with the same team.",
     target: 5,
     stat: "sameTeamSeasonsMax",
   },
@@ -189,7 +189,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "goal-minutes-0-20",
     category: "Badges",
     label: "Full Timeline",
-    description: "Marca al menos un gol en cada minuto del partido entre el 0 y el 20.",
+    description: "Score at least one goal in every minute from 0 to 20.",
     target: 21,
     stat: "goalMinutesCovered",
   },
@@ -197,7 +197,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "nations",
     category: "Badges",
     label: "Nations",
-    description: "Participa al menos en una Nations Cup.",
+    description: "Participate in at least one Nations Cup.",
     target: 1,
     stat: "nationsParticipations",
   },
@@ -205,7 +205,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "all-stars",
     category: "Badges",
     label: "All Stars",
-    description: "Gana un All Stars, Future Stars o Rising Stars.",
+    description: "Win an All Stars, Future Stars, or Rising Stars.",
     target: 1,
     stat: "allStarTitles",
   },
@@ -213,7 +213,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "rookie-placeholder-3",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila III por definir.",
+    description: "Row III badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -221,7 +221,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-4a",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila IV por definir.",
+    description: "Row IV badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -229,7 +229,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-4b",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila IV por definir.",
+    description: "Row IV badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -237,7 +237,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-4c",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila IV por definir.",
+    description: "Row IV badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -245,7 +245,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-4d",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila IV por definir.",
+    description: "Row IV badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -253,7 +253,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-5a",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila V por definir.",
+    description: "Row V badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -261,7 +261,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-5b",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila V por definir.",
+    description: "Row V badge to be defined.",
     target: 1,
     stat: "rookiePlaceholder",
   },
@@ -269,7 +269,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-6a",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila VI por definir.",
+    description: "Row VI badge to be defined.",
     target: 1,
     stat: "championPlaceholder",
   },
@@ -277,7 +277,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "placeholder-7a",
     category: "Badges",
     label: "TBD",
-    description: "Insignia de la fila VII por definir.",
+    description: "Row VII badge to be defined.",
     target: 1,
     stat: "fusionPlaceholder",
   },
@@ -285,7 +285,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "versatile",
     category: "Badges",
     label: "Versatile",
-    description: "Juega al menos un partido en GK, CB, CM, LW o RW, y ST.",
+    description: "Play at least one match in GK, CB, CM, LW or RW, and ST.",
     target: 5,
     stat: "versatileCoverage",
   },
@@ -293,15 +293,15 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "double-double",
     category: "Badges",
     label: "Double Double",
-    description: "Llega en una misma season a 10 o mas goles y 10 o mas asistencias.",
+    description: "Reach 10+ goals and 10+ assists in the same season.",
     target: 1,
     stat: "doubleDoubleSeasons",
   },
   {
     key: "invincible",
     category: "Badges",
-    label: "Invictos",
-    description: "Termina una season sin derrotas y con mas de 5 partidos jugados.",
+    label: "Invincible",
+    description: "Finish a season unbeaten with more than 5 matches played.",
     target: 1,
     stat: "seasonInvictos",
   },
@@ -309,7 +309,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "captain",
     category: "Badges",
     label: "Captain",
-    description: "Ha sido capitan o subcapitan en algun equipo.",
+    description: "Serve as captain or vice-captain for any team.",
     target: 1,
     stat: "captaincies",
   },
@@ -317,7 +317,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "impact-sub",
     category: "Badges",
     label: "Impact Sub",
-    description: "Marca o asiste entrando como suplente.",
+    description: "Score or assist after coming on as a substitute.",
     target: 1,
     stat: "impactSubMatches",
   },
@@ -325,7 +325,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "new-colours",
     category: "Badges",
     label: "New Colours",
-    description: "Juega en 2 teams distintos con mas de 4 partidos en cada uno.",
+    description: "Play for 2 different teams with 4+ matches each.",
     target: 2,
     stat: "teamsOverFourMatches",
   },
@@ -333,7 +333,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "full-shift",
     category: "Badges",
     label: "Full Shift",
-    description: "Juega un partido entero sin ser sustituido.",
+    description: "Play a full match without being substituted.",
     target: 1,
     stat: "fullShiftMatches",
   },
@@ -341,7 +341,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "ups",
     category: "Badges",
     label: "Ups",
-    description: "Marca 1 owngoal.",
+    description: "Score 1 own goal.",
     target: 1,
     stat: "ownGoals",
   },
@@ -349,7 +349,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "double-threat",
     category: "Badges",
     label: "Double Threat",
-    description: "Marca y asiste en un mismo partido.",
+    description: "Score and assist in the same match.",
     target: 1,
     stat: "doubleThreatMatches",
   },
@@ -357,7 +357,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "no-mercy",
     category: "Badges",
     label: "No Mercy",
-    description: "Gana un partido por mercy con una diferencia de 7 goles o mas.",
+    description: "Win by mercy with a 7+ goal difference.",
     target: 1,
     stat: "mercyWins",
   },
@@ -365,7 +365,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "comeback",
     category: "Badges",
     label: "Comeback",
-    description: "Remonta un partido y terminalo ganandolo.",
+    description: "Come back to win a match.",
     target: 1,
     stat: "comebackWins",
   },
@@ -373,7 +373,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "league-winner",
     category: "Badges",
     label: "League Winner",
-    description: "Gana una league con tu team.",
+    description: "Win a league with your team.",
     target: 1,
     stat: "leagueTitles",
   },
@@ -381,7 +381,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "summer-winner",
     category: "Badges",
     label: "Summer Winner",
-    description: "Gana una summer cup con tu team.",
+    description: "Win a Summer Cup with your team.",
     target: 1,
     stat: "summerTitles",
   },
@@ -389,7 +389,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "globetrotter",
     category: "Badges",
     label: "Globetrotter",
-    description: "Juega en 10 teams distintos con mas de 4 partidos en cada uno.",
+    description: "Play for 10 different teams with 4+ matches each.",
     target: 10,
     stat: "teamsOverFourMatches",
   },
@@ -397,7 +397,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "opening-strike",
     category: "Badges",
     label: "Opening Strike",
-    description: "Marca un gol en el minuto 0.",
+    description: "Score a goal at minute 0.",
     target: 1,
     stat: "openingStrikeGoals",
   },
@@ -405,7 +405,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "silent-genius",
     category: "Badges",
     label: "Silent Genius",
-    description: "Da 3 preasistencias en un mismo partido.",
+    description: "Make 3 pre-assists in a single match.",
     target: 1,
     stat: "silentGeniusMatches",
   },
@@ -413,7 +413,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "late-hero",
     category: "Badges",
     label: "Late Hero",
-    description: "Marca el gol de la victoria en el minuto 19 o 20.",
+    description: "Score the winning goal in minute 19 or 20.",
     target: 1,
     stat: "lateHeroWins",
   },
@@ -421,7 +421,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "cup-winner",
     category: "Badges",
     label: "Cup Winner",
-    description: "Gana una cup con tu team.",
+    description: "Win a cup with your team.",
     target: 1,
     stat: "cupTitles",
   },
@@ -429,7 +429,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "supercup-winner",
     category: "Badges",
     label: "Supercup Winner",
-    description: "Gana una supercup con tu team.",
+    description: "Win a supercup with your team.",
     target: 1,
     stat: "supercupTitles",
   },
@@ -437,7 +437,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "perfect-start",
     category: "Badges",
     label: "Perfect Start",
-    description: "Marca en tus primeros 3 partidos de una season.",
+    description: "Score in your first 3 matches of a season.",
     target: 1,
     stat: "perfectStartSeasons",
   },
@@ -445,7 +445,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "treble",
     category: "Badges",
     label: "Treble",
-    description: "Gana league, cup y supercup en una misma season.",
+    description: "Win league, cup, and supercup in the same season.",
     target: 1,
     stat: "trebleSeasons",
   },
@@ -453,7 +453,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "nations-winner",
     category: "Badges",
     label: "Nations",
-    description: "Gana una Nations Cup con tu team.",
+    description: "Win a Nations Cup with your team.",
     target: 1,
     stat: "nationsTitles",
   },
@@ -461,7 +461,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "big-night",
     category: "Badges",
     label: "Big Night",
-    description: "Marca 3 o mas goles y da 3 o mas asistencias en el mismo partido.",
+    description: "Score 3+ goals and deliver 3+ assists in the same match.",
     target: 1,
     stat: "bigNightMatches",
   },
@@ -469,7 +469,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "league-dynasty",
     category: "Badges",
     label: "League Dynasty",
-    description: "Gana 5 leagues con tu team.",
+    description: "Win 5 leagues with your team.",
     target: 5,
     stat: "leagueTitles",
   },
@@ -477,7 +477,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "best-award",
     category: "Badges",
     label: "Best Winner",
-    description: "Gana un Best GK, Best Defender, Best Midfielder, Best Attacker o Best MVP.",
+    description: "Win a Best GK, Best Defender, Best Midfielder, Best Attacker, or Best MVP award.",
     target: 1,
     stat: "bestAwards",
   },
@@ -485,7 +485,7 @@ const objectiveDefinitions: ObjectiveDefinition[] = [
     key: "double-century",
     category: "Badges",
     label: "Dual Centurion",
-    description: "Logra mas de 100 goles y mas de 100 asistencias en tu carrera.",
+    description: "Reach 100+ goals and 100+ assists in your career.",
     target: 1,
     stat: "doubleCenturyCareer",
   },
@@ -1453,7 +1453,7 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
         return {
           ...o,
           label: "Poker Face",
-          description: "Marca 1 poker con 4 o mas goles en un partido.",
+          description: "Score a poker with 4+ goals in a single match.",
           current,
           completed,
         }
@@ -1462,7 +1462,7 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
       if (o.key === "comeback") {
         return {
           ...o,
-          description: "Remonta un partido y terminalo ganandolo.",
+          description: "Come back to win a match.",
           current,
           completed,
         }

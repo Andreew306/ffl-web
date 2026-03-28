@@ -139,7 +139,28 @@ async function inferPlayerIdFromDiscord(discordId: string) {
   return new mongoose.Types.ObjectId([...candidateIds][0])
 }
 
-export async function syncDiscordUser(discordId: string, discordAvatar?: string | null) {
+async function inferPlayerIdFromDisplayName(displayName: string) {
+  const trimmed = displayName.trim()
+  if (!trimmed) return null
+
+  const players = await PlayerModel.find({
+    player_name: { $regex: `^${escapeRegex(trimmed)}$`, $options: "i" },
+  })
+    .select("_id")
+    .lean<Array<{ _id: mongoose.Types.ObjectId }>>()
+
+  if (players.length !== 1) {
+    return null
+  }
+
+  return players[0]._id
+}
+
+export async function syncDiscordUser(
+  discordId: string,
+  discordAvatar?: string | null,
+  displayNameOverride?: string | null
+) {
   await dbConnect()
 
   const existingUser = await UserModel.findOne({ discordId })
@@ -150,12 +171,26 @@ export async function syncDiscordUser(discordId: string, discordAvatar?: string 
   const avatarChanged =
     Boolean(discordAvatar) && discordAvatar !== existingUser?.discordAvatar
 
-  if (existingUser && syncedRecently && !avatarChanged) {
+  const { roles, displayName } = await fetchDiscordRoles(discordId)
+  const resolvedDisplayName =
+    displayName?.trim() ||
+    displayNameOverride?.trim() ||
+    existingUser?.discordName?.trim() ||
+    null
+  const displayNameChanged = Boolean(resolvedDisplayName && resolvedDisplayName !== existingUser?.discordName)
+
+  if (existingUser && syncedRecently && !avatarChanged && !displayNameChanged) {
     return existingUser
   }
 
-  const { roles, displayName } = await fetchDiscordRoles(discordId)
-  const playerId = existingUser?.playerId ?? (await inferPlayerIdFromDiscord(discordId))
+  const shouldTryDisplayName = Boolean(resolvedDisplayName) && (displayNameChanged || !existingUser?.playerId)
+  const displayNamePlayerId = shouldTryDisplayName && resolvedDisplayName
+    ? await inferPlayerIdFromDisplayName(resolvedDisplayName)
+    : null
+  const playerId =
+    displayNamePlayerId ??
+    existingUser?.playerId ??
+    (await inferPlayerIdFromDiscord(discordId))
   const existingRoles = normalizeRoles(existingUser?.roles)
   const mergedRolesById = new Map(existingRoles.map((role) => [role.id, role]))
 
@@ -171,7 +206,7 @@ export async function syncDiscordUser(discordId: string, discordAvatar?: string 
       $set: {
         roles: mergedRoles,
         ...(discordAvatar ? { discordAvatar } : {}),
-        ...(displayName ? { discordName: displayName } : {}),
+        ...(resolvedDisplayName ? { discordName: resolvedDisplayName } : {}),
         ...(playerId ? { playerId } : {}),
         discordSyncedAt: now,
       },
@@ -254,6 +289,10 @@ export const authOptions: NextAuthOptions = {
 
       const discordProfile = profile as DiscordProfile | undefined
       const discordId = discordProfile?.id
+      const displayNameOverride =
+        discordProfile?.global_name?.trim() ||
+        discordProfile?.username?.trim() ||
+        null
 
       if (!discordId) {
         return false
@@ -261,7 +300,8 @@ export const authOptions: NextAuthOptions = {
 
       await syncDiscordUser(
         discordId,
-        user?.image ?? buildDiscordAvatarUrl(discordId, discordProfile?.avatar) ?? null
+        user?.image ?? buildDiscordAvatarUrl(discordId, discordProfile?.avatar) ?? null,
+        displayNameOverride
       )
       return true
     },

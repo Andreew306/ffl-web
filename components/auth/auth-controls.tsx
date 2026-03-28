@@ -58,7 +58,7 @@ export function AuthControls({ mobile = false }: AuthControlsProps) {
     >
       <Link href="/profile" className={mobile ? "w-full" : ""}>
         <UserCircle2 className="mr-2 h-4 w-4" />
-        Mi perfil
+        My profile
       </Link>
     </Button>
   )
@@ -68,11 +68,11 @@ export function AuthControls({ mobile = false }: AuthControlsProps) {
       onClick={() => signOut({ callbackUrl: "/" })}
       variant="ghost"
       className={mobile ? "w-full justify-start text-slate-300 hover:bg-white/10 hover:text-white" : "text-slate-300 hover:bg-white/10 hover:text-white"}
-    >
-      <LogOut className="mr-2 h-4 w-4" />
-      Salir
-    </Button>
-  )
+  >
+    <LogOut className="mr-2 h-4 w-4" />
+    Sign out
+  </Button>
+)
 
   if (mobile) {
     return (
@@ -126,7 +126,7 @@ export function AuthControls({ mobile = false }: AuthControlsProps) {
               )}
             </span>
             <div className="min-w-0">
-              <div className="truncate font-medium text-white">{session.user.name || "Usuario Discord"}</div>
+              <div className="truncate font-medium text-white">{session.user.name || "Discord user"}</div>
               <div className="truncate text-xs text-slate-400">{session.user.discordId}</div>
             </div>
           </div>
@@ -139,7 +139,7 @@ export function AuthControls({ mobile = false }: AuthControlsProps) {
             >
               <Link href="/profile" onClick={() => setIsOpen(false)}>
                 <UserCircle2 className="mr-2 h-4 w-4" />
-                Mi perfil
+                My profile
               </Link>
             </Button>
             <Button
@@ -148,7 +148,7 @@ export function AuthControls({ mobile = false }: AuthControlsProps) {
               className="h-11 flex-1 rounded-2xl text-slate-300 hover:bg-white/10 hover:text-white"
             >
               <LogOut className="mr-2 h-4 w-4" />
-              Salir
+              Sign out
             </Button>
           </div>
         </div>
