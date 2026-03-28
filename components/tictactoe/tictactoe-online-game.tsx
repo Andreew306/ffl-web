@@ -476,21 +476,7 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
                   className="w-full text-left"
                 >
                   <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-3 transition hover:border-cyan-300/40 hover:bg-slate-950/80">
-                    <div
-                      className={cn(
-                        "relative h-14 w-14 rounded-full border shadow-[0_10px_24px_rgba(2,6,23,0.45)]",
-                        option.kitImage ? "border-slate-900/90 bg-slate-900/80" : "border-white/10 bg-slate-900/80"
-                      )}
-                      style={
-                        option.kitImage
-                          ? {
-                              backgroundImage: `url(${option.kitImage})`,
-                              backgroundSize: "cover",
-                              backgroundPosition: "center",
-                            }
-                          : undefined
-                      }
-                    >
+                    <div className="relative h-14 w-14 rounded-full border border-white/10 bg-slate-900/80 shadow-[0_10px_24px_rgba(2,6,23,0.45)]">
                       {isImageUrl(option.avatar || "") ? (
                         <div className="absolute inset-0 flex items-center justify-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}

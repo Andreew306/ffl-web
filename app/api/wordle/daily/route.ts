@@ -7,11 +7,30 @@ function toMadridDateKey(value = new Date()) {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
   }).formatToParts(value)
 
   const year = parts.find((part) => part.type === "year")?.value ?? "0000"
   const month = parts.find((part) => part.type === "month")?.value ?? "00"
   const day = parts.find((part) => part.type === "day")?.value ?? "00"
+  const hour = Number(parts.find((part) => part.type === "hour")?.value ?? "0")
+
+  if (hour < 1) {
+    const previous = new Date(value.getTime() - 24 * 60 * 60 * 1000)
+    const prevParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Madrid",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(previous)
+
+    const prevYear = prevParts.find((part) => part.type === "year")?.value ?? "0000"
+    const prevMonth = prevParts.find((part) => part.type === "month")?.value ?? "00"
+    const prevDay = prevParts.find((part) => part.type === "day")?.value ?? "00"
+    return `${prevYear}-${prevMonth}-${prevDay}`
+  }
+
   return `${year}-${month}-${day}`
 }
 
