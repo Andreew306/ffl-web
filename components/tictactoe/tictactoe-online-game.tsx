@@ -200,7 +200,6 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
     : `${Math.floor(timeLeft / 60).toString().padStart(2, "0")}:${(timeLeft % 60).toString().padStart(2, "0")}`
   const isWinner = state?.status === "finished" && state?.result === "win" && state?.winnerUserId === state?.yourUserId
   const isLoser = state?.status === "finished" && state?.result === "win" && state?.winnerUserId !== state?.yourUserId
-  const isDraw = state?.status === "finished" && state?.result === "draw"
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
