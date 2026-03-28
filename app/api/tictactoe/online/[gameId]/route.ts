@@ -69,7 +69,12 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     .map((column: TicTacToeColumn) => new mongoose.Types.ObjectId(column.teamId?.toString?.()))
 
   const { teamCountryPlayers } = await getTicTacToeTeamCountryPlayers(teamIds)
-  const usedPlayers = new Set(game.picks.map((pick) => pick.playerObjectId?.toString()).filter(Boolean) as string[])
+  type TicTacToePick = { playerObjectId?: unknown }
+  const usedPlayers = new Set(
+    game.picks
+      .map((pick: TicTacToePick) => pick.playerObjectId?.toString?.())
+      .filter(Boolean) as string[]
+  )
 
   const cells = game.rows.flatMap((row, rowIndex) => {
     const country = row.country || ""
