@@ -71,6 +71,8 @@ export type UserProfileData = {
     discordId: string
     roles: IUserRole[]
     playerId: string | null
+    discordAvatar?: string | null
+    discordName?: string | null
   }
   player: {
     id: string
@@ -518,8 +520,14 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
   if (!db) throw new Error("Database connection not initialized")
 
   const user = await UserModel.findOne({ discordId })
-    .select("discordId playerId roles")
-    .lean<{ discordId: string; playerId?: mongoose.Types.ObjectId | null; roles?: Array<IUserRole | string> } | null>()
+    .select("discordId playerId roles discordAvatar discordName")
+    .lean<{
+      discordId: string
+      playerId?: mongoose.Types.ObjectId | null
+      roles?: Array<IUserRole | string>
+      discordAvatar?: string | null
+      discordName?: string | null
+    } | null>()
 
   if (!user) return null
 
@@ -528,7 +536,13 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
 
   if (!playerObjectId) {
     return {
-      user: { discordId: user.discordId, roles: normalizedUserRoles, playerId: null },
+      user: {
+        discordId: user.discordId,
+        roles: normalizedUserRoles,
+        playerId: null,
+        discordAvatar: user.discordAvatar ?? null,
+        discordName: user.discordName ?? null,
+      },
       player: null,
       stats: ZERO_STATS,
       objectives: objectiveDefinitions.map((o) => ({ ...o, current: 0, completed: false })),
@@ -1440,7 +1454,13 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
   }
 
   return {
-    user: { discordId: user.discordId, roles: normalizedUserRoles, playerId: playerObjectId },
+    user: {
+      discordId: user.discordId,
+      roles: normalizedUserRoles,
+      playerId: playerObjectId,
+      discordAvatar: user.discordAvatar ?? null,
+      discordName: user.discordName ?? null,
+    },
     player: player
       ? { id: player._id.toString(), playerId: player.player_id, name: player.player_name, country: player.country, avatar: player.avatar }
       : null,
@@ -1475,4 +1495,27 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
       }
     }),
   }
+}
+
+export async function getUserProfileDataByPlayerId(playerId: string): Promise<UserProfileData | null> {
+  await dbConnect()
+
+  let playerObjectId: mongoose.Types.ObjectId | null = null
+  if (mongoose.Types.ObjectId.isValid(playerId)) {
+    playerObjectId = new mongoose.Types.ObjectId(playerId)
+  } else if (Number.isFinite(Number(playerId))) {
+    const player = await PlayerModel.findOne({ player_id: Number(playerId) })
+      .select("_id")
+      .lean<{ _id: mongoose.Types.ObjectId } | null>()
+    playerObjectId = player?._id ?? null
+  }
+
+  if (!playerObjectId) return null
+
+  const user = await UserModel.findOne({ playerId: playerObjectId })
+    .select("discordId")
+    .lean<{ discordId: string } | null>()
+
+  if (!user?.discordId) return null
+  return getUserProfileData(user.discordId)
 }

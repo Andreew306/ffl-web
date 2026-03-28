@@ -3,6 +3,7 @@ import Player from "@/lib/models/Player"
 import PlayerCompetition from "@/lib/models/PlayerCompetition"
 import TeamCompetition from "@/lib/models/TeamCompetition"
 import Competition from "@/lib/models/Competition"
+import UserModel from "@/lib/models/User"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
@@ -271,6 +272,14 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   ])
 
   const playerIds = players.map((player) => toObjectIdString(player._id)).filter(Boolean)
+  const linkedUsers = playerIds.length
+    ? await UserModel.find({ playerId: { $in: playerIds } })
+        .select("playerId")
+        .lean<{ playerId?: { toString?: () => string } }[]>()
+    : []
+  const linkedPlayerIds = new Set(
+    linkedUsers.map((user) => toObjectIdString(user.playerId)).filter(Boolean)
+  )
   const playerCompetitionRows = playerIds.length
     ? await PlayerCompetition.find({ player_id: { $in: playerIds } })
         .select("player_id team_competition_id")
@@ -555,6 +564,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
                   playerId ? playerFallbackKit.get(playerId)?.textColor || "" : ""
                 const avatar = player.avatar || ""
                 const avatarIsImage = isImageUrl(avatar)
+                const hasLinkedUser = playerId ? linkedPlayerIds.has(playerId) : false
                 return (
                   <Card
                     key={player._id?.toString() ?? player.player_id}
@@ -644,9 +654,23 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
                       </div>
                     </div>
 
-                    <Link href={`/players/${player.player_id}`}>
-                      <Button className="w-full bg-teal-600 hover:bg-teal-500 text-white">View profile</Button>
-                    </Link>
+                    <div className="flex flex-col gap-2">
+                      <Link href={`/players/${player.player_id}`}>
+                        <Button className="w-full bg-teal-600 hover:bg-teal-500 text-white">
+                          View profile
+                        </Button>
+                      </Link>
+                      {hasLinkedUser ? (
+                        <Link href={`/profile/${playerId}`}>
+                          <Button
+                            variant="outline"
+                            className="w-full border-teal-500/40 text-teal-200 hover:bg-teal-500/10"
+                          >
+                            View public profile
+                          </Button>
+                        </Link>
+                      ) : null}
+                    </div>
                   </CardContent>
                   </Card>
                 )

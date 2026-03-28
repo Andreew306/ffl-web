@@ -71,7 +71,7 @@ export async function POST(request: Request) {
 
   const firstTurn = Math.random() > 0.5 ? challenge.fromUserId : challenge.toUserId
   const turnSeconds = 30
-  const now = new Date()
+  const turnStart = new Date()
 
   const game = await TicTacToeGameModel.create({
     mode: "online",
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     opponentUserId: challenge.toUserId,
     currentTurnUserId: firstTurn,
     turnSeconds,
-    turnExpiresAt: new Date(now.getTime() + turnSeconds * 1000),
+    turnExpiresAt: new Date(turnStart.getTime() + turnSeconds * 1000),
     turnNumber: 1,
     rows: board.rows.map((country) => ({ type: "country", country })),
     columns: board.columns.map((column) => ({

@@ -7,8 +7,11 @@ import TeamModel from "@/lib/models/Team"
 import CompetitionModel from "@/lib/models/Competition"
 import MatchModel from "@/lib/models/Match"
 import GoalModel from "@/lib/models/Goal"
+import UserModel from "@/lib/models/User"
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import PlayerStatsTabs from "./PlayerStatsTabs"
+import { Button } from "@/components/ui/button"
 import {
   getFlagBackgroundStyle,
   getKitTextColor,
@@ -284,6 +287,11 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
     logTiming(`${timingLabel}:total`, totalStart)
     return notFound()
   }
+
+  const linkedUser = await UserModel.findOne({ playerId: player._id })
+    .select("_id")
+    .lean()
+  const hasLinkedUser = Boolean(linkedUser)
 
   const readMatchStat = (row: PlayerMatchStatRow, snakeKey: string, camelKey?: string) => {
     if (row?.[snakeKey] !== undefined) {
@@ -1252,6 +1260,13 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
                 <span className="uppercase tracking-[0.2em] text-xs text-slate-400">Country</span>
                 <span>{player.country || "N/A"}</span>
               </div>
+              {hasLinkedUser ? (
+                <div>
+                  <Button asChild className="mt-2 bg-teal-500 text-slate-950 hover:bg-teal-400">
+                    <Link href={`/profile/${toObjectIdString(player._id)}`}>View public profile</Link>
+                  </Button>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>

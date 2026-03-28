@@ -1,12 +1,7 @@
 import Image from "next/image"
-import Link from "next/link"
-import { redirect } from "next/navigation"
-import { getServerSession } from "next-auth"
-import { Shield, UserCircle2 } from "lucide-react"
-import { authOptions, syncDiscordUser } from "@/lib/auth"
-import { getUserProfileData } from "@/lib/services/profile.service"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { notFound } from "next/navigation"
+import { Shield } from "lucide-react"
+import { getUserProfileDataByPlayerId } from "@/lib/services/profile.service"
 import { ObjectivesMap } from "@/components/profile/objectives-map"
 import { getFlagBackgroundStyle, isImageUrl, shouldOverlayFlag } from "@/lib/utils"
 
@@ -66,27 +61,12 @@ function getRoleSeasonNumber(roleName: string) {
   return -1
 }
 
-export default async function ProfilePage() {
-  const session = await getServerSession(authOptions)
+export default async function PublicProfilePage({ params }: { params: Promise<{ playerId: string }> }) {
+  const { playerId } = await params
+  const profile = await getUserProfileDataByPlayerId(playerId)
 
-  if (!session?.user?.discordId) {
-    redirect("/api/auth/signin/discord?callbackUrl=/profile")
-  }
-
-  await syncDiscordUser(session.user.discordId)
-  const profile = await getUserProfileData(session.user.discordId)
-
-  if (!profile) {
-    return (
-      <div className="min-h-screen bg-slate-950 px-4 py-10 text-white">
-        <div className="mx-auto max-w-3xl rounded-3xl border border-white/10 bg-slate-900/70 p-8 text-center">
-          <h1 className="text-3xl font-semibold">Profile unavailable</h1>
-          <p className="mt-4 text-slate-300">
-            The account signed in, but we could not initialize the internal user.
-          </p>
-        </div>
-      </div>
-    )
+  if (!profile || !profile.player) {
+    return notFound()
   }
 
   const visibleRoles = profile.user.roles
@@ -98,14 +78,11 @@ export default async function ProfilePage() {
       if (seasonDiff !== 0) return seasonDiff
       return a.name.normalize("NFKC").localeCompare(b.name.normalize("NFKC"), "es", { sensitivity: "base" })
     })
-  const avatar =
-    session.user.image?.trim() ||
-    profile.user.discordAvatar?.trim() ||
-    profile.player?.avatar?.trim() ||
-    ""
+
+  const avatar = profile.user.discordAvatar?.trim() || profile.player.avatar?.trim() || ""
   const avatarIsImage = isImageUrl(avatar)
-  const countryStyle = profile.player?.country ? getFlagBackgroundStyle(profile.player.country) : null
-  const countryOverlay = profile.player?.country && shouldOverlayFlag(profile.player.country)
+  const countryStyle = profile.player.country ? getFlagBackgroundStyle(profile.player.country) : null
+  const countryOverlay = profile.player.country && shouldOverlayFlag(profile.player.country)
     ? getTwemojiUrl(profile.player.country)
     : ""
 
@@ -122,7 +99,7 @@ export default async function ProfilePage() {
                       avatarIsImage ? (
                         <Image
                           src={avatar}
-                          alt={profile.player?.name || session.user.name || "Avatar"}
+                          alt={profile.player.name}
                           fill
                           sizes="160px"
                           className="object-cover"
@@ -131,15 +108,10 @@ export default async function ProfilePage() {
                         <span>{avatar}</span>
                       )
                     ) : (
-                      <span>{(profile.player?.name || session.user.name || "P").charAt(0).toUpperCase()}</span>
+                      <span>{profile.player.name.charAt(0).toUpperCase()}</span>
                     )}
                   </div>
                 </div>
-                {profile.player ? (
-                  <Button asChild className="mt-5 bg-teal-500 text-slate-950 hover:bg-teal-400">
-                    <Link href={`/players/${profile.player.playerId}`}>View stats profile</Link>
-                  </Button>
-                ) : null}
               </div>
 
               <div className="min-w-0">
@@ -148,13 +120,13 @@ export default async function ProfilePage() {
                   Player
                 </div>
                 <h1 className="mt-5 text-4xl font-semibold tracking-tight text-white sm:text-5xl">
-                  {profile.player?.name || "Discord account linked"}
+                  {profile.player.name}
                 </h1>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-slate-200">
                     {countryStyle ? (
                       <span
-                        aria-label={profile.player?.country}
+                        aria-label={profile.player.country}
                         className="h-7 w-7 rounded-full border border-white/10"
                         style={{
                           ...countryStyle,
@@ -176,16 +148,12 @@ export default async function ProfilePage() {
                       />
                     ) : null}
                     <span className="uppercase tracking-[0.35em] text-slate-400">Country</span>
-                    <span className="font-semibold text-white">{profile.player?.country || "-"}</span>
+                    <span className="font-semibold text-white">{profile.player.country || "-"}</span>
                   </div>
                   <div className="inline-flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-slate-200">
                     <span className="uppercase tracking-[0.35em] text-slate-400">Player ID</span>
-                    <span className="font-semibold text-white">{profile.player?.playerId || "-"}</span>
+                    <span className="font-semibold text-white">{profile.player.playerId}</span>
                   </div>
-                </div>
-                <div className="mt-4 inline-flex items-center gap-3 rounded-full border border-white/10 bg-slate-950/50 px-4 py-3 text-sm text-slate-200">
-                  <span className="uppercase tracking-[0.35em] text-slate-400">Discord ID</span>
-                  <span className="font-semibold text-white">{profile.user.discordId}</span>
                 </div>
               </div>
             </div>
@@ -202,33 +170,18 @@ export default async function ProfilePage() {
                     {role.name}
                   </div>
                 )) : (
-                  <span className="text-slate-400">No awards yet</span>
+                  <div className="rounded-2xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm text-slate-400">
+                    No awards visible
+                  </div>
                 )}
               </div>
             </div>
           </div>
         </section>
 
-        {profile.player ? <ObjectivesMap objectives={profile.objectives} /> : null}
-
-        {!profile.player ? (
-          <Card className="mt-8 border-amber-400/20 bg-amber-500/10 text-white">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <UserCircle2 className="h-6 w-6 text-amber-300" />
-                No player linked
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-slate-200">
-              <p>
-                Discord login works, but this account is not linked to a player in the database yet. The system tries to auto-link using the Elo `discordId` when the match is unique.
-              </p>
-              <p>
-                If your player does not appear, you will need to manually attach this user&apos;s `playerId` in the `users` collection.
-              </p>
-            </CardContent>
-          </Card>
-        ) : null}
+        <div className="mt-10">
+          <ObjectivesMap objectives={profile.objectives} />
+        </div>
       </div>
     </div>
   )
