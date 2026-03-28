@@ -314,7 +314,10 @@ export function WordleHome({ daily, leaderboard }: Props) {
         now.toLocaleString("en-US", { timeZone: "Europe/Madrid" })
       )
       const next = new Date(madridNow)
-      next.setHours(24, 0, 0, 0)
+      next.setHours(1, 0, 0, 0)
+      if (madridNow.getTime() >= next.getTime()) {
+        next.setDate(next.getDate() + 1)
+      }
       const diff = Math.max(next.getTime() - madridNow.getTime(), 0)
       const hours = Math.floor(diff / 3600000)
       const minutes = Math.floor((diff % 3600000) / 60000)
