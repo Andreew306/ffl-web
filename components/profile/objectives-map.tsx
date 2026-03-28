@@ -589,7 +589,7 @@ export function ObjectivesMap({ objectives }: ObjectivesMapProps) {
   const pct = Math.round((completedCount / Math.max(totalCount, 1)) * 100)
 
   return (
-    <section className="mt-8 rounded-[32px] border border-white/10 bg-slate-900/70 p-6">
+    <section className="mt-8 overflow-visible rounded-[32px] border border-white/10 bg-slate-900/70 p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="text-xs uppercase tracking-[0.35em] text-slate-500">Objectives Board</div>
@@ -609,8 +609,8 @@ export function ObjectivesMap({ objectives }: ObjectivesMapProps) {
         </div>
       </div>
 
-      <div className="relative mt-6 overflow-visible rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-4 md:p-5">
-        <div className="grid grid-cols-[96px_repeat(14,minmax(0,1fr))] gap-2">
+      <div className="relative mt-6 overflow-visible rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_top,rgba(15,23,42,0.96),rgba(2,6,23,0.98))] p-4 pb-12 md:p-5 md:pb-14">
+        <div className="grid overflow-visible grid-cols-[96px_repeat(14,minmax(0,1fr))] gap-2">
           {rows.map((row) => (
             <div key={row.label} className="contents">
               <div className="flex min-h-[68px] flex-col justify-center rounded-[16px] border border-white/8 bg-slate-950/45 px-3">

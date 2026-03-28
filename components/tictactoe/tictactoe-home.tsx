@@ -383,10 +383,10 @@ export function TicTacToeHome({ boards, searchablePlayers, topWins, mostGames, r
         setIncomingChallenges(data.incoming ?? [])
         setOutgoingChallenges(data.outgoing ?? [])
         setOnlineError("")
-      } catch (error) {
-        if (!mounted) return
-        setOnlineError("Unable to load online players.")
-      }
+    } catch {
+      if (!mounted) return
+      setOnlineError("Unable to load online players.")
+    }
     }
 
     refreshOnline()

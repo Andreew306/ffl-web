@@ -222,7 +222,7 @@ export default async function ProfilePage() {
                 Discord login works, but this account is not linked to a player in the database yet. The system tries to auto-link using the Elo `discordId` when the match is unique.
               </p>
               <p>
-                If your player does not appear, you will need to manually attach this user's `playerId` in the `users` collection.
+                If your player does not appear, you will need to manually attach this user&apos;s `playerId` in the `users` collection.
               </p>
             </CardContent>
           </Card>
