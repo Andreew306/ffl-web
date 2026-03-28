@@ -48,7 +48,7 @@ async function fetchDiscordRoles(discordId: string) {
   const botToken = process.env.DISCORD_BOT_TOKEN
 
   if (!guildId || !botToken) {
-    return []
+    return { roles: [], displayName: null }
   }
 
   const headers = {
