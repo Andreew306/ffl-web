@@ -122,7 +122,6 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
   const [error, setError] = useState("")
   const [selectedCell, setSelectedCell] = useState<OnlineCell | null>(null)
   const [search, setSearch] = useState("")
-  const [guessError, setGuessError] = useState("")
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
 
   const fetchState = async (silent = false) => {
@@ -180,7 +179,12 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
     return map
   }, [state?.picks])
 
-  const trimmedSearch = search.trim()
+  const filteredOptions = useMemo(() => {
+    if (!selectedCell) return []
+    const query = search.trim().toLowerCase()
+    if (!query) return []
+    return selectedCell.options.filter((option) => option.playerName.toLowerCase().includes(query))
+  }, [selectedCell, search])
 
   const canPlay = state?.status === "active" && state.isYourTurn
   const turnLabel = state?.status === "finished"
@@ -296,11 +300,14 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
                               if (!canPlay || pick) return
                               setSelectedCell(cell)
                               setSearch("")
-                              setGuessError("")
                             }}
                             className={cn(
                               "group min-h-[112px] rounded-[22px] border bg-emerald-500/10 p-3 text-left transition hover:border-cyan-300/25 hover:bg-emerald-500/15",
-                              pick ? "border-emerald-300/45 bg-emerald-400/20 shadow-[0_0_0_1px_rgba(110,231,183,0.25),0_0_28px_rgba(52,211,153,0.16)]" : "border-white/10"
+                              pick
+                                ? pick.filledByUserId === state?.yourUserId
+                                  ? "border-cyan-300/45 bg-cyan-400/20 shadow-[0_0_0_1px_rgba(34,211,238,0.25),0_0_28px_rgba(34,211,238,0.16)]"
+                                  : "border-amber-300/45 bg-amber-400/20 shadow-[0_0_0_1px_rgba(251,191,36,0.25),0_0_28px_rgba(251,191,36,0.16)]"
+                                : "border-white/10"
                             )}
                             disabled={!canPlay || Boolean(pick)}
                           >
@@ -331,7 +338,7 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-xs uppercase tracking-[0.34em] text-slate-500">Select player</div>
-                <div className="mt-2 text-2xl font-semibold text-white">Enter your guess</div>
+                <div className="mt-2 text-2xl font-semibold text-white">Search any player</div>
               </div>
               <button
                 type="button"
@@ -347,63 +354,73 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
                 value={search}
                 onChange={(event) => {
                   setSearch(event.target.value)
-                  setGuessError("")
                 }}
-                placeholder="Type the player name"
+                placeholder="Search player"
                 className="w-full rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/60 focus:ring-2 focus:ring-cyan-400/20"
               />
             </div>
 
-            <div className="mt-5">
-              {guessError ? (
-                <div className="rounded-2xl border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
-                  {guessError}
+            <div className="mt-5 max-h-[320px] space-y-3 overflow-y-auto pr-2">
+              {!search.trim() ? (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/50 px-4 py-6 text-center text-sm text-slate-400">
+                  Start typing to search players.
                 </div>
-              ) : (
-                <div className="rounded-2xl border border-white/10 bg-slate-950/60 px-4 py-3 text-sm text-slate-400">
-                  Type the exact player name and submit your guess.
+              ) : filteredOptions.length ? filteredOptions.map((option) => (
+                <button
+                  key={option.playerObjectId}
+                  type="button"
+                  onClick={async () => {
+                    if (!selectedCell) return
+                    await fetch(`/api/tictactoe/online/${game.gameId}/pick`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        row: selectedCell.row,
+                        col: selectedCell.col,
+                        playerObjectId: option.playerObjectId,
+                      }),
+                    })
+                    setSelectedCell(null)
+                    setSearch("")
+                    void fetchState(true)
+                  }}
+                  className="w-full text-left"
+                >
+                  <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/60 px-3 py-3 transition hover:border-cyan-300/40 hover:bg-slate-950/80">
+                    <div
+                      className={cn(
+                        "relative h-14 w-14 rounded-full border shadow-[0_10px_24px_rgba(2,6,23,0.45)]",
+                        option.kitImage ? "border-slate-900/90 bg-slate-900/80" : "border-white/10 bg-slate-900/80"
+                      )}
+                      style={
+                        option.kitImage
+                          ? {
+                              backgroundImage: `url(${option.kitImage})`,
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }
+                          : undefined
+                      }
+                    >
+                      {isImageUrl(option.avatar || "") ? (
+                        <div className="absolute inset-0 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={option.avatar} alt={option.playerName} className="h-8 w-8 rounded-full object-cover" />
+                        </div>
+                      ) : option.avatar ? (
+                        <div className="absolute inset-0 flex items-center justify-center text-lg">{option.avatar}</div>
+                      ) : null}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold text-white">{option.playerName}</div>
+                    </div>
+                  </div>
+                </button>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-slate-950/50 px-4 py-6 text-center text-sm text-slate-400">
+                  No players found for this cell.
                 </div>
               )}
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <button
-                type="button"
-                onClick={async () => {
-                  if (!selectedCell) return
-                  if (!trimmedSearch) {
-                    setGuessError("Enter a player name to submit.")
-                    return
-                  }
-                  const matches = selectedCell.options.filter(
-                    (option) => option.playerName.trim().toLowerCase() === trimmedSearch.toLowerCase()
-                  )
-                  if (matches.length === 0) {
-                    setGuessError("No exact match for that name.")
-                    return
-                  }
-                  if (matches.length > 1) {
-                    setGuessError("Multiple players share that name. Be more specific.")
-                    return
-                  }
-                  await fetch(`/api/tictactoe/online/${game.gameId}/pick`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      row: selectedCell.row,
-                      col: selectedCell.col,
-                      playerObjectId: matches[0].playerObjectId,
-                    }),
-                  })
-                  setSelectedCell(null)
-                  setSearch("")
-                  setGuessError("")
-                  void fetchState(true)
-                }}
-                className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.3em] text-cyan-100 hover:bg-cyan-400/20"
-              >
-                Submit guess
-              </button>
             </div>
           </div>
         </div>
