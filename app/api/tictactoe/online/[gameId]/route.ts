@@ -77,9 +77,9 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
   )
 
   type TicTacToeRow = { country?: string | null }
-  const cells = game.rows.flatMap((row: TicTacToeRow, rowIndex) => {
+  const cells = game.rows.flatMap((row: TicTacToeRow, rowIndex: number) => {
     const country = row.country || ""
-    return game.columns.map((column: TicTacToeColumn, colIndex) => {
+    return game.columns.map((column: TicTacToeColumn, colIndex: number) => {
       const teamId = column.teamId?.toString() ?? ""
       const key = `${country}::${teamId}`
       const rawOptions = teamCountryPlayers.get(key) ?? []
