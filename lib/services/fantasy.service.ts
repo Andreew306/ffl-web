@@ -643,8 +643,15 @@ async function getCompetitionPlayersByGroup(
     .select("_id")
     .lean<Array<{ _id: mongoose.Types.ObjectId }>>()
 
+  const emptyGroups = {
+    gk: [] as Array<{ _id: mongoose.Types.ObjectId; player_id: number; positions: string[] }>,
+    def: [] as Array<{ _id: mongoose.Types.ObjectId; player_id: number; positions: string[] }>,
+    mid: [] as Array<{ _id: mongoose.Types.ObjectId; player_id: number; positions: string[] }>,
+    att: [] as Array<{ _id: mongoose.Types.ObjectId; player_id: number; positions: string[] }>,
+  }
+
   if (!teamCompetitions.length) {
-    return []
+    return emptyGroups
   }
 
   const groupedPlayerCompetitions = await PlayerCompetitionModel.aggregate<{
