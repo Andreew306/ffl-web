@@ -94,7 +94,17 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     })
   })
 
-  const picks = game.picks.map((pick) => {
+  type TicTacToePickDetails = {
+    row: number
+    col: number
+    filledByUserId?: unknown
+    playerObjectId?: unknown
+    playerId?: number
+    playerName?: string
+    country?: string
+    avatar?: string
+  }
+  const picks = game.picks.map((pick: TicTacToePickDetails) => {
     const row = game.rows[pick.row]
     const column = game.columns[pick.col]
     const country = row?.country || pick.country || ""
