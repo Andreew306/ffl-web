@@ -200,7 +200,7 @@ export default async function ProfilePage() {
                     {role.name}
                   </div>
                 )) : (
-                  <span className="text-slate-400">Sin awards visibles</span>
+                  <span className="text-slate-400">No awards yet</span>
                 )}
               </div>
             </div>

@@ -11,10 +11,10 @@ const GRID_COLS = 14
 
 const DIFFICULTY_LABELS = [
   "I - Rookie",
-  "II - Por definir",
-  "III - Por definir",
-  "IV - Por definir",
-  "V - Por definir",
+  "II - TBD",
+  "III - TBD",
+  "IV - TBD",
+  "V - TBD",
   "VI - Champion",
   "VII - Fusion",
 ]
@@ -548,7 +548,6 @@ function ObjectiveBadge({ objective }: { objective: ProfileObjective }) {
         "group relative h-[92px] rounded-[16px] border p-1.5 transition-all duration-300",
         done ? `${style.accent} bg-slate-950/85 ${style.glow}` : "border-white/8 bg-slate-950/35 opacity-60",
       ].join(" ")}
-      title={`${objective.label} - ${objective.description}`}
     >
       <div className={`absolute inset-0 rounded-[14px] bg-gradient-to-b ${style.frame} ${done ? "opacity-95" : "opacity-14"} transition-opacity`} />
       <div className="absolute inset-[2px] rounded-[12px] border border-white/10 bg-[radial-gradient(circle_at_50%_24%,rgba(255,255,255,0.18),rgba(2,6,23,0.96))]" />
@@ -564,6 +563,14 @@ function ObjectiveBadge({ objective }: { objective: ProfileObjective }) {
           <div className={`line-clamp-2 text-[8px] font-semibold leading-[1.02] ${done ? "text-white" : "text-slate-300"}`}>
             {objective.label}
           </div>
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute left-1/2 top-full z-20 mt-3 w-56 -translate-x-1/2 opacity-0 transition-all duration-200 group-hover:translate-y-1 group-hover:opacity-100">
+        <div className="rounded-2xl border border-white/10 bg-slate-950/90 px-4 py-3 text-[11px] text-slate-200 shadow-[0_12px_30px_rgba(4,12,26,0.55)] backdrop-blur">
+          <div className="text-xs font-semibold text-white">{objective.label}</div>
+          <div className="mt-1 text-[10px] uppercase tracking-[0.28em] text-slate-400">{objective.category}</div>
+          <div className="mt-2 text-[11px] leading-relaxed text-slate-300">{objective.description}</div>
         </div>
       </div>
     </div>
