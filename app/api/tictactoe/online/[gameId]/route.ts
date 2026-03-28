@@ -63,9 +63,10 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
 
   await game.save()
 
+  type TicTacToeColumn = { type?: string; teamId?: unknown; teamName?: string | null; teamImage?: string | null }
   const teamIds = game.columns
-    .filter((column) => column.type === "team" && column.teamId)
-    .map((column) => new mongoose.Types.ObjectId(column.teamId?.toString()))
+    .filter((column: TicTacToeColumn) => column.type === "team" && column.teamId)
+    .map((column: TicTacToeColumn) => new mongoose.Types.ObjectId(column.teamId?.toString?.()))
 
   const { teamCountryPlayers } = await getTicTacToeTeamCountryPlayers(teamIds)
   const usedPlayers = new Set(game.picks.map((pick) => pick.playerObjectId?.toString()).filter(Boolean) as string[])
@@ -119,7 +120,7 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
     status: game.status,
     difficulty: game.difficulty ?? null,
     rows: game.rows.map((row) => row.country || ""),
-    columns: game.columns.map((column) => ({
+    columns: game.columns.map((column: TicTacToeColumn) => ({
       id: column.teamId?.toString() ?? "",
       name: column.teamName ?? "Unknown team",
       image: column.teamImage ?? undefined,
