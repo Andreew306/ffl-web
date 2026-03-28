@@ -58,6 +58,17 @@ export async function POST(request: Request, context: { params: Promise<{ gameId
     return NextResponse.json({ error: "Match not found." }, { status: 404 })
   }
 
+  const now = new Date()
+  const MAX_MATCH_MS = 10 * 60 * 1000
+  if (game.status === "active" && game.createdAt && now.getTime() - game.createdAt.getTime() >= MAX_MATCH_MS) {
+    game.status = "finished"
+    game.result = "draw"
+    game.currentTurnUserId = null
+    game.finishedAt = now
+    await game.save()
+    return NextResponse.json({ error: "Match expired." }, { status: 400 })
+  }
+
   if (game.status !== "active") {
     return NextResponse.json({ error: "Match is not active." }, { status: 400 })
   }

@@ -51,6 +51,13 @@ export async function GET(_request: Request, context: { params: Promise<{ gameId
   }
 
   const now = new Date()
+  const MAX_MATCH_MS = 10 * 60 * 1000
+  if (game.status === "active" && game.createdAt && now.getTime() - game.createdAt.getTime() >= MAX_MATCH_MS) {
+    game.status = "finished"
+    game.result = "draw"
+    game.currentTurnUserId = null
+    game.finishedAt = now
+  }
   if (game.status === "active" && game.turnExpiresAt && game.turnExpiresAt.getTime() <= now.getTime()) {
     const nextTurn = String(game.currentTurnUserId) === String(game.createdByUserId)
       ? game.opponentUserId
