@@ -37,9 +37,10 @@ function normalizeName(value: string) {
 export async function getWordlePlayerForDate(dateKey: string): Promise<DailyWordle> {
   await dbConnect()
 
-  const eligiblePlayers = await PlayerCompetitionModel.aggregate<
-    Array<{ _id: string; matchesPlayed: number }>
-  >([
+  const eligiblePlayers = await PlayerCompetitionModel.aggregate<{
+    _id: string
+    matchesPlayed: number
+  }>([
     {
       $group: {
         _id: "$player_id",
