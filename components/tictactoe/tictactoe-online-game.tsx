@@ -158,6 +158,10 @@ export function TicTacToeOnlineGame({ game }: TicTacToeOnlineGameProps) {
     }
 
     const getRemaining = () => {
+      if (!state.turnExpiresAt) {
+        setTimeLeft(null)
+        return
+      }
       const expiresAt = new Date(state.turnExpiresAt).getTime()
       const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
       setTimeLeft(remaining)
