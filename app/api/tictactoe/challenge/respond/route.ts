@@ -5,6 +5,7 @@ import dbConnect from "@/lib/db/mongoose"
 import UserModel from "@/lib/models/User"
 import TicTacToeChallengeModel from "@/lib/models/TicTacToeChallenge"
 import TicTacToeGameModel from "@/lib/models/TicTacToeGame"
+import { createTicTacToeBoard } from "@/lib/services/tictactoe.service"
 
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
@@ -59,11 +60,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Only the recipient can accept." }, { status: 403 })
   }
 
+  const difficulty = "all"
+  const board = await createTicTacToeBoard(difficulty)
+  if (!board) {
+    return NextResponse.json({ error: "Unable to generate a board for this match." }, { status: 500 })
+  }
+
   challenge.status = "accepted"
   await challenge.save()
 
-  const difficulty = "all"
   const firstTurn = Math.random() > 0.5 ? challenge.fromUserId : challenge.toUserId
+  const turnSeconds = 30
+  const now = new Date()
 
   const game = await TicTacToeGameModel.create({
     mode: "online",
@@ -72,10 +80,16 @@ export async function POST(request: Request) {
     createdByUserId: challenge.fromUserId,
     opponentUserId: challenge.toUserId,
     currentTurnUserId: firstTurn,
-    turnSeconds: 30,
+    turnSeconds,
+    turnExpiresAt: new Date(now.getTime() + turnSeconds * 1000),
     turnNumber: 1,
-    rows: [],
-    columns: [],
+    rows: board.rows.map((country) => ({ type: "country", country })),
+    columns: board.columns.map((column) => ({
+      type: "team",
+      teamId: column.id,
+      teamName: column.name,
+      teamImage: column.image ?? null,
+    })),
     picks: [],
   })
 

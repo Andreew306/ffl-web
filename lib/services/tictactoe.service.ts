@@ -195,6 +195,179 @@ function buildBoards(
   return boards
 }
 
+export async function createTicTacToeBoard(difficulty: TicTacToeDifficulty): Promise<TicTacToeBoard | null> {
+  await dbConnect()
+
+  const competitionCounts = await TeamCompetitionModel.collection.aggregate([
+    { $group: { _id: "$team_id", competitionIds: { $addToSet: "$competition_id" } } },
+    { $project: { competitionCount: { $size: "$competitionIds" } } },
+    { $match: { competitionCount: { $gte: 3 } } },
+  ]).toArray() as Array<{ _id: mongoose.Types.ObjectId; competitionCount: number }>
+
+  const eligibleTeamIds = competitionCounts.map((entry) => entry._id)
+  const teams = eligibleTeamIds.length
+    ? await TeamModel.collection
+        .find(
+          { _id: { $in: eligibleTeamIds }, image: { $exists: true, $ne: "" } },
+          { projection: { _id: 1, team_id: 1, team_name: 1, teamName: 1, image: 1, kits: 1 } }
+        )
+        .toArray() as TeamDoc[]
+    : []
+
+  const teamIdSet = new Set(teams.map((team) => team._id.toString()))
+  const eligibleTeamCompetitions = await TeamCompetitionModel.collection
+    .find(
+      { team_id: { $in: teams.map((team) => team._id) } },
+      { projection: { _id: 1, team_id: 1 } }
+    )
+    .toArray() as Array<{ _id: mongoose.Types.ObjectId; team_id: mongoose.Types.ObjectId }>
+
+  const teamCompetitionIds = eligibleTeamCompetitions.map((row) => row._id)
+  const teamCompetitionToTeam = new Map(eligibleTeamCompetitions.map((row) => [row._id.toString(), row.team_id.toString()]))
+
+  const playerCompetitions = teamCompetitionIds.length
+    ? await TeamCompetitionModel.db.collection("playercompetitions")
+        .find(
+          { team_competition_id: { $in: teamCompetitionIds } },
+          { projection: { player_id: 1, team_competition_id: 1 } }
+        )
+        .toArray() as Array<{ player_id?: mongoose.Types.ObjectId; team_competition_id?: mongoose.Types.ObjectId }>
+    : []
+
+  const playerIds = [...new Set(
+    playerCompetitions
+      .map((row) => row.player_id?.toString())
+      .filter((value): value is string => Boolean(value))
+  )].map((value) => new mongoose.Types.ObjectId(value))
+
+  const players = playerIds.length
+    ? await PlayerModel.collection
+        .find(
+          { _id: { $in: playerIds } },
+          { projection: { _id: 1, player_id: 1, player_name: 1, playerName: 1, country: 1, avatar: 1 } }
+        )
+        .toArray() as PlayerDoc[]
+    : []
+  const playerMap = new Map(players.map((player) => [player._id.toString(), player]))
+
+  const teamCountries = new Map<string, Set<string>>()
+  const teamCountryPlayers = new Map<string, TicTacToeCellOption[]>()
+
+  for (const row of playerCompetitions) {
+    const player = row.player_id ? playerMap.get(row.player_id.toString()) : null
+    const teamId = row.team_competition_id ? teamCompetitionToTeam.get(row.team_competition_id.toString()) : null
+    if (!player || !teamId || !teamIdSet.has(teamId) || !player.country) continue
+
+    if (!teamCountries.has(teamId)) {
+      teamCountries.set(teamId, new Set())
+    }
+    teamCountries.get(teamId)!.add(player.country)
+
+    const key = `${teamId}::${player.country}`
+    const options = teamCountryPlayers.get(key) ?? []
+    const team = teams.find((entry) => entry._id.toString() === teamId)
+    if (!options.some((option) => option.playerObjectId === player._id.toString())) {
+      options.push({
+        playerObjectId: player._id.toString(),
+        playerId: Number(player.player_id ?? 0),
+        playerName: player.player_name || player.playerName || "Unknown player",
+        country: player.country,
+        avatar: player.avatar,
+        kitImage: normalizeTeamImageUrl(team?.kits?.[0]),
+        teamImage: normalizeTeamImageUrl(team?.image),
+        teamName: team ? getTeamName(team) : undefined,
+      })
+      teamCountryPlayers.set(key, options)
+    }
+  }
+
+  const teamRows = teams
+    .map((team) => ({
+      team,
+      countries: [...(teamCountries.get(team._id.toString()) ?? new Set<string>())],
+    }))
+    .filter((entry) => entry.countries.length >= 3)
+
+  return buildBoard(teamRows, teamCountryPlayers, difficulty)
+}
+
+export async function getTicTacToeTeamCountryPlayers(teamIds: mongoose.Types.ObjectId[]) {
+  await dbConnect()
+  if (!teamIds.length) {
+    return { teams: [] as TeamDoc[], teamCountryPlayers: new Map<string, TicTacToeCellOption[]>() }
+  }
+
+  const teams = await TeamModel.collection
+    .find(
+      { _id: { $in: teamIds } },
+      { projection: { _id: 1, team_id: 1, team_name: 1, teamName: 1, image: 1, kits: 1 } }
+    )
+    .toArray() as TeamDoc[]
+
+  const teamIdSet = new Set(teams.map((team) => team._id.toString()))
+  const teamCompetitions = await TeamCompetitionModel.collection
+    .find(
+      { team_id: { $in: teamIds } },
+      { projection: { _id: 1, team_id: 1 } }
+    )
+    .toArray() as Array<{ _id: mongoose.Types.ObjectId; team_id: mongoose.Types.ObjectId }>
+
+  const teamCompetitionIds = teamCompetitions.map((row) => row._id)
+  const teamCompetitionToTeam = new Map(teamCompetitions.map((row) => [row._id.toString(), row.team_id.toString()]))
+
+  const playerCompetitions = teamCompetitionIds.length
+    ? await TeamCompetitionModel.db.collection("playercompetitions")
+        .find(
+          { team_competition_id: { $in: teamCompetitionIds } },
+          { projection: { player_id: 1, team_competition_id: 1 } }
+        )
+        .toArray() as Array<{ player_id?: mongoose.Types.ObjectId; team_competition_id?: mongoose.Types.ObjectId }>
+    : []
+
+  const playerIds = [...new Set(
+    playerCompetitions
+      .map((row) => row.player_id?.toString())
+      .filter((value): value is string => Boolean(value))
+  )].map((value) => new mongoose.Types.ObjectId(value))
+
+  const players = playerIds.length
+    ? await PlayerModel.collection
+        .find(
+          { _id: { $in: playerIds } },
+          { projection: { _id: 1, player_id: 1, player_name: 1, playerName: 1, country: 1, avatar: 1 } }
+        )
+        .toArray() as PlayerDoc[]
+    : []
+  const playerMap = new Map(players.map((player) => [player._id.toString(), player]))
+
+  const teamCountryPlayers = new Map<string, TicTacToeCellOption[]>()
+
+  for (const row of playerCompetitions) {
+    const player = row.player_id ? playerMap.get(row.player_id.toString()) : null
+    const teamId = row.team_competition_id ? teamCompetitionToTeam.get(row.team_competition_id.toString()) : null
+    if (!player || !teamId || !teamIdSet.has(teamId) || !player.country) continue
+
+    const key = `${teamId}::${player.country}`
+    const options = teamCountryPlayers.get(key) ?? []
+    const team = teams.find((entry) => entry._id.toString() === teamId)
+    if (!options.some((option) => option.playerObjectId === player._id.toString())) {
+      options.push({
+        playerObjectId: player._id.toString(),
+        playerId: Number(player.player_id ?? 0),
+        playerName: player.player_name || player.playerName || "Unknown player",
+        country: player.country,
+        avatar: player.avatar,
+        kitImage: normalizeTeamImageUrl(team?.kits?.[0]),
+        teamImage: normalizeTeamImageUrl(team?.image),
+        teamName: team ? getTeamName(team) : undefined,
+      })
+      teamCountryPlayers.set(key, options)
+    }
+  }
+
+  return { teams, teamCountryPlayers }
+}
+
 async function getUserMetaMap(userIds: mongoose.Types.ObjectId[]) {
   if (!userIds.length) return new Map<string, { teamName: string; playerName?: string; avatar?: string }>()
 
