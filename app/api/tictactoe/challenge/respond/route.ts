@@ -6,8 +6,6 @@ import UserModel from "@/lib/models/User"
 import TicTacToeChallengeModel from "@/lib/models/TicTacToeChallenge"
 import TicTacToeGameModel from "@/lib/models/TicTacToeGame"
 
-const ONLINE_DIFFICULTIES = ["easy", "medium", "hard"] as const
-
 export async function POST(request: Request) {
   const session = await getServerSession(authOptions)
   if (!session?.user?.discordId) {
@@ -64,7 +62,7 @@ export async function POST(request: Request) {
   challenge.status = "accepted"
   await challenge.save()
 
-  const difficulty = ONLINE_DIFFICULTIES[Math.floor(Math.random() * ONLINE_DIFFICULTIES.length)]
+  const difficulty = "all"
   const firstTurn = Math.random() > 0.5 ? challenge.fromUserId : challenge.toUserId
 
   const game = await TicTacToeGameModel.create({

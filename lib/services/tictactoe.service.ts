@@ -69,7 +69,7 @@ export type TicTacToePageData = {
 export type TicTacToeOnlineGameSummary = {
   gameId: string
   status: "pending" | "active" | "finished"
-  difficulty?: "easy" | "medium" | "hard" | null
+  difficulty?: "easy" | "medium" | "hard" | "all" | null
   createdAt: Date
   turnSeconds?: number | null
   turnExpiresAt?: Date | null
@@ -251,7 +251,7 @@ export async function getTicTacToeOnlineGameSummary(gameId: string, discordId: s
     .lean<{
       _id: mongoose.Types.ObjectId
       status: "pending" | "active" | "finished"
-      difficulty?: "easy" | "medium" | "hard" | null
+      difficulty?: "easy" | "medium" | "hard" | "all" | null
       createdByUserId?: mongoose.Types.ObjectId | null
       opponentUserId?: mongoose.Types.ObjectId | null
       currentTurnUserId?: mongoose.Types.ObjectId | null

@@ -23,7 +23,7 @@ export interface ITicTacToeCellPick {
 export interface ITicTacToeGame extends Document {
   mode: "solo" | "online"
   status: "pending" | "active" | "finished"
-  difficulty?: "easy" | "medium" | "hard" | null
+  difficulty?: "easy" | "medium" | "hard" | "all" | null
   result?: "win" | "draw" | null
   createdByUserId?: mongoose.Types.ObjectId | null
   opponentUserId?: mongoose.Types.ObjectId | null
@@ -72,7 +72,7 @@ const ticTacToeGameSchema = new Schema<ITicTacToeGame>(
   {
     mode: { type: String, enum: ["solo", "online"], required: true },
     status: { type: String, enum: ["pending", "active", "finished"], required: true, default: "pending" },
-    difficulty: { type: String, enum: ["easy", "medium", "hard"], default: null },
+    difficulty: { type: String, enum: ["easy", "medium", "hard", "all"], default: null },
     result: { type: String, enum: ["win", "draw"], default: null },
     createdByUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
     opponentUserId: { type: Schema.Types.ObjectId, ref: "User", default: null },
