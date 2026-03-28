@@ -71,19 +71,6 @@ function FlagBadge({ country, className }: { country?: string; className?: strin
   )
 }
 
-function UserAvatar({ avatar, label }: { avatar?: string; label: string }) {
-  if (avatar && isImageUrl(avatar)) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={avatar} alt={label} className="h-10 w-10 rounded-full object-cover" />
-  }
-
-  return (
-    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-sm font-semibold text-white">
-      {label.slice(0, 1).toUpperCase()}
-    </div>
-  )
-}
-
 function FilledPlayerBadge({ option }: { option: TicTacToeCellOption }) {
   const avatarIsImage = isImageUrl(option.avatar || "")
   const avatarText = !avatarIsImage ? (option.avatar || "").trim() : ""
