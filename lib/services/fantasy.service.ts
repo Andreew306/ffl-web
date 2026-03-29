@@ -665,8 +665,8 @@ async function getCompetitionPlayersByGroup(
         $and: [
           {
             $or: [
-              { matches_played: { $gt: 0 } },
-              { matchesPlayed: { $gt: 0 } },
+              { matches_played: { $gte: 0 } },
+              { matchesPlayed: { $gte: 0 } },
             ],
           },
           {
@@ -806,8 +806,8 @@ async function getCompetitionCandidatePlayers(
         team_competition_id: { $in: teamCompetitions.map((item) => item._id) },
         player_id: { $nin: excludedPlayerIds },
         $or: [
-          { matches_played: { $gt: 0 } },
-          { matchesPlayed: { $gt: 0 } },
+          { matches_played: { $gte: 0 } },
+          { matchesPlayed: { $gte: 0 } },
         ],
       },
     },
