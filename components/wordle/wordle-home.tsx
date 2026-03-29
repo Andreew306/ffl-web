@@ -332,6 +332,24 @@ export function WordleHome({ daily, leaderboard }: Props) {
     return () => clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    const now = new Date()
+    const madridNow = new Date(
+      now.toLocaleString("en-US", { timeZone: "Europe/Madrid" })
+    )
+    const nextReload = new Date(madridNow)
+    nextReload.setHours(1, 30, 0, 0)
+    if (madridNow.getTime() >= nextReload.getTime()) {
+      nextReload.setDate(nextReload.getDate() + 1)
+    }
+    const delay = Math.max(nextReload.getTime() - madridNow.getTime(), 0)
+    const timeout = window.setTimeout(() => {
+      window.location.reload()
+    }, delay)
+
+    return () => window.clearTimeout(timeout)
+  }, [])
+
   const calendar = useMemo(() => {
     const { year, month } = calendarView
     const current = new Date(year, month - 1, 1)
