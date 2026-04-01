@@ -17,7 +17,7 @@ export function formatMinutesSeconds(value: number) {
 }
 
 export function normalizeTeamImageUrl(image?: string) {
-  if (!image) return ""
+  if (typeof image !== "string") return ""
   const trimmed = image.trim()
   return trimmed.startsWith("data:image") ? "" : trimmed
 }

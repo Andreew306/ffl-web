@@ -412,13 +412,28 @@ function extractSeasonValue(rawSeason: string | number | null | undefined) {
   return match ? Number.parseInt(match[0], 10) : -1
 }
 
-function toMadridDateKey(value: Date | string) {
+function toValidDate(value: Date | string | number | null | undefined) {
+  if (!value) return null
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return null
+  return date
+}
+
+function toSafeIsoString(value: Date | string | number | null | undefined, fallback = "") {
+  const date = toValidDate(value)
+  return date ? date.toISOString() : fallback
+}
+
+function toMadridDateKey(value: Date | string | number | null | undefined) {
+  const date = toValidDate(value)
+  if (!date) return "0000-00-00"
+
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).formatToParts(new Date(value))
+  }).formatToParts(date)
 
   const year = parts.find((part) => part.type === "year")?.value ?? "0000"
   const month = parts.find((part) => part.type === "month")?.value ?? "00"
@@ -2239,7 +2254,7 @@ export async function joinFantasyLeagueByInviteCode(discordId: string, inviteCod
   if (!existingMember) {
     const memberCount = await FantasyLeagueMemberModel.countDocuments({ leagueId: league._id })
 
-    if (memberCount >= league.maxMembers) {
+    if (league.leagueType !== "open" && memberCount >= league.maxMembers) {
       throw new Error("La liga fantasy ya ha alcanzado el maximo de participantes.")
     }
 
@@ -3286,7 +3301,7 @@ export async function getFantasyLeagueDetail(
     market = {
       id: marketDay._id.toString(),
       status: marketDay.status,
-      marketDate: marketDay.marketDate.toISOString(),
+      marketDate: toSafeIsoString(marketDay.marketDate),
       listings: marketDay.listings
         .map((listing): FantasyMarketEntry | null => {
           const player = listingPlayerById.get(listing.playerObjectId.toString())
@@ -3415,7 +3430,7 @@ export async function getFantasyLeagueDetail(
       weekMap.get(weekNumber)?.matches.push({
         id: match._id.toString(),
         matchId: match.match_id,
-        date: new Date(match.date).toISOString(),
+        date: toSafeIsoString(match.date),
         team1Name: team1?.teamName ?? "TBD",
         team1Image: team1?.teamImage ?? "",
         team2Name: team2?.teamName ?? "TBD",
@@ -3462,24 +3477,24 @@ export async function getFantasyLeagueDetail(
             const seller = membershipByUserId.get(listing.sellerUserId.toString()) ?? "Unknown team"
             return [
               {
-                id: `sale-${marketDay.marketDate.toISOString()}-${index}`,
+                id: `sale-${toSafeIsoString(marketDay.marketDate)}-${index}`,
                 type: "sale" as const,
                 title: `${seller} sold ${playerName}`,
                 subtitle: `Bought by ${buyer}`,
                 amount: listing.winningBidAmount,
-                date: marketDay.marketDate.toISOString(),
+                date: toSafeIsoString(marketDay.marketDate),
               },
             ]
           }
 
           return [
             {
-              id: `purchase-${marketDay.marketDate.toISOString()}-${index}`,
+              id: `purchase-${toSafeIsoString(marketDay.marketDate)}-${index}`,
               type: "purchase" as const,
               title: `${buyer} bought ${playerName}`,
               subtitle: "Signed from the league market",
               amount: listing.winningBidAmount,
-              date: marketDay.marketDate.toISOString(),
+              date: toSafeIsoString(marketDay.marketDate),
             },
           ]
         }
@@ -3488,12 +3503,12 @@ export async function getFantasyLeagueDetail(
           const seller = membershipByUserId.get(listing.sellerUserId.toString()) ?? "Unknown team"
           return [
             {
-              id: `autosale-${marketDay.marketDate.toISOString()}-${index}`,
+              id: `autosale-${toSafeIsoString(marketDay.marketDate)}-${index}`,
               type: "auto_sale" as const,
               title: `${seller} sold ${playerName}`,
               subtitle: "Bought back by the league",
               amount: listing.basePrice,
-              date: marketDay.marketDate.toISOString(),
+              date: toSafeIsoString(marketDay.marketDate),
             },
           ]
         }
@@ -3515,12 +3530,12 @@ export async function getFantasyLeagueDetail(
       }>>()
 
     const clauseActivity: FantasyHomeActivityItem[] = clauseChanges.map((change, index) => ({
-      id: `clause-${change.createdAt.toISOString()}-${index}`,
+      id: `clause-${toSafeIsoString(change.createdAt)}-${index}`,
       type: "clause_up" as const,
       title: `${membershipByUserId.get(change.userId.toString()) ?? "Unknown team"} raised clause`,
       subtitle: `${playerNameByObjectId.get(change.playerObjectId.toString()) ?? "Unknown player"} · Clause ${change.newClause}`,
       amount: change.newClause,
-      date: change.createdAt.toISOString(),
+      date: toSafeIsoString(change.createdAt),
     }))
 
     const clauseExecutions = await FantasyClauseExecutionModel.find({
@@ -3537,12 +3552,12 @@ export async function getFantasyLeagueDetail(
       }>>()
 
     const clauseExecutionActivity: FantasyHomeActivityItem[] = clauseExecutions.map((execution, index) => ({
-      id: `clause-exec-${execution.executedAt.toISOString()}-${index}`,
+      id: `clause-exec-${toSafeIsoString(execution.executedAt)}-${index}`,
       type: "purchase",
       title: `${membershipByUserId.get(execution.buyerUserId.toString()) ?? "Unknown team"} triggered a clause`,
       subtitle: `${playerNameByObjectId.get(execution.playerObjectId.toString()) ?? "Unknown player"} · From ${membershipByUserId.get(execution.sellerUserId.toString()) ?? "Unknown team"}`,
       amount: execution.clausePrice,
-      date: execution.executedAt.toISOString(),
+      date: toSafeIsoString(execution.executedAt),
     }))
 
     activity = [...marketActivity, ...clauseActivity, ...clauseExecutionActivity]
@@ -3782,3 +3797,4 @@ export async function getFantasyLeagueDetail(
       .sort((a, b) => b.points - a.points || a.teamName.localeCompare(b.teamName)),
   }
 }
+

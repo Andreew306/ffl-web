@@ -35,13 +35,25 @@ type FantasyLeagueHomeProps = {
 }
 
 function formatDateTime(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return "Date TBD"
+  }
+
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Madrid",
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value))
+  }).format(parsed)
+}
+
+function formatMatchScore(home: number, away: number) {
+  if (home === 0 && away === 0) {
+    return "-"
+  }
+  return `${home} - ${away}`
 }
 
 function ActivityIcon({ type }: { type: ActivityItem["type"] }) {
@@ -52,10 +64,10 @@ function ActivityIcon({ type }: { type: ActivityItem["type"] }) {
   return <ShoppingBag className="h-4 w-4 text-emerald-300" />
 }
 
-function TeamBadge({ image, name }: { image?: string; name: string }) {
+function TeamBadge({ image, name, reverse = false }: { image?: string; name: string; reverse?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/10 bg-slate-950/70">
+    <div className={`flex items-center gap-3 ${reverse ? "flex-row-reverse justify-end text-right" : ""}`}>
+      <div className="flex h-10 w-10 items-center justify-center overflow-hidden">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={image} alt={name} className="h-full w-full object-cover" />
@@ -124,11 +136,11 @@ export default function FantasyLeagueHome({ defaultWeek, weeks, activity }: Fant
                   <TeamBadge image={match.team1Image} name={match.team1Name} />
                   <div className="rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-2 text-center">
                     <div className="text-2xl font-semibold text-white">
-                      {match.scoreTeam1} - {match.scoreTeam2}
+                      {formatMatchScore(match.scoreTeam1, match.scoreTeam2)}
                     </div>
                   </div>
                   <div className="justify-self-end">
-                    <TeamBadge image={match.team2Image} name={match.team2Name} />
+                    <TeamBadge image={match.team2Image} name={match.team2Name} reverse />
                   </div>
                 </div>
               </div>

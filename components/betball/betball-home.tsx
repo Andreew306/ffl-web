@@ -12,13 +12,18 @@ type BetBallHomeProps = {
 }
 
 function formatMatchDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return "Date TBD"
+  }
+
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
     timeZone: "Europe/Madrid",
-  }).format(new Date(value))
+  }).format(parsed)
 }
 
 function FflCoin({ value }: { value: number }) {

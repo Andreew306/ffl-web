@@ -152,6 +152,13 @@ function extractMatchdayFromComments(comments?: string | null) {
   return match ? Number.parseInt(match[1], 10) : null
 }
 
+function toSafeIsoDate(value?: Date | string | number | null) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toISOString()
+}
+
 function toOdds(probability: number) {
   const safeProbability = Math.min(0.88, Math.max(0.08, probability))
   const margin = 1.08
@@ -495,12 +502,16 @@ function getWeightedAverage(values: number[]) {
 
 async function getLatestLeagueCompetitionRows() {
   const competitions = await CompetitionModel.collection
-    .find({ type: "league" }, { projection: { _id: 1, competition_id: 1, name: 1, season: 1, division: 1 } })
+    .find(
+      { type: "league" },
+      { projection: { _id: 1, competition_id: 1, name: 1, season: 1, year: 1, division: 1 } }
+    )
     .toArray() as Array<{
       _id: mongoose.Types.ObjectId
       competition_id: string
       name?: string
       season?: number
+      year?: number
       division?: number | null
     }>
 
@@ -508,10 +519,13 @@ async function getLatestLeagueCompetitionRows() {
     return []
   }
 
-  const highestSeason = competitions.reduce((max, competition) => Math.max(max, Number(competition.season ?? 0)), 0)
+  const highestSeason = competitions.reduce(
+    (max, competition) => Math.max(max, Number(competition.season ?? competition.year ?? 0)),
+    0
+  )
 
   return competitions
-    .filter((competition) => Number(competition.season ?? 0) === highestSeason)
+    .filter((competition) => Number(competition.season ?? competition.year ?? 0) === highestSeason)
     .sort((a, b) => Number(a.division ?? 99) - Number(b.division ?? 99))
 }
 
@@ -686,7 +700,7 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
       week,
       matchday,
       matchdayLabel,
-      date: new Date(match.date).toISOString(),
+      date: toSafeIsoDate(match.date),
       team1Name: team1?.teamName ?? "TBD",
       team1Image: team1?.teamImage ?? "",
       team2Name: team2?.teamName ?? "TBD",
@@ -713,13 +727,13 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
       }))
   }
 
-  return [...competitionMap.values()].filter((competition) => competition.weeks.length > 0)
+  return [...competitionMap.values()]
 }
 
 export const getBetBallData = unstable_cache(
   async () => getBetBallDataInternal(),
   ["betball:data"],
-  { revalidate: 3600 }
+  { revalidate: 300 }
 )
 
 export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMatchDetail | null> {
@@ -1410,7 +1424,7 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
     week,
     matchday,
     matchdayLabel: matchday ? `MD${matchday}` : "No matchday",
-    date: new Date(match.date).toISOString(),
+    date: toSafeIsoDate(match.date),
     comments: match.comments ?? "",
     team1Name: team1?.teamName ?? "TBD",
     team1Image: team1?.teamImage ?? "",

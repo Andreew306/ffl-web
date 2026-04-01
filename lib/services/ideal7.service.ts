@@ -70,6 +70,35 @@ function pickString(value?: string | null) {
   return typeof value === "string" ? value.trim() : ""
 }
 
+function pickKitImage(kits?: Array<string | { image?: string | null } | null> | null) {
+  if (!Array.isArray(kits)) {
+    return ""
+  }
+  for (const entry of kits) {
+    if (!entry) continue
+    if (typeof entry === "string") {
+      const normalized = normalizeTeamImageUrl(entry)
+      if (normalized) return normalized
+    } else {
+      const normalized = normalizeTeamImageUrl(entry.image ?? "")
+      if (normalized) return normalized
+    }
+  }
+  return ""
+}
+
+function collectKitImages(kits?: Array<string | { image?: string | null } | null> | null) {
+  if (!Array.isArray(kits)) return []
+  const normalized = kits
+    .map((entry) => {
+      if (!entry) return ""
+      if (typeof entry === "string") return normalizeTeamImageUrl(entry)
+      return normalizeTeamImageUrl(entry.image ?? "")
+    })
+    .filter((value) => value)
+  return Array.from(new Set(normalized))
+}
+
 function extractSeasonValue(rawSeason: string | number | null | undefined) {
   if (rawSeason === null || rawSeason === undefined) {
     return -1
@@ -106,6 +135,18 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
     .map((entry) => entry.team_id)
     .filter((value): value is mongoose.Types.ObjectId => Boolean(value))
 
+  const kitsByTeamId = new Map<string, string[]>()
+  const allKits: string[] = []
+  for (const entry of rawTeamCompetitions) {
+    if (!entry.team_id) continue
+    const current = kitsByTeamId.get(entry.team_id.toString()) ?? []
+    const kits = collectKitImages(entry.kits)
+    if (kits.length) {
+      kitsByTeamId.set(entry.team_id.toString(), Array.from(new Set([...current, ...kits])))
+    }
+    allKits.push(...kits)
+  }
+
   const rawTeams = teamIds.length
     ? await TeamModel.collection
         .find(
@@ -115,13 +156,34 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
         .toArray() as RawTeam[]
     : []
 
+  for (const team of rawTeams) {
+    const current = kitsByTeamId.get(team._id.toString()) ?? []
+    const kits = collectKitImages(team.kits)
+    if (kits.length) {
+      kitsByTeamId.set(team._id.toString(), Array.from(new Set([...current, ...kits])))
+    }
+    allKits.push(...kits)
+  }
+
+  const globalKits = Array.from(new Set(allKits.filter((value) => value)))
+  const globalKitFallback = globalKits.length
+    ? globalKits[Math.floor(Math.random() * globalKits.length)] ?? ""
+    : ""
+
+  const randomKitByTeamId = new Map<string, string>()
+  for (const [teamId, kits] of kitsByTeamId) {
+    if (!kits.length) continue
+    const choice = kits[Math.floor(Math.random() * kits.length)] ?? ""
+    if (choice) randomKitByTeamId.set(teamId, choice)
+  }
+
   const teamById = new Map(
     rawTeams.map((team) => [
       team._id.toString(),
       {
         teamName: pickString(team.team_name) || pickString(team.teamName) || "Unknown team",
         teamImage: normalizeTeamImageUrl(team.image),
-        teamKit: team.kits?.[0] || "",
+        teamKit: pickKitImage(team.kits) || randomKitByTeamId.get(team._id.toString()) || globalKitFallback,
         teamTextColor: getKitTextColor(team.textColor),
       },
     ])
@@ -129,15 +191,17 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
 
   const visualsByTeamCompetitionId = new Map(
     rawTeamCompetitions.map((entry) => {
-      const team = entry.team_id ? teamById.get(entry.team_id.toString()) : null
+      const teamId = entry.team_id?.toString()
+      const team = teamId ? teamById.get(teamId) : null
       const season = entry.competition_id ? seasonByCompetitionId.get(entry.competition_id.toString()) ?? -1 : -1
+      const randomKit = teamId ? randomKitByTeamId.get(teamId) : ""
       return [
         entry._id.toString(),
         {
           season,
           teamName: team?.teamName ?? "Unknown team",
           teamImage: team?.teamImage ?? "",
-          kitImage: entry.kits?.[0] || team?.teamKit || "",
+          kitImage: pickKitImage(entry.kits) || team?.teamKit || randomKit || globalKitFallback,
           kitTextColor: getKitTextColor(entry.textColor) || team?.teamTextColor || "",
         },
       ]
