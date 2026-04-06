@@ -127,6 +127,18 @@ export async function leaveFantasyLeagueAction(formData: FormData) {
   }
 }
 
+export async function leaveFantasyLeagueFormAction(formData: FormData): Promise<void> {
+  const result = await leaveFantasyLeagueAction(formData)
+  if (result?.ok === false && result.requiresAuth) {
+    redirect("/api/auth/signin/discord?callbackUrl=/fantasy/leagues")
+  }
+
+  const leagueId = getStringValue(formData, "leagueId")
+  const error = result?.ok === false ? result.error : "No se ha podido abandonar la liga fantasy."
+  const suffix = error ? `?error=${encodeURIComponent(error)}` : ""
+  redirect(leagueId ? `/fantasy/leagues/${leagueId}${suffix}` : `/fantasy/leagues${suffix}`)
+}
+
 export async function kickFantasyMemberAction(formData: FormData) {
   const session = await getServerSession(authOptions)
 
@@ -149,6 +161,17 @@ export async function kickFantasyMemberAction(formData: FormData) {
     const message = error instanceof Error ? error.message : "No se ha podido expulsar al miembro."
     return { ok: false, error: message } satisfies FantasyActionResult
   }
+}
+
+export async function kickFantasyMemberFormAction(formData: FormData): Promise<void> {
+  const result = await kickFantasyMemberAction(formData)
+  if (result?.ok === false && result.requiresAuth) {
+    redirect("/api/auth/signin/discord?callbackUrl=/fantasy/leagues")
+  }
+
+  const leagueId = getStringValue(formData, "leagueId")
+  const error = result?.ok === false ? result.error : "No se ha podido expulsar al miembro."
+  redirect(leagueId ? `/fantasy/leagues/${leagueId}?error=${encodeURIComponent(error)}` : "/fantasy/leagues")
 }
 
 export async function placeFantasyBidAction(leagueId: string, playerObjectId: string, amount: number) {

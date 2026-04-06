@@ -10,7 +10,7 @@ import FantasyLeagueHome from "@/components/fantasy/fantasy-league-home"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getFantasyLeagueDetail } from "@/lib/services/fantasy.service"
-import { kickFantasyMemberAction, leaveFantasyLeagueAction } from "@/app/fantasy/actions"
+import { kickFantasyMemberFormAction, leaveFantasyLeagueFormAction } from "@/app/fantasy/actions"
 
 type FantasyLeagueDetailPageProps = {
   params: Promise<{ leagueId: string }>
@@ -73,7 +73,7 @@ export default async function FantasyLeagueDetailPage({ params, searchParams }: 
 
         {league.role !== "owner" ? (
           <section className="mt-4 flex justify-end">
-            <form action={leaveFantasyLeagueAction}>
+            <form action={leaveFantasyLeagueFormAction}>
               <input type="hidden" name="leagueId" value={league.id} />
               <button
                 type="submit"
@@ -225,7 +225,7 @@ export default async function FantasyLeagueDetailPage({ params, searchParams }: 
                         <div className="flex items-center justify-end gap-3">
                           <span className="text-right text-lg font-semibold text-white">{entry.points}</span>
                           {league.role === "owner" && entry.role !== "owner" ? (
-                            <form action={kickFantasyMemberAction}>
+                            <form action={kickFantasyMemberFormAction}>
                               <input type="hidden" name="leagueId" value={league.id} />
                               <input type="hidden" name="memberUserId" value={entry.userId} />
                               <button
