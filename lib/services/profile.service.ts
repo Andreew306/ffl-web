@@ -1588,12 +1588,12 @@ async function fetchPersistedRoles(): Promise<IUserRole[]> {
     ProfileRolePointsModel.find({})
       .select("roleId roleName")
       .lean<Array<{ roleId: string; roleName: string }>>(),
-    PlayerManualRoleModel.aggregate<Array<{ _id: string; name: string }>>([
+    PlayerManualRoleModel.aggregate<{ _id: string; name: string }>([
       { $unwind: "$roles" },
       { $match: { "roles.id": { $exists: true, $ne: "" }, "roles.name": { $exists: true, $ne: "" } } },
       { $group: { _id: "$roles.id", name: { $first: "$roles.name" } } },
     ]),
-    UserModel.aggregate<Array<{ _id: string; name: string }>>([
+    UserModel.aggregate<{ _id: string; name: string }>([
       { $unwind: "$roles" },
       { $match: { "roles.id": { $exists: true, $ne: "" }, "roles.name": { $exists: true, $ne: "" } } },
       { $group: { _id: "$roles.id", name: { $first: "$roles.name" } } },
