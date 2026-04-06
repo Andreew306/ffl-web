@@ -2,11 +2,14 @@
 
 import { getServerSession } from "next-auth"
 import { revalidatePath } from "next/cache"
+import { redirect } from "next/navigation"
 import { authOptions } from "@/lib/auth"
 import {
   cancelFantasyPlayerSale,
   createFantasyLeagueForUser,
   deleteFantasyLeagueForUser,
+  kickFantasyLeagueMemberForOwner,
+  leaveFantasyLeagueForUser,
   joinFantasyLeagueByInviteCode,
   listFantasyPlayerForSale,
   moveFantasyRosterPlayer,
@@ -95,6 +98,55 @@ export async function deleteFantasyLeagueAction(leagueId: string) {
     return { ok: true, inviteCode: "" } satisfies FantasyActionResult
   } catch (error) {
     const message = error instanceof Error ? error.message : "No se ha podido borrar la liga fantasy."
+    return { ok: false, error: message } satisfies FantasyActionResult
+  }
+}
+
+export async function leaveFantasyLeagueAction(formData: FormData) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.discordId) {
+    return {
+      ok: false,
+      error: "Necesitas iniciar sesion con Discord para usar Fantasy.",
+      requiresAuth: true,
+    } satisfies FantasyActionResult
+  }
+
+  const leagueId = getStringValue(formData, "leagueId")
+
+  try {
+    await leaveFantasyLeagueForUser(session.user.discordId, leagueId)
+    revalidatePath("/fantasy")
+    revalidatePath("/fantasy/leagues")
+    revalidatePath(`/fantasy/leagues/${leagueId}`)
+    redirect("/fantasy/leagues")
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se ha podido abandonar la liga fantasy."
+    return { ok: false, error: message } satisfies FantasyActionResult
+  }
+}
+
+export async function kickFantasyMemberAction(formData: FormData) {
+  const session = await getServerSession(authOptions)
+
+  if (!session?.user?.discordId) {
+    return {
+      ok: false,
+      error: "Necesitas iniciar sesion con Discord para usar Fantasy.",
+      requiresAuth: true,
+    } satisfies FantasyActionResult
+  }
+
+  const leagueId = getStringValue(formData, "leagueId")
+  const memberUserId = getStringValue(formData, "memberUserId")
+
+  try {
+    await kickFantasyLeagueMemberForOwner(session.user.discordId, leagueId, memberUserId)
+    revalidatePath(`/fantasy/leagues/${leagueId}`)
+    return { ok: true, inviteCode: "" } satisfies FantasyActionResult
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "No se ha podido expulsar al miembro."
     return { ok: false, error: message } satisfies FantasyActionResult
   }
 }

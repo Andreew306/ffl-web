@@ -4,7 +4,7 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { Shield, UserCircle2 } from "lucide-react"
 import { authOptions, syncDiscordUser } from "@/lib/auth"
-import { getUserProfileData } from "@/lib/services/profile.service"
+import { PROFILE_ROLE_MANAGER_ID, getUserProfileData } from "@/lib/services/profile.service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ObjectivesMap } from "@/components/profile/objectives-map"
@@ -108,6 +108,7 @@ export default async function ProfilePage() {
   const countryOverlay = profile.player?.country && shouldOverlayFlag(profile.player.country)
     ? getTwemojiUrl(profile.player.country)
     : ""
+  const canManageRoles = profile.user.roles.some((role) => role.id === PROFILE_ROLE_MANAGER_ID)
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -187,6 +188,13 @@ export default async function ProfilePage() {
                   <span className="uppercase tracking-[0.35em] text-slate-400">Discord ID</span>
                   <span className="font-semibold text-white">{profile.user.discordId}</span>
                 </div>
+                {canManageRoles ? (
+                  <div className="mt-5">
+                    <Button asChild className="bg-cyan-500 text-slate-950 hover:bg-cyan-400">
+                      <Link href="/profile/manage-roles">Manage roles</Link>
+                    </Button>
+                  </div>
+                ) : null}
               </div>
             </div>
 

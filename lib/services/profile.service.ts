@@ -2,6 +2,10 @@ import mongoose from "mongoose"
 import dbConnect from "@/lib/db/mongoose"
 import UserModel, { type IUserRole } from "@/lib/models/User"
 import PlayerModel from "@/lib/models/Player"
+import PlayerManualRoleModel from "@/lib/models/PlayerManualRole"
+import ProfileRolePointsModel from "@/lib/models/ProfileRolePoints"
+
+export const PROFILE_ROLE_MANAGER_ID = "1118447762237829190"
 
 type ProfileStats = {
   matchesPlayed: number
@@ -503,6 +507,20 @@ function normalizeRoles(roles?: Array<IUserRole | string>) {
     .filter((role): role is IUserRole => Boolean(role))
 }
 
+function mergeRoles(base: IUserRole[], extra: IUserRole[]) {
+  const merged = new Map<string, IUserRole>()
+  for (const role of base) merged.set(role.id, role)
+  for (const role of extra) merged.set(role.id, role)
+  return [...merged.values()]
+}
+
+async function getManualRolesForPlayer(playerObjectId: string) {
+  const manualRoleDoc = await PlayerManualRoleModel.findOne({ playerId: new mongoose.Types.ObjectId(playerObjectId) })
+    .select("roles")
+    .lean<{ roles?: Array<IUserRole | string> } | null>()
+  return normalizeRoles(manualRoleDoc?.roles)
+}
+
 const ZERO_STATS: ProfileStats = {
   matchesPlayed: 0, matchesWon: 0, goals: 0, assists: 0, preassists: 0,
   cleanSheets: 0, mvp: 0, totw: 0, kicks: 0, braces: 0, hatTricks: 0, pokers: 0,
@@ -549,6 +567,8 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
     }
   }
 
+  const manualRoles = await getManualRolesForPlayer(playerObjectId)
+  const effectiveUserRoles = mergeRoles(normalizedUserRoles, manualRoles)
   const playerOid = new mongoose.Types.ObjectId(playerObjectId)
 
   // Run all aggregations in parallel
@@ -1296,7 +1316,7 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
     ]).toArray(),
   ])
 
-  const allStarTitles = normalizedUserRoles.filter((role) => {
+  const allStarTitles = effectiveUserRoles.filter((role) => {
     const normalized = role.name.normalize("NFKC").toLowerCase()
     return normalized.includes("all stars") || normalized.includes("future stars") || normalized.includes("rising stars")
   }).length
@@ -1397,7 +1417,7 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
     return goalsByMatch.slice(0, 3).every((goals) => goals > 0) ? sum + 1 : sum
   }, 0)
 
-  const bestAwards = normalizedUserRoles.filter((role) => {
+  const bestAwards = effectiveUserRoles.filter((role) => {
     const normalized = role.name.normalize("NFKC").toLowerCase()
     return normalized.includes("best gk") || normalized.includes("best defender") || normalized.includes("best midfielder") || normalized.includes("best attacker") || normalized.includes("best mvp")
   }).length
@@ -1456,7 +1476,7 @@ export async function getUserProfileData(discordId: string): Promise<UserProfile
   return {
     user: {
       discordId: user.discordId,
-      roles: normalizedUserRoles,
+      roles: effectiveUserRoles,
       playerId: playerObjectId,
       discordAvatar: user.discordAvatar ?? null,
       discordName: user.discordName ?? null,
@@ -1518,4 +1538,292 @@ export async function getUserProfileDataByPlayerId(playerId: string): Promise<Us
 
   if (!user?.discordId) return null
   return getUserProfileData(user.discordId)
+}
+
+function escapeRegex(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+async function getManagerRoles(discordId: string) {
+  const managerUser = await UserModel.findOne({ discordId })
+    .select("roles")
+    .lean<{ roles?: Array<IUserRole | string> } | null>()
+  const managerRoles = normalizeRoles(managerUser?.roles)
+  const canManage = managerRoles.some((role) => role.id === PROFILE_ROLE_MANAGER_ID)
+  return { managerRoles, canManage }
+}
+
+export async function fetchGuildRoles(): Promise<IUserRole[]> {
+  const guildId = process.env.DISCORD_GUILD_ID
+  const botToken = process.env.DISCORD_BOT_TOKEN
+  if (!guildId || !botToken) {
+    return []
+  }
+
+  try {
+    const response = await fetch(`https://discord.com/api/v10/guilds/${guildId}/roles`, {
+      headers: {
+        Authorization: `Bot ${botToken}`,
+        "Content-Type": "application/json",
+      },
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      return []
+    }
+
+    const roles = (await response.json()) as Array<{ id?: string; name?: string; position?: number }>
+    return roles
+      .filter((role): role is { id: string; name: string; position?: number } => Boolean(role.id && role.name))
+      .sort((a, b) => Number(b.position ?? 0) - Number(a.position ?? 0))
+      .map((role) => ({ id: role.id, name: role.name }))
+  } catch {
+    return []
+  }
+}
+
+async function fetchPersistedRoles(): Promise<IUserRole[]> {
+  const [pointRoles, manualRoles, userRoles] = await Promise.all([
+    ProfileRolePointsModel.find({})
+      .select("roleId roleName")
+      .lean<Array<{ roleId: string; roleName: string }>>(),
+    PlayerManualRoleModel.aggregate<Array<{ _id: string; name: string }>>([
+      { $unwind: "$roles" },
+      { $match: { "roles.id": { $exists: true, $ne: "" }, "roles.name": { $exists: true, $ne: "" } } },
+      { $group: { _id: "$roles.id", name: { $first: "$roles.name" } } },
+    ]),
+    UserModel.aggregate<Array<{ _id: string; name: string }>>([
+      { $unwind: "$roles" },
+      { $match: { "roles.id": { $exists: true, $ne: "" }, "roles.name": { $exists: true, $ne: "" } } },
+      { $group: { _id: "$roles.id", name: { $first: "$roles.name" } } },
+    ]),
+  ])
+
+  const byId = new Map<string, IUserRole>()
+  for (const row of pointRoles) {
+    byId.set(row.roleId, { id: row.roleId, name: row.roleName })
+  }
+  for (const row of manualRoles) {
+    byId.set(row._id, { id: row._id, name: row.name })
+  }
+  for (const row of userRoles) {
+    byId.set(row._id, { id: row._id, name: row.name })
+  }
+
+  return [...byId.values()]
+}
+
+async function getRoleManagerContext(discordId: string) {
+  const { managerRoles, canManage } = await getManagerRoles(discordId)
+  const guildRoles = await fetchGuildRoles()
+  const persistedRoles = await fetchPersistedRoles()
+
+  const guildById = new Map(guildRoles.map((role) => [role.id, role]))
+  const persistedExtras = persistedRoles
+    .filter((role) => !guildById.has(role.id))
+    .sort((a, b) => a.name.normalize("NFKC").localeCompare(b.name.normalize("NFKC"), "es", { sensitivity: "base" }))
+  const availableRoles = guildRoles.length
+    ? [...guildRoles, ...persistedExtras]
+    : [...managerRoles, ...persistedExtras.filter((role) => !managerRoles.some((entry) => entry.id === role.id))]
+
+  return { canManage, availableRoles }
+}
+
+export type ProfileRoleManagerPlayer = {
+  playerObjectId: string
+  playerId: number
+  playerName: string
+  country: string
+  avatar?: string
+  hasRole: boolean
+}
+
+export type ProfileRoleManagerData = {
+  availableRoles: IUserRole[]
+  selectedRole: IUserRole | null
+  selectedRolePoints: number
+  rolePointsById: Record<string, number>
+  assignedPlayers: ProfileRoleManagerPlayer[]
+  searchQuery: string
+  searchResults: ProfileRoleManagerPlayer[]
+}
+
+export async function getProfileRoleManagerData(
+  discordId: string,
+  input?: { roleId?: string | null; query?: string | null }
+): Promise<ProfileRoleManagerData> {
+  await dbConnect()
+
+  const { availableRoles, canManage } = await getRoleManagerContext(discordId)
+  if (!canManage) {
+    throw new Error("You do not have permissions to manage roles.")
+  }
+
+  const sortedRoles = availableRoles.filter((role) => role.name.trim().length > 0)
+  const selectedRole = sortedRoles.find((role) => role.id === input?.roleId) ?? sortedRoles[0] ?? null
+  if (!selectedRole) {
+    return {
+      availableRoles: [],
+      selectedRole: null,
+      selectedRolePoints: 0,
+      rolePointsById: {},
+      assignedPlayers: [],
+      searchQuery: "",
+      searchResults: [],
+    }
+  }
+
+  const rolePointsRows = await ProfileRolePointsModel.find({ roleId: { $in: sortedRoles.map((role) => role.id) } })
+    .select("roleId points")
+    .lean<Array<{ roleId: string; points: number }>>()
+  const rolePointsById = Object.fromEntries(
+    rolePointsRows.map((row) => [row.roleId, Number.isFinite(row.points) ? Number(row.points) : 0])
+  )
+  const selectedRolePoints = rolePointsById[selectedRole.id] ?? 0
+
+  const [manualAssignedRows, userAssignedRows] = await Promise.all([
+    PlayerManualRoleModel.find({ "roles.id": selectedRole.id })
+      .select("playerId")
+      .lean<Array<{ playerId: mongoose.Types.ObjectId }>>(),
+    UserModel.find({ "roles.id": selectedRole.id, playerId: { $ne: null } })
+      .select("playerId")
+      .lean<Array<{ playerId?: mongoose.Types.ObjectId | null }>>(),
+  ])
+
+  const assignedPlayerIds = new Set<string>()
+  for (const row of manualAssignedRows) assignedPlayerIds.add(String(row.playerId))
+  for (const row of userAssignedRows) {
+    if (row.playerId) assignedPlayerIds.add(String(row.playerId))
+  }
+
+  const assignedPlayersRaw = assignedPlayerIds.size
+    ? await PlayerModel.find({ _id: { $in: [...assignedPlayerIds].map((id) => new mongoose.Types.ObjectId(id)) } })
+      .select("_id player_id player_name country avatar")
+      .lean<Array<{ _id: mongoose.Types.ObjectId; player_id: number; player_name: string; country: string; avatar?: string }>>()
+    : []
+
+  const assignedPlayers: ProfileRoleManagerPlayer[] = assignedPlayersRaw
+    .map((player) => ({
+      playerObjectId: player._id.toString(),
+      playerId: Number(player.player_id),
+      playerName: player.player_name,
+      country: player.country,
+      avatar: player.avatar,
+      hasRole: true,
+    }))
+    .sort((a, b) => a.playerName.normalize("NFKC").localeCompare(b.playerName.normalize("NFKC"), "es", { sensitivity: "base" }))
+
+  const query = input?.query?.trim() ?? ""
+  if (!query) {
+    return {
+      availableRoles: sortedRoles,
+      selectedRole,
+      selectedRolePoints,
+      rolePointsById,
+      assignedPlayers,
+      searchQuery: "",
+      searchResults: assignedPlayers,
+    }
+  }
+
+  const safe = escapeRegex(query)
+  const regex = new RegExp(safe, "i")
+  const numeric = Number.parseInt(query, 10)
+
+  const searchRows = await PlayerModel.find({
+    $or: [
+      { player_name: { $regex: regex } },
+      ...(Number.isFinite(numeric) ? [{ player_id: numeric }] : []),
+    ],
+  })
+    .select("_id player_id player_name country avatar")
+    .lean<Array<{ _id: mongoose.Types.ObjectId; player_id: number; player_name: string; country: string; avatar?: string }>>()
+
+  const searchResults: ProfileRoleManagerPlayer[] = searchRows.map((player) => ({
+    playerObjectId: player._id.toString(),
+    playerId: Number(player.player_id),
+    playerName: player.player_name,
+    country: player.country,
+    avatar: player.avatar,
+    hasRole: assignedPlayerIds.has(player._id.toString()),
+  }))
+
+  return {
+    availableRoles: sortedRoles,
+    selectedRole,
+    selectedRolePoints,
+    rolePointsById,
+    assignedPlayers,
+    searchQuery: query,
+    searchResults,
+  }
+}
+
+export async function assignProfileRoleToPlayer(discordId: string, roleId: string, playerObjectId: string) {
+  await dbConnect()
+  const { availableRoles, canManage } = await getRoleManagerContext(discordId)
+  if (!canManage) {
+    throw new Error("You do not have permissions to manage roles.")
+  }
+
+  const role = availableRoles.find((entry) => entry.id === roleId)
+  if (!role) {
+    throw new Error("Role not found in Discord server roles.")
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(playerObjectId)) {
+    throw new Error("Invalid player id.")
+  }
+
+  await PlayerManualRoleModel.findOneAndUpdate(
+    { playerId: new mongoose.Types.ObjectId(playerObjectId) },
+    { $addToSet: { roles: role } },
+    { upsert: true }
+  )
+}
+
+export async function removeProfileRoleFromPlayer(discordId: string, roleId: string, playerObjectId: string) {
+  await dbConnect()
+  const { canManage } = await getManagerRoles(discordId)
+  if (!canManage) {
+    throw new Error("You do not have permissions to manage roles.")
+  }
+
+  if (!mongoose.Types.ObjectId.isValid(playerObjectId)) {
+    throw new Error("Invalid player id.")
+  }
+
+  await PlayerManualRoleModel.findOneAndUpdate(
+    { playerId: new mongoose.Types.ObjectId(playerObjectId) },
+    { $pull: { roles: { id: roleId } } }
+  )
+
+  await PlayerManualRoleModel.deleteMany({ roles: { $size: 0 } })
+}
+
+export async function setProfileRolePoints(discordId: string, roleId: string, points: number) {
+  await dbConnect()
+  const { availableRoles, canManage } = await getRoleManagerContext(discordId)
+  if (!canManage) {
+    throw new Error("You do not have permissions to manage roles.")
+  }
+
+  const role = availableRoles.find((entry) => entry.id === roleId)
+  if (!role) {
+    throw new Error("Role not found in Discord server roles.")
+  }
+
+  const normalizedPoints = Number.isFinite(points) ? Math.max(0, Math.trunc(points)) : 0
+  await ProfileRolePointsModel.findOneAndUpdate(
+    { roleId: role.id },
+    {
+      $set: {
+        roleName: role.name,
+        points: normalizedPoints,
+        updatedByDiscordId: discordId,
+      },
+    },
+    { upsert: true }
+  )
 }

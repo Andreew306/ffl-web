@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation"
+import Link from "next/link"
 import { getServerSession } from "next-auth"
 import { Coins, Crown, Users } from "lucide-react"
 import { authOptions, syncDiscordUser } from "@/lib/auth"
@@ -9,12 +10,14 @@ import FantasyLeagueHome from "@/components/fantasy/fantasy-league-home"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getFantasyLeagueDetail } from "@/lib/services/fantasy.service"
+import { kickFantasyMemberAction, leaveFantasyLeagueAction } from "@/app/fantasy/actions"
 
 type FantasyLeagueDetailPageProps = {
   params: Promise<{ leagueId: string }>
+  searchParams: Promise<{ tab?: string; userId?: string }>
 }
 
-export default async function FantasyLeagueDetailPage({ params }: FantasyLeagueDetailPageProps) {
+export default async function FantasyLeagueDetailPage({ params, searchParams }: FantasyLeagueDetailPageProps) {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.discordId) {
@@ -23,7 +26,10 @@ export default async function FantasyLeagueDetailPage({ params }: FantasyLeagueD
 
   await syncDiscordUser(session.user.discordId, session.user.image ?? null)
   const { leagueId } = await params
-  const league = await getFantasyLeagueDetail(session.user.discordId, leagueId)
+  const query = await searchParams
+  const activeTab = ["home", "market", "team", "table"].includes(String(query.tab)) ? String(query.tab) : "home"
+  const viewedUserId = typeof query.userId === "string" && query.userId.trim() ? query.userId : undefined
+  const league = await getFantasyLeagueDetail(session.user.discordId, leagueId, viewedUserId)
 
   if (!league) {
     notFound()
@@ -65,8 +71,22 @@ export default async function FantasyLeagueDetailPage({ params }: FantasyLeagueD
           </div>
         </section>
 
+        {league.role !== "owner" ? (
+          <section className="mt-4 flex justify-end">
+            <form action={leaveFantasyLeagueAction}>
+              <input type="hidden" name="leagueId" value={league.id} />
+              <button
+                type="submit"
+                className="rounded-xl border border-rose-300/30 bg-rose-500/15 px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-rose-100 transition hover:bg-rose-500/25"
+              >
+                Abandon League
+              </button>
+            </form>
+          </section>
+        ) : null}
+
         <section className="mt-10">
-          <Tabs defaultValue="home" className="gap-6">
+          <Tabs key={`${activeTab}:${viewedUserId ?? "self"}`} defaultValue={activeTab} className="gap-6">
             <TabsList className="h-auto w-full justify-start rounded-2xl border border-white/10 bg-slate-900/60 p-2">
               <TabsTrigger value="home" className="rounded-xl px-5 py-3 data-[state=active]:bg-slate-950 data-[state=active]:text-white">
                 Home
@@ -111,15 +131,32 @@ export default async function FantasyLeagueDetailPage({ params }: FantasyLeagueD
             </TabsContent>
 
             <TabsContent value="team">
+              {league.teamView.isReadOnly ? (
+                <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                  <span>Viewing {league.teamView.viewedTeamName} (read-only)</span>
+                  <Link
+                    href={`/fantasy/leagues/${league.id}?tab=team`}
+                    className="rounded-xl border border-cyan-200/30 bg-slate-950/60 px-3 py-1.5 text-xs uppercase tracking-[0.2em] text-white transition hover:border-cyan-200/60"
+                  >
+                    Back to my team
+                  </Link>
+                </div>
+              ) : null}
               {league.teamView.mode === "open" ? (
                 <FantasyOpenRosterBoard
                   leagueId={league.id}
                   currentWeek={league.teamView.currentWeek}
                   weeks={league.teamView.weeks}
                   availablePlayers={league.teamView.availablePlayers}
+                  readOnly={league.teamView.isReadOnly}
                 />
               ) : (
-                <FantasyRosterBoard leagueId={league.id} currentWeek={league.teamView.currentWeek} weeks={league.teamView.weeks} />
+                <FantasyRosterBoard
+                  leagueId={league.id}
+                  currentWeek={league.teamView.currentWeek}
+                  weeks={league.teamView.weeks}
+                  readOnly={league.teamView.isReadOnly}
+                />
               )}
             </TabsContent>
 
@@ -170,7 +207,12 @@ export default async function FantasyLeagueDetailPage({ params }: FantasyLeagueD
                           </div>
                         </div>
                         <div>
-                          <div className="font-semibold text-white">{entry.teamName}</div>
+                          <Link
+                            href={`/fantasy/leagues/${league.id}?tab=team&userId=${entry.userId}`}
+                            className="font-semibold text-white transition hover:text-cyan-200"
+                          >
+                            {entry.teamName}
+                          </Link>
                           <div className="mt-1 flex items-center gap-2 text-sm text-slate-400">
                             {entry.role === "owner" ? (
                               <span className="rounded-full border border-amber-300/30 bg-amber-400 p-1 text-slate-950">
@@ -180,7 +222,21 @@ export default async function FantasyLeagueDetailPage({ params }: FantasyLeagueD
                             <span>{entry.playerName ?? "Perfil sin jugador vinculado"}</span>
                           </div>
                         </div>
-                        <span className="text-right text-lg font-semibold text-white">{entry.points}</span>
+                        <div className="flex items-center justify-end gap-3">
+                          <span className="text-right text-lg font-semibold text-white">{entry.points}</span>
+                          {league.role === "owner" && entry.role !== "owner" ? (
+                            <form action={kickFantasyMemberAction}>
+                              <input type="hidden" name="leagueId" value={league.id} />
+                              <input type="hidden" name="memberUserId" value={entry.userId} />
+                              <button
+                                type="submit"
+                                className="rounded-lg border border-rose-300/30 bg-rose-500/15 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-rose-100 transition hover:bg-rose-500/25"
+                              >
+                                Kick
+                              </button>
+                            </form>
+                          ) : null}
+                        </div>
                       </div>
                     ))}
                   </div>

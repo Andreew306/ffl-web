@@ -38,6 +38,7 @@ type RosterPlayer = {
 type FantasyRosterBoardProps = {
   leagueId: string
   currentWeek: number
+  readOnly?: boolean
   weeks: Array<{
     week: number
     formation: string
@@ -274,7 +275,7 @@ function PlayerToken({
   )
 }
 
-export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: FantasyRosterBoardProps) {
+export default function FantasyRosterBoard({ leagueId, currentWeek, weeks, readOnly = false }: FantasyRosterBoardProps) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [selectedWeek, setSelectedWeek] = useState(
@@ -291,6 +292,7 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: Fan
 
   const roster = activeWeek?.roster ?? []
   const isEditableWeek = Boolean(activeWeek && activeWeek.week === currentWeek && !activeWeek.locked)
+  const canEditWeek = isEditableWeek && !readOnly
   const playersById = useMemo(() => new Map(roster.map((player) => [player.id, player])), [roster])
 
   const groupedPlayers = useMemo<Record<GroupKey, RosterPlayer[]>>(
@@ -327,8 +329,8 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: Fan
   const selectedPlayer = selectedPlayerId ? playersById.get(selectedPlayerId) ?? null : null
   const selectedGroup = selectedPlayer ? getPlayerGroup(selectedPlayer) : null
   const isSelectedStarter = Boolean(selectedPlayer && selectedPlayer.slot !== "BENCH")
-  const canBench = Boolean(selectedPlayer && selectedGroup && isSelectedStarter && benchByGroup[selectedGroup].length > 0 && isEditableWeek)
-  const canStart = Boolean(selectedPlayer && !isSelectedStarter && isEditableWeek)
+  const canBench = Boolean(selectedPlayer && selectedGroup && isSelectedStarter && benchByGroup[selectedGroup].length > 0 && canEditWeek)
+  const canStart = Boolean(selectedPlayer && !isSelectedStarter && canEditWeek)
 
   useEffect(() => {
     if (selectedPlayer) {
@@ -442,7 +444,7 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: Fan
             <ArrowRightLeft className="h-5 w-5 text-sky-300" />
             Bench
           </span>
-          <span>{isEditableWeek ? "Editable" : "Locked"}</span>
+          <span>{canEditWeek ? "Editable" : "Locked"}</span>
         </div>
 
         <div className="mt-5 grid min-h-[700px] gap-4 content-start sm:min-h-[760px]">
@@ -507,7 +509,7 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: Fan
               Week {activeWeek?.week} points: {selectedPlayer.weekPoints}
             </div>
 
-            {!isEditableWeek ? (
+            {!canEditWeek ? (
               <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">
                 Past weeks are locked. You can review this lineup but you cannot edit it.
               </div>
@@ -558,7 +560,7 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: Fan
                 </button>
               ) : null}
 
-              {isEditableWeek ? (
+              {canEditWeek ? (
                 selectedPlayer.isOnMarket ? (
                   <button
                     type="button"
@@ -603,7 +605,7 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks }: Fan
                 )
               ) : null}
 
-              {isEditableWeek ? (
+              {canEditWeek ? (
                 <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-4">
                   <div className="flex items-center gap-2 text-sm font-medium text-white">
                     <Shield className="h-4 w-4 text-cyan-200" />

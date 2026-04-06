@@ -144,6 +144,9 @@ export type FantasyLeagueDetail = DashboardLeague & {
   teamView: {
     mode: "market" | "open"
     currentWeek: number
+    viewedUserId: string
+    viewedTeamName: string
+    isReadOnly: boolean
     weeks: Array<{
       week: number
       formation: string
@@ -471,13 +474,26 @@ function inferFormationFromSlots(
   return `1-${counts.def}-${counts.mid}-${counts.att}`
 }
 
+function getMadridCalendarDate(value: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(value)
+
+  const year = Number(parts.find((part) => part.type === "year")?.value ?? "1970")
+  const month = Number(parts.find((part) => part.type === "month")?.value ?? "1")
+  const day = Number(parts.find((part) => part.type === "day")?.value ?? "1")
+  return { year, month, day }
+}
+
 function getFantasyWeekStart(date: Date) {
-  const local = new Date(date)
-  local.setHours(0, 0, 0, 0)
-  const day = local.getDay()
-  const diffToWednesday = (day + 4) % 7
-  local.setDate(local.getDate() - diffToWednesday)
-  return local
+  const madridDate = getMadridCalendarDate(date)
+  const startOfMadridDayUtc = new Date(Date.UTC(madridDate.year, madridDate.month - 1, madridDate.day))
+  const dayOfWeek = startOfMadridDayUtc.getUTCDay()
+  const diffToFriday = (dayOfWeek + 2) % 7
+  return new Date(startOfMadridDayUtc.getTime() - diffToFriday * 24 * 60 * 60 * 1000)
 }
 
 function getCurrentFantasyWeekNumber(startDate: Date, now = new Date()) {
@@ -2460,6 +2476,105 @@ export async function deleteFantasyLeagueForUser(discordId: string, leagueId: st
   ])
 }
 
+async function removeUserFromFantasyLeague(leagueId: mongoose.Types.ObjectId, userId: mongoose.Types.ObjectId) {
+  const rosterIds = await FantasyRosterModel.find({ leagueId, userId })
+    .select("_id")
+    .lean<Array<{ _id: mongoose.Types.ObjectId }>>()
+    .then((rows) => rows.map((row) => row._id))
+
+  await Promise.all([
+    FantasyBidModel.deleteMany({ leagueId, userId }),
+    FantasyRosterSlotModel.deleteMany({ leagueId, userId }),
+    FantasyRosterModel.deleteMany({ leagueId, userId }),
+    FantasyWeekLineupModel.deleteMany({ leagueId, userId }),
+    FantasyOpenWeekLineupModel.deleteMany({ leagueId, userId }),
+    FantasyWeekScoreModel.deleteMany({ leagueId, userId }),
+    FantasyWeekRewardModel.deleteMany({ leagueId, userId }),
+    FantasyProcessedStatModel.deleteMany({ leagueId, userId }),
+    FantasyClauseChangeModel.deleteMany({ leagueId, userId }),
+    FantasyClauseExecutionModel.deleteMany({
+      leagueId,
+      $or: [{ buyerUserId: userId }, { sellerUserId: userId }],
+    }),
+    FantasyLeagueMemberModel.deleteOne({ leagueId, userId }),
+    FantasyMarketDayModel.updateMany(
+      { leagueId },
+      {
+        $pull: {
+          listings: {
+            sellerUserId: userId,
+          },
+        },
+      }
+    ),
+  ])
+
+  if (rosterIds.length) {
+    await FantasyRosterSlotModel.deleteMany({ rosterId: { $in: rosterIds } })
+  }
+}
+
+export async function leaveFantasyLeagueForUser(discordId: string, leagueId: string) {
+  await dbConnect()
+
+  const user = await getUserByDiscordId(discordId)
+  const leagueObjectId = new mongoose.Types.ObjectId(leagueId)
+  const membership = await FantasyLeagueMemberModel.findOne({ leagueId: leagueObjectId, userId: user._id })
+    .select("role")
+    .lean<{ role: "owner" | "member" } | null>()
+
+  if (!membership) {
+    throw new Error("No perteneces a esta liga fantasy.")
+  }
+
+  if (membership.role === "owner") {
+    throw new Error("El owner no puede abandonar la liga. Borra la liga o expulsa a los miembros.")
+  }
+
+  await removeUserFromFantasyLeague(leagueObjectId, user._id)
+}
+
+export async function kickFantasyLeagueMemberForOwner(discordId: string, leagueId: string, memberUserId: string) {
+  await dbConnect()
+
+  const owner = await getUserByDiscordId(discordId)
+  const leagueObjectId = new mongoose.Types.ObjectId(leagueId)
+  const memberObjectId = new mongoose.Types.ObjectId(memberUserId)
+
+  const league = await FantasyLeagueModel.findById(leagueObjectId)
+    .select("ownerUserId")
+    .lean<{ ownerUserId: mongoose.Types.ObjectId } | null>()
+
+  if (!league) {
+    throw new Error("La liga fantasy no existe.")
+  }
+
+  if (league.ownerUserId.toString() !== owner._id.toString()) {
+    throw new Error("Solo el owner puede expulsar miembros.")
+  }
+
+  if (memberObjectId.toString() === owner._id.toString()) {
+    throw new Error("No puedes expulsarte a ti mismo.")
+  }
+
+  const membership = await FantasyLeagueMemberModel.findOne({
+    leagueId: leagueObjectId,
+    userId: memberObjectId,
+  })
+    .select("role")
+    .lean<{ role: "owner" | "member" } | null>()
+
+  if (!membership) {
+    throw new Error("El usuario ya no pertenece a esta liga.")
+  }
+
+  if (membership.role === "owner") {
+    throw new Error("No se puede expulsar al owner de la liga.")
+  }
+
+  await removeUserFromFantasyLeague(leagueObjectId, memberObjectId)
+}
+
 export async function placeFantasyBidForUser(
   discordId: string,
   leagueId: string,
@@ -3027,7 +3142,8 @@ export async function setFantasyOpenLineupPlayer(
 
 export async function getFantasyLeagueDetail(
   discordId: string,
-  leagueId: string
+  leagueId: string,
+  viewedUserId?: string
 ): Promise<FantasyLeagueDetail | null> {
   await dbConnect()
   const currentUser = await getUserByDiscordId(discordId)
@@ -3084,14 +3200,73 @@ export async function getFantasyLeagueDetail(
     .lean<{ competitionObjectId?: mongoose.Types.ObjectId | null; leagueType?: FantasyLeagueType | null } | null>()
 
   const membershipByUserId = new Map(members.map((member) => [member.userId.toString(), member.teamName]))
+  const viewedMember = viewedUserId
+    ? members.find((member) => member.userId.toString() === viewedUserId) ?? null
+    : null
+  const teamUserId = viewedMember?.userId ?? currentUser._id
+  const viewedTeamName = viewedMember?.teamName ?? league.teamName
+  const isReadOnlyTeamView = teamUserId.toString() !== currentUser._id.toString()
 
-  let enrichedRoster = league.roster
+  let baseRoster = league.roster
+  if (isReadOnlyTeamView) {
+    const viewedRosterSlots = await FantasyRosterSlotModel.find({
+      leagueId: new mongoose.Types.ObjectId(leagueId),
+      userId: teamUserId,
+    })
+      .select("playerObjectId player_id slot currentValue releaseClause acquiredBy isOnMarket")
+      .lean<Array<{
+        _id: mongoose.Types.ObjectId
+        playerObjectId: mongoose.Types.ObjectId
+        player_id: number
+        slot: "GK" | "DEF" | "MID" | "ATT" | "FLEX" | "BENCH"
+        currentValue: number
+        releaseClause: number
+        acquiredBy: "random" | "market" | "clausulazo"
+        isOnMarket?: boolean
+      }>>()
 
-  if (leagueDoc?.competitionObjectId && league.roster.length) {
+    const viewedPlayerIds = viewedRosterSlots.map((item) => item.playerObjectId)
+    const viewedPlayers = viewedPlayerIds.length
+      ? await PlayerModel.find({ _id: { $in: viewedPlayerIds } })
+          .select("_id player_id player_name country avatar")
+          .lean<Array<{
+            _id: mongoose.Types.ObjectId
+            player_id: number
+            player_name: string
+            country: string
+            avatar?: string
+          }>>()
+      : []
+
+    const viewedPlayerByObjectId = new Map(viewedPlayers.map((player) => [player._id.toString(), player]))
+    baseRoster = viewedRosterSlots
+      .map((slot) => {
+        const player = viewedPlayerByObjectId.get(slot.playerObjectId.toString())
+        if (!player) return null
+        return {
+          id: slot._id.toString(),
+          playerObjectId: slot.playerObjectId.toString(),
+          playerId: player.player_id,
+          playerName: player.player_name,
+          country: player.country,
+          avatar: player.avatar ?? undefined,
+          slot: slot.slot,
+          currentValue: slot.currentValue,
+          releaseClause: slot.releaseClause,
+          acquiredBy: slot.acquiredBy,
+          isOnMarket: slot.isOnMarket ?? false,
+        }
+      })
+      .filter((slot): slot is NonNullable<typeof slot> => Boolean(slot))
+  }
+
+  let enrichedRoster = baseRoster
+
+  if (leagueDoc?.competitionObjectId && baseRoster.length) {
     const rosterPrices = await FantasyPlayerPriceModel.find({
       fantasySeasonId: league.fantasySeasonId,
       competitionObjectId: leagueDoc.competitionObjectId,
-      playerObjectId: { $in: league.roster.map((item) => new mongoose.Types.ObjectId(item.playerObjectId)) },
+      playerObjectId: { $in: baseRoster.map((item) => new mongoose.Types.ObjectId(item.playerObjectId)) },
     })
       .select("playerObjectId price changePercent changeDirection")
       .lean<Array<{
@@ -3105,7 +3280,7 @@ export async function getFantasyLeagueDetail(
       rosterPrices.map((price) => [price.playerObjectId.toString(), price])
     )
 
-    const rosterPlayerIds = league.roster.map((item) => new mongoose.Types.ObjectId(item.playerObjectId))
+    const rosterPlayerIds = baseRoster.map((item) => new mongoose.Types.ObjectId(item.playerObjectId))
     const teamCompetitions = await TeamCompetitionModel.find({ competition_id: leagueDoc.competitionObjectId })
       .select("_id kits team_id")
       .lean<Array<{
@@ -3190,7 +3365,7 @@ export async function getFantasyLeagueDetail(
       })
     )
 
-    enrichedRoster = league.roster.map((item) => {
+    enrichedRoster = baseRoster.map((item) => {
       const bestCompetition = bestCompetitionByPlayer.get(item.playerObjectId)
       const visual = bestCompetition ? kitByTeamCompetitionId.get(bestCompetition.teamCompetitionId) : null
 
@@ -3289,7 +3464,7 @@ export async function getFantasyLeagueDetail(
 
     const sellingPlayerIds = new Set(
       marketDay.listings
-        .filter((listing) => listing.sellerUserId?.toString() === currentUser._id.toString())
+        .filter((listing) => listing.sellerUserId?.toString() === teamUserId.toString())
         .map((listing) => listing.playerObjectId.toString())
     )
 
@@ -3587,7 +3762,7 @@ export async function getFantasyLeagueDetail(
 
       const weekScores = await FantasyWeekScoreModel.find({
         leagueId: new mongoose.Types.ObjectId(leagueId),
-        userId: currentUser._id,
+        userId: teamUserId,
       })
         .select("week entries")
         .lean<Array<{
@@ -3606,7 +3781,7 @@ export async function getFantasyLeagueDetail(
       const playerById = new Map(availablePlayers.map((player) => [player.playerObjectId, player]))
       const openLineups = await FantasyOpenWeekLineupModel.find({
         leagueId: new mongoose.Types.ObjectId(leagueId),
-        userId: currentUser._id,
+        userId: teamUserId,
       })
         .select("week formation slots")
         .sort({ week: 1 })
@@ -3649,7 +3824,7 @@ export async function getFantasyLeagueDetail(
     } else {
     const currentLeagueLineups = await FantasyWeekLineupModel.find({
       leagueId: new mongoose.Types.ObjectId(leagueId),
-      userId: currentUser._id,
+      userId: teamUserId,
     })
       .select("week formation starters bench")
       .sort({ week: 1 })
@@ -3666,7 +3841,7 @@ export async function getFantasyLeagueDetail(
 
     const refreshedLineups = await FantasyWeekLineupModel.find({
       leagueId: new mongoose.Types.ObjectId(leagueId),
-      userId: currentUser._id,
+      userId: teamUserId,
     })
       .select("week formation starters bench")
       .sort({ week: 1 })
@@ -3679,7 +3854,7 @@ export async function getFantasyLeagueDetail(
 
     const weekScores = await FantasyWeekScoreModel.find({
       leagueId: new mongoose.Types.ObjectId(leagueId),
-      userId: currentUser._id,
+      userId: teamUserId,
     })
       .select("week entries")
       .lean<Array<{
@@ -3696,53 +3871,6 @@ export async function getFantasyLeagueDetail(
     }
 
     const enrichedRosterByPlayer = new Map(enrichedRoster.map((player) => [player.playerObjectId, player]))
-    const lineupPlayerObjectIds = [...new Set(
-      refreshedLineups.flatMap((lineup) => [...lineup.starters, ...lineup.bench].map((entry) => entry.playerObjectId.toString()))
-    )]
-    const missingLineupPlayerIds = lineupPlayerObjectIds.filter((id) => !enrichedRosterByPlayer.has(id))
-
-    if (missingLineupPlayerIds.length) {
-      const extraPlayers = await PlayerModel.find({ _id: { $in: missingLineupPlayerIds.map((id) => new mongoose.Types.ObjectId(id)) } })
-        .select("_id player_id player_name country avatar")
-        .lean<Array<{ _id: mongoose.Types.ObjectId; player_id: number; player_name: string; country: string; avatar?: string }>>()
-
-      const competitionVisuals = await getCompetitionCandidatePlayers(leagueDoc.competitionObjectId, [])
-      const visualByPlayerId = new Map(
-        competitionVisuals.map((player) => [
-          player._id.toString(),
-          {
-            position: player.position ?? null,
-            teamName: player.teamName,
-            teamImage: player.teamImage,
-            kitImage: player.kitImage,
-            kitTextColor: player.kitTextColor,
-          },
-        ])
-      )
-
-      for (const player of extraPlayers) {
-        const visuals = visualByPlayerId.get(player._id.toString())
-        enrichedRosterByPlayer.set(player._id.toString(), {
-          id: player._id.toString(),
-          playerObjectId: player._id.toString(),
-          playerId: player.player_id,
-          playerName: player.player_name,
-          country: player.country,
-          avatar: player.avatar ?? undefined,
-          slot: "BENCH",
-          position: visuals?.position ?? null,
-          teamName: visuals?.teamName ?? "",
-          teamImage: visuals?.teamImage ?? "",
-          kitImage: visuals?.kitImage ?? "",
-          kitTextColor: visuals?.kitTextColor ?? "",
-          currentValue: 0,
-          releaseClause: 0,
-          acquiredBy: "random",
-          isOnMarket: false,
-        })
-      }
-    }
-
     teamWeeks = refreshedLineups.map((lineup) => {
       const rosterView = [...lineup.starters, ...lineup.bench]
         .map((entry) => {
@@ -3779,6 +3907,9 @@ export async function getFantasyLeagueDetail(
     teamView: {
       mode: league.leagueType,
       currentWeek: teamCurrentWeek,
+      viewedUserId: teamUserId.toString(),
+      viewedTeamName,
+      isReadOnly: isReadOnlyTeamView,
       weeks: teamWeeks,
       availablePlayers,
     },

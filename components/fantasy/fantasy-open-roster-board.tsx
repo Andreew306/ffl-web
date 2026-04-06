@@ -42,6 +42,7 @@ type Props = {
   currentWeek: number
   weeks: OpenWeek[]
   availablePlayers: OpenPlayer[]
+  readOnly?: boolean
 }
 
 type FormationKey = "1-3-2-1" | "1-3-1-2" | "1-2-1-3" | "1-2-2-2" | "1-1-2-3" | "1-1-3-2"
@@ -206,7 +207,7 @@ function PlayerToken({
   )
 }
 
-export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, availablePlayers }: Props) {
+export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, availablePlayers, readOnly = false }: Props) {
   const [selectedWeek, setSelectedWeek] = useState(
     weeks.some((entry) => entry.week === currentWeek) ? currentWeek : (weeks[weeks.length - 1]?.week ?? currentWeek)
   )
@@ -278,7 +279,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
   }, [])
 
   async function updateFormation(nextFormation: FormationKey) {
-    if (!activeWeek || activeWeek.locked) return
+    if (!activeWeek || activeWeek.locked || readOnly) return
     setFormationOpen(false)
     startTransition(async () => {
       const result = await setFantasyOpenLineupFormationAction(leagueId, activeWeek.week, nextFormation)
@@ -289,7 +290,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
   }
 
   async function updateSlot(slotIndex: number, playerObjectId: string | null) {
-    if (!activeWeek || activeWeek.locked) return
+    if (!activeWeek || activeWeek.locked || readOnly) return
     startTransition(async () => {
       const result = await setFantasyOpenLineupPlayerAction(leagueId, activeWeek.week, slotIndex, playerObjectId)
       if (!result.ok) {
@@ -312,7 +313,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
           key={slotIndex}
           player={player}
           compact={compact}
-          onClick={activeWeek?.locked ? undefined : () => setSelectedSlotIndex(slotIndex)}
+          onClick={activeWeek?.locked || readOnly ? undefined : () => setSelectedSlotIndex(slotIndex)}
         />
       )
     }
@@ -321,7 +322,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
       <button
         key={slotIndex}
         type="button"
-        disabled={activeWeek?.locked || pending}
+        disabled={activeWeek?.locked || readOnly || pending}
         onClick={() => {
           setSelectedSlotIndex(slotIndex)
           setQuery("")
@@ -330,7 +331,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
         className={cn(
           "group flex flex-col items-center justify-center text-center transition",
           compact ? "gap-1" : "gap-2",
-          activeWeek?.locked ? "cursor-not-allowed opacity-55" : "hover:scale-[1.03]"
+          activeWeek?.locked || readOnly ? "cursor-not-allowed opacity-55" : "hover:scale-[1.03]"
         )}
       >
         <div
@@ -378,7 +379,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
               <div ref={formationRef} className="relative">
                 <button
                   type="button"
-                  disabled={activeWeek?.locked}
+                  disabled={activeWeek?.locked || readOnly}
                   onClick={() => setFormationOpen((value) => !value)}
                   className="flex items-center gap-3 rounded-full border border-cyan-300/20 bg-slate-950/85 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-cyan-100 shadow-[0_0_24px_rgba(34,211,238,0.08)] disabled:opacity-60"
                 >
@@ -463,7 +464,7 @@ export default function FantasyOpenRosterBoard({ leagueId, currentWeek, weeks, a
               <Search className="h-5 w-5 text-sky-300" />
               Lineup slots
             </span>
-            <span>{activeWeek?.locked ? "Locked" : "Editable"}</span>
+            <span>{activeWeek?.locked || readOnly ? "Locked" : "Editable"}</span>
           </div>
 
           <div className="mt-5 grid min-h-[700px] gap-4 content-start">
