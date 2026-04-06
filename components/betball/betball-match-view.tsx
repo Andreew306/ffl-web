@@ -3,11 +3,82 @@
 import { useMemo, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 import { BadgeDollarSign, Coins, Shield, Target, Trophy, Users } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { cn, getFlagBackgroundStyle, isImageUrl, shouldOverlayFlag } from "@/lib/utils"
-import type { BetBallAnalysisPlayer, BetBallMarketOption, BetBallMatchDetail } from "@/lib/services/betball.service"
+
+type BetBallMarketOption = {
+  id: string
+  token: string
+  label: string
+  description: string
+  odds: number
+  category:
+    | "result"
+    | "mercy"
+    | "goals"
+    | "exact-total-goals"
+    | "exact-score"
+    | "clean-sheet"
+    | "scorer"
+    | "btts"
+    | "first-scorer"
+    | "top-scorer"
+    | "player-goals"
+}
+
+type BetBallAnalysisPlayer = {
+  playerId: number
+  playerName: string
+  country?: string
+  avatar?: string
+  kitImage?: string
+  goals: number
+  assists: number
+  matchesPlayed: number
+  shotsOnGoal: number
+  avg: number
+  odds: number
+  assistOdds: number
+  goalOrAssistOdds: number
+}
+
+type BetBallMatchDetail = {
+  id: string
+  competitionLabel: string
+  week: number
+  matchdayLabel: string
+  date: string
+  team1Name: string
+  team1Image?: string
+  team2Name: string
+  team2Image?: string
+  analysis: {
+    projectedGoals: {
+      home: number
+      away: number
+    }
+    exactScoreHistory: {
+      sampleSize: number
+      frequencies: Record<string, number>
+    }
+    markets: {
+      result: BetBallMarketOption[]
+      mercy: BetBallMarketOption[]
+      goals: BetBallMarketOption[]
+      exactTotalGoals: BetBallMarketOption[]
+      bothTeamsToScore: BetBallMarketOption[]
+      cleanSheet: BetBallMarketOption[]
+      firstScorer: BetBallMarketOption[]
+      topScorer: BetBallMarketOption[]
+    }
+    teams: Array<{
+      topScorers: BetBallAnalysisPlayer[]
+    }>
+  }
+}
 
 type BetBallMatchViewProps = {
   match: BetBallMatchDetail
@@ -47,6 +118,28 @@ function toManualOdds(probability: number) {
   const safeProbability = Math.min(0.88, Math.max(0.0008, probability))
   const softenedProbability = Math.pow(safeProbability, 0.72)
   return Math.round(((1.08 / softenedProbability) * 0.25) * 100) / 100
+}
+
+function buildFirstScorerFallbackMarket(player: BetBallAnalysisPlayer): BetBallMarketOption {
+  return {
+    id: `first-scorer-${player.playerId}`,
+    token: "FG",
+    label: `${player.playerName} first scorer`,
+    description: "First goalscorer in the match",
+    odds: Math.round(player.odds * 1.28 * 100) / 100,
+    category: "first-scorer",
+  }
+}
+
+function buildTopScorerFallbackMarket(player: BetBallAnalysisPlayer): BetBallMarketOption {
+  return {
+    id: `top-scorer-${player.playerId}`,
+    token: "MG",
+    label: `${player.playerName} top scorer`,
+    description: "Most goals in the match",
+    odds: Math.round(player.odds * 1.55 * 100) / 100,
+    category: "top-scorer",
+  }
 }
 
 function FflCoin({ value }: { value: number }) {
@@ -110,20 +203,38 @@ function FlagBadge({ country, className }: { country?: string; className?: strin
 
 function PlayerChip({ player }: { player: BetBallAnalysisPlayer }) {
   const avatarIsImage = isImageUrl(player.avatar || "")
-  const avatarText = !avatarIsImage ? (player.avatar || "").trim() : ""
+  const avatarIsEmoji = Boolean(player.avatar && !avatarIsImage)
 
   return (
-    <div className="relative flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-slate-900/80 shadow-[0_10px_30px_rgba(2,6,23,0.45)]">
-      {player.kitImage ? (
-        <div className="absolute inset-0 rounded-full bg-cover bg-center" style={{ backgroundImage: `url(${player.kitImage})` }} />
-      ) : null}
-      {avatarIsImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={player.avatar} alt={player.playerName} className="relative z-10 h-7 w-7 rounded-full border border-slate-950/70 object-cover shadow-[0_4px_12px_rgba(2,6,23,0.4)]" />
-      ) : avatarText ? (
-        <span className="relative z-10 text-xl leading-none">{avatarText}</span>
-      ) : null}
-      <FlagBadge country={player.country} className="-bottom-1 -right-1 absolute h-5 w-5 rounded-full ring-2 ring-slate-950" />
+    <div className="relative h-14 w-14">
+      <div
+        className={cn(
+          "flex h-14 w-14 items-center justify-center rounded-full border border-slate-950/90 shadow-[0_10px_24px_rgba(2,6,23,0.45)]",
+          player.kitImage ? "bg-slate-900/80" : "bg-slate-900/80 ring-1 ring-white/10"
+        )}
+        style={
+          player.kitImage
+            ? {
+                backgroundImage: `url(${player.kitImage})`,
+                backgroundSize: "cover",
+                backgroundPosition: "center",
+              }
+            : undefined
+        }
+      >
+        {avatarIsImage && player.avatar ? (
+          <Image
+            src={player.avatar}
+            alt={player.playerName}
+            width={34}
+            height={34}
+            className="h-8 w-8 rounded-full object-cover"
+          />
+        ) : avatarIsEmoji ? (
+          <span className="text-lg leading-none">{player.avatar}</span>
+        ) : null}
+      </div>
+      <FlagBadge country={player.country} className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full ring-2 ring-slate-950" />
     </div>
   )
 }
@@ -177,11 +288,14 @@ function MarketCard({
 }
 
 export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
+  const router = useRouter()
   const [betCategory, setBetCategory] = useState<"match" | "goals" | "players" | "defence" | "summary">("match")
   const [selectedBets, setSelectedBets] = useState<BetBallMarketOption[]>([])
   const [stake, setStake] = useState("100")
   const [exactScoreHome, setExactScoreHome] = useState("1")
   const [exactScoreAway, setExactScoreAway] = useState("0")
+  const [isSubmittingSlip, setIsSubmittingSlip] = useState(false)
+  const [slipError, setSlipError] = useState("")
 
   const playerRows = useMemo(() => {
     const players = match.analysis.teams.flatMap((team) => team.topScorers)
@@ -240,6 +354,32 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
     return [...grouped.values()].sort((a, b) => Number(a.line) - Number(b.line))
   }, [match.analysis.markets.goals])
 
+  const firstScorerByPlayerId = useMemo(
+    () =>
+      new Map(
+        match.analysis.markets.firstScorer
+          .map((market) => {
+            const matchId = market.id.match(/-(\d+)$/)
+            return matchId ? [Number.parseInt(matchId[1], 10), market] : null
+          })
+          .filter((entry): entry is [number, BetBallMarketOption] => Boolean(entry))
+      ),
+    [match.analysis.markets.firstScorer]
+  )
+
+  const topScorerByPlayerId = useMemo(
+    () =>
+      new Map(
+        match.analysis.markets.topScorer
+          .map((market) => {
+            const matchId = market.id.match(/-(\d+)$/)
+            return matchId ? [Number.parseInt(matchId[1], 10), market] : null
+          })
+          .filter((entry): entry is [number, BetBallMarketOption] => Boolean(entry))
+      ),
+    [match.analysis.markets.topScorer]
+  )
+
   const toggleSelection = (market: BetBallMarketOption) => {
     setSelectedBets((current) => {
       const exists = current.some((item) => item.id === market.id)
@@ -258,6 +398,42 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
     }),
     [exactAwayValue, exactHomeValue, exactScoreOdds, match.team1Name, match.team2Name]
   )
+
+  const handlePrepareSlip = async () => {
+    if (!selectedBets.length || !canAfford || isSubmittingSlip) return
+    setSlipError("")
+    setIsSubmittingSlip(true)
+
+    try {
+      const response = await fetch("/api/betball/slips", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          matchId: match.id,
+          competitionLabel: match.competitionLabel,
+          matchLabel: `${match.team1Name} vs ${match.team2Name}`,
+          kickoffAt: match.date,
+          stake: numericStake,
+          selections: selectedBets,
+        }),
+      })
+
+      const payload = await response.json() as { ok?: boolean; slipId?: string; error?: string }
+      if (!response.ok || !payload.ok || !payload.slipId) {
+        setSlipError(payload.error || "The slip could not be prepared.")
+        return
+      }
+
+      router.push(`/betball?tab=my-bets&created=${encodeURIComponent(payload.slipId)}`)
+      router.refresh()
+    } catch {
+      setSlipError("The slip could not be prepared.")
+    } finally {
+      setIsSubmittingSlip(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -459,11 +635,13 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
                   <div className="mt-2 text-xl font-semibold text-white">Player - Goal or assist</div>
                 </div>
 
-                <div className="grid grid-cols-[minmax(0,1.7fr)_110px_110px_130px] gap-0 border-b border-white/10 px-5 py-3 text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
+                <div className="grid grid-cols-[minmax(0,1.7fr)_110px_110px_130px_130px_130px] gap-0 border-b border-white/10 px-5 py-3 text-xs font-medium uppercase tracking-[0.2em] text-slate-500">
                   <div>Player</div>
                   <div className="text-center">To score</div>
                   <div className="text-center">To assist</div>
                   <div className="text-center">Goal or assist</div>
+                  <div className="text-center">First scorer</div>
+                  <div className="text-center">Top scorer</div>
                 </div>
 
                 <div className="divide-y divide-white/10">
@@ -492,9 +670,13 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
                       odds: player.goalOrAssistOdds,
                       category: "scorer",
                     }
+                    const firstScorerMarket =
+                      firstScorerByPlayerId.get(player.playerId) ?? buildFirstScorerFallbackMarket(player)
+                    const topScorerMarket =
+                      topScorerByPlayerId.get(player.playerId) ?? buildTopScorerFallbackMarket(player)
 
                     return (
-                      <div key={player.playerId} className="grid grid-cols-[minmax(0,1.7fr)_110px_110px_130px] items-center gap-0 px-5 py-3">
+                      <div key={player.playerId} className="grid grid-cols-[minmax(0,1.7fr)_110px_110px_130px_130px_130px] items-center gap-0 px-5 py-3">
                         <div className="flex items-center gap-3 pr-3">
                           <PlayerChip player={player} />
                           <div className="min-w-0">
@@ -505,19 +687,21 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
                           </div>
                         </div>
 
-                        {[scoreMarket, assistMarket, goalOrAssistMarket].map((market, index) => (
+                        {[scoreMarket, assistMarket, goalOrAssistMarket, firstScorerMarket, topScorerMarket].map((market, index) => (
                           <button
-                            key={market.id ?? `${player.playerId}-${index}`}
+                            key={market?.id ?? `${player.playerId}-${index}`}
                             type="button"
-                            onClick={() => toggleSelection(market)}
+                            disabled={!market}
+                            onClick={() => market && toggleSelection(market)}
                             className={cn(
                               "mx-2 rounded-2xl border px-3 py-3 text-center transition",
-                              selectedIds.has(market.id)
+                              market && selectedIds.has(market.id)
                                 ? "border-cyan-300/40 bg-cyan-400/10 text-cyan-100"
-                                : "border-white/10 bg-slate-900/80 text-white hover:border-cyan-300/25 hover:bg-slate-900"
+                                : "border-white/10 bg-slate-900/80 text-white hover:border-cyan-300/25 hover:bg-slate-900",
+                              !market ? "cursor-not-allowed opacity-35" : ""
                             )}
                           >
-                            <div className="text-lg font-semibold">{market.odds.toFixed(2)}</div>
+                            <div className="text-lg font-semibold">{market ? market.odds.toFixed(2) : "-"}</div>
                           </button>
                         ))}
                       </div>
@@ -588,12 +772,18 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
                     <div className="mt-6">
                       <Button
                         type="button"
-                        disabled={!canAfford}
+                        disabled={!canAfford || isSubmittingSlip}
+                        onClick={handlePrepareSlip}
                         className="w-full bg-sky-400 text-slate-950 hover:bg-sky-300 disabled:cursor-not-allowed disabled:bg-sky-400/40"
                       >
-                        Prepare slip
+                        {isSubmittingSlip ? "Preparing..." : "Prepare slip"}
                       </Button>
                     </div>
+                    {slipError ? (
+                      <div className="mt-4 rounded-[20px] border border-rose-300/20 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+                        {slipError}
+                      </div>
+                    ) : null}
                   </>
                 ) : (
                   <div className="mt-5 rounded-[20px] border border-dashed border-white/10 px-4 py-10 text-center text-sm text-slate-500">

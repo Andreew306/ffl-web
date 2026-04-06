@@ -2,9 +2,12 @@ import mongoose from "mongoose"
 import { unstable_cache } from "next/cache"
 import dbConnect from "@/lib/db/mongoose"
 import CompetitionModel from "@/lib/models/Competition"
+import GoalModel from "@/lib/models/Goal"
 import MatchModel from "@/lib/models/Match"
+import BetBallSlipModel from "@/lib/models/BetBallSlip"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 import TeamModel from "@/lib/models/Team"
+import UserModel from "@/lib/models/User"
 import { normalizeTeamImageUrl } from "@/lib/utils"
 
 export type BetBallOdds = {
@@ -48,6 +51,35 @@ export type BetBallCompetition = {
   season: number
   division: number | null
   weeks: BetBallWeek[]
+}
+
+export type BetBallUserSlip = {
+  id: string
+  matchId: string
+  matchLabel: string
+  competitionLabel: string
+  kickoffAt: string
+  createdAt: string
+  selectionCount: number
+  stake: number
+  combinedOdds: number
+  potentialReturn: number
+  payout: number
+  status: "pending" | "won" | "lost" | "void"
+  selections: BetBallMarketOption[]
+}
+
+export type BetBallUserSnapshot = {
+  fflCoins: number
+  myBets: BetBallUserSlip[]
+}
+
+export type BetBallSettlementResult = {
+  checkedMatches: number
+  settledSlips: number
+  wonSlips: number
+  lostSlips: number
+  skippedSlips: number
 }
 
 export type BetBallMatchDetail = {
@@ -112,6 +144,15 @@ export type BetBallMarketOption = {
     | "first-scorer"
     | "top-scorer"
     | "player-goals"
+}
+
+export type PlaceBetBallSlipInput = {
+  matchId: string
+  competitionLabel: string
+  matchLabel: string
+  kickoffAt?: string
+  selections: BetBallMarketOption[]
+  stake: number
 }
 
 export type BetBallAnalysisPlayer = {
@@ -237,6 +278,21 @@ function getNumericValue<T extends Record<string, unknown>>(row: T | null | unde
     if (typeof value === "number" && Number.isFinite(value)) return value
   }
   return 0
+}
+
+function pickKitImage(kits?: Array<string | { image?: string | null } | null> | null) {
+  if (!Array.isArray(kits)) return ""
+  for (const entry of kits) {
+    if (!entry) continue
+    if (typeof entry === "string") {
+      const normalized = normalizeTeamImageUrl(entry)
+      if (normalized) return normalized
+      continue
+    }
+    const normalized = normalizeTeamImageUrl(entry.image ?? "")
+    if (normalized) return normalized
+  }
+  return ""
 }
 
 function buildTotalGoalsMarkets(homeTeam: TeamSummary | null, awayTeam: TeamSummary | null): BetBallMarketOption[] {
@@ -392,10 +448,9 @@ function buildCombinedScorerMarkets(home: BetBallAnalysisTeam, away: BetBallAnal
       if (b.player.shotsOnGoal !== a.player.shotsOnGoal) return b.player.shotsOnGoal - a.player.shotsOnGoal
       return b.player.avg - a.player.avg
     })
-    .slice(0, 8)
 
   return {
-    firstScorer: ranked.slice(0, 6).map(({ player, teamName, baseOdds }) => ({
+    firstScorer: ranked.map(({ player, teamName, baseOdds }) => ({
       id: `first-scorer-${player.playerId}`,
       token: "FG",
       label: `${player.playerName} first scorer`,
@@ -403,7 +458,7 @@ function buildCombinedScorerMarkets(home: BetBallAnalysisTeam, away: BetBallAnal
       odds: Math.round(baseOdds * 1.28 * 100) / 100,
       category: "first-scorer" as const,
     })),
-    topScorer: ranked.slice(0, 6).map(({ player, teamName, baseOdds }) => ({
+    topScorer: ranked.map(({ player, teamName, baseOdds }) => ({
       id: `top-scorer-${player.playerId}`,
       token: "MG",
       label: `${player.playerName} top scorer`,
@@ -411,7 +466,7 @@ function buildCombinedScorerMarkets(home: BetBallAnalysisTeam, away: BetBallAnal
       odds: Math.round(baseOdds * 1.55 * 100) / 100,
       category: "top-scorer" as const,
     })),
-    anytimeScorer: ranked.slice(0, 8).map(({ player, teamName, baseOdds }) => ({
+    anytimeScorer: ranked.map(({ player, teamName, baseOdds }) => ({
       id: `anytime-scorer-${player.playerId}`,
       token: "AG",
       label: `${player.playerName} to score`,
@@ -419,7 +474,7 @@ function buildCombinedScorerMarkets(home: BetBallAnalysisTeam, away: BetBallAnal
       odds: baseOdds,
       category: "scorer" as const,
     })),
-    anytimeAssist: ranked.slice(0, 8).map(({ player, teamName }) => ({
+    anytimeAssist: ranked.map(({ player, teamName }) => ({
       id: `anytime-assist-${player.playerId}`,
       token: "AS",
       label: `${player.playerName} to assist`,
@@ -427,7 +482,7 @@ function buildCombinedScorerMarkets(home: BetBallAnalysisTeam, away: BetBallAnal
       odds: player.assistOdds,
       category: "scorer" as const,
     })),
-    goalOrAssist: ranked.slice(0, 8).map(({ player, teamName }) => ({
+    goalOrAssist: ranked.map(({ player, teamName }) => ({
       id: `goal-assist-${player.playerId}`,
       token: "G/A",
       label: `${player.playerName} goal or assist`,
@@ -435,7 +490,7 @@ function buildCombinedScorerMarkets(home: BetBallAnalysisTeam, away: BetBallAnal
       odds: player.goalOrAssistOdds,
       category: "scorer" as const,
     })),
-    playerGoalLines: ranked.slice(0, 6).flatMap(({ player, teamName, baseOdds }) => ([
+    playerGoalLines: ranked.flatMap(({ player, teamName, baseOdds }) => ([
       {
         id: `player-over-${player.playerId}`,
         token: "O0.5",
@@ -552,6 +607,8 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
           goals_conceded: 1,
           possession_avg: 1,
           shots_on_goal: 1,
+          kits: 1,
+          textColor: 1,
         },
       }
     )
@@ -565,6 +622,8 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
       goals_conceded?: number
       possession_avg?: number
       shots_on_goal?: number
+      kits?: Array<string | { image?: string | null } | null> | null
+      textColor?: string
     }>
 
   const rawTeamIds = [...new Set(
@@ -616,6 +675,8 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
         {
           teamName: team?.team_name ?? "Unknown team",
           teamImage: normalizeTeamImageUrl(team?.image),
+          teamKit: pickKitImage(item.kits),
+          teamKitTextColor: item.textColor ?? "",
           strength: getCompetitionStrength(item),
         },
       ]
@@ -787,6 +848,8 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
           possession_avg: 1,
           shots_on_goal: 1,
           cs: 1,
+          kits: 1,
+          textColor: 1,
         },
       }
     )
@@ -799,6 +862,8 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
       goals_conceded?: number
       possession_avg?: number
       shots_on_goal?: number
+      kits?: Array<string | { image?: string | null } | null> | null
+      textColor?: string
     }>
 
   const currentSeason = Number(competition?.season ?? 0)
@@ -830,6 +895,8 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
               possession_avg: 1,
               shots_on_goal: 1,
               cs: 1,
+              kits: 1,
+              textColor: 1,
             },
           }
         )
@@ -847,6 +914,8 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
           possession_avg?: number
           shots_on_goal?: number
           cs?: number
+          kits?: Array<string | { image?: string | null } | null> | null
+          textColor?: string
         }>
     : []
 
@@ -915,8 +984,8 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
         {
           teamName: team?.team_name ?? "Unknown team",
           teamImage: normalizeTeamImageUrl(team?.image),
-          teamKit: team?.kits?.[0] ?? "",
-          teamKitTextColor: team?.textColor ?? "",
+          teamKit: pickKitImage(item.kits),
+          teamKitTextColor: item.textColor ?? "",
           strength: getCompetitionStrength(item),
           stats: {
             pointsPerMatch: Number(item.points ?? 0) / matchesPlayed,
@@ -1477,5 +1546,508 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
       },
       teams: [homeAnalysis, awayAnalysis],
     },
+  }
+}
+
+export async function getBetBallUserSnapshot(discordId?: string | null): Promise<BetBallUserSnapshot> {
+  await dbConnect()
+
+  if (!discordId) {
+    return { fflCoins: 0, myBets: [] }
+  }
+
+  const user = await UserModel.findOne({ discordId })
+    .select("_id betballCoins")
+    .lean<{ _id: mongoose.Types.ObjectId; betballCoins?: number } | null>()
+
+  if (!user?._id) {
+    return { fflCoins: 0, myBets: [] }
+  }
+
+  const slips = await BetBallSlipModel.find({ userId: user._id })
+    .sort({ createdAt: -1 })
+    .lean<Array<{
+      _id: mongoose.Types.ObjectId
+      matchId: mongoose.Types.ObjectId
+      matchLabel: string
+      competitionLabel: string
+      kickoffAt?: Date | null
+      createdAt: Date
+      selectionCount: number
+      stake: number
+      combinedOdds: number
+      potentialReturn: number
+      payout?: number
+      status: "pending" | "won" | "lost" | "void"
+      selections: Array<{
+        marketId: string
+        token: string
+        label: string
+        description: string
+        odds: number
+        category: BetBallMarketOption["category"]
+      }>
+    }>>()
+
+  return {
+    fflCoins: Number(user.betballCoins ?? 0),
+    myBets: slips.map((slip) => ({
+      id: slip._id.toString(),
+      matchId: slip.matchId.toString(),
+      matchLabel: slip.matchLabel,
+      competitionLabel: slip.competitionLabel,
+      kickoffAt: slip.kickoffAt ? slip.kickoffAt.toISOString() : "",
+      createdAt: slip.createdAt.toISOString(),
+      selectionCount: Number(slip.selectionCount ?? slip.selections.length),
+      stake: Number(slip.stake ?? 0),
+      combinedOdds: Number(slip.combinedOdds ?? 0),
+      potentialReturn: Number(slip.potentialReturn ?? 0),
+      payout: Number(slip.payout ?? 0),
+      status: slip.status ?? "pending",
+      selections: (slip.selections ?? []).map((selection) => ({
+        id: selection.marketId,
+        token: selection.token,
+        label: selection.label,
+        description: selection.description,
+        odds: Number(selection.odds ?? 0),
+        category: selection.category,
+      })),
+    })),
+  }
+}
+
+export async function placeBetBallSlipForUser(discordId: string, input: PlaceBetBallSlipInput) {
+  await dbConnect()
+
+  const user = await UserModel.findOne({ discordId })
+    .select("_id betballCoins")
+    .lean<{ _id: mongoose.Types.ObjectId; betballCoins?: number } | null>()
+
+  if (!user?._id) {
+    throw new Error("You need to sign in with Discord to use BetBall.")
+  }
+
+  const matchObjectId = new mongoose.Types.ObjectId(input.matchId)
+  const matchExists = await MatchModel.exists({ _id: matchObjectId })
+  if (!matchExists) {
+    throw new Error("Match not found.")
+  }
+
+  const selections = (input.selections ?? []).filter((selection) => (
+    selection
+    && typeof selection.id === "string"
+    && typeof selection.label === "string"
+    && typeof selection.description === "string"
+    && typeof selection.token === "string"
+    && typeof selection.category === "string"
+    && Number.isFinite(Number(selection.odds))
+  ))
+
+  if (!selections.length) {
+    throw new Error("Select at least one market.")
+  }
+
+  const uniqueSelections = new Map(selections.map((selection) => [selection.id, { ...selection, odds: Number(selection.odds) }]))
+  const normalizedSelections = [...uniqueSelections.values()]
+  const stake = Math.floor(Number(input.stake ?? 0))
+  if (!Number.isFinite(stake) || stake <= 0) {
+    throw new Error("Stake must be greater than 0.")
+  }
+
+  const coins = Number(user.betballCoins ?? 0)
+  if (stake > coins) {
+    throw new Error("You do not have enough FFL Coins for this bet.")
+  }
+
+  const combinedOdds = Math.round(normalizedSelections.reduce((acc, selection) => acc * selection.odds, 1) * 100) / 100
+  const potentialReturn = Math.round(stake * combinedOdds * 100) / 100
+
+  const slip = await BetBallSlipModel.create({
+    userId: user._id,
+    discordId,
+    matchId: matchObjectId,
+    matchLabel: input.matchLabel,
+    competitionLabel: input.competitionLabel,
+    kickoffAt: input.kickoffAt ? new Date(input.kickoffAt) : null,
+    selections: normalizedSelections.map((selection) => ({
+      marketId: selection.id,
+      token: selection.token,
+      label: selection.label,
+      description: selection.description,
+      odds: selection.odds,
+      category: selection.category,
+    })),
+    selectionCount: normalizedSelections.length,
+    stake,
+    combinedOdds,
+    potentialReturn,
+    payout: 0,
+    status: "pending",
+  })
+
+  await UserModel.updateOne({ _id: user._id }, { $inc: { betballCoins: -stake } })
+
+  return {
+    slipId: slip._id.toString(),
+    remainingCoins: coins - stake,
+  }
+}
+
+function parsePlayerIdFromMarketId(marketId: string) {
+  const match = marketId.match(/-(\d+)$/)
+  return match ? Number.parseInt(match[1], 10) : null
+}
+
+function parseLineFromToken(token: string) {
+  const raw = token.slice(1)
+  const numeric = Number(raw)
+  return Number.isFinite(numeric) ? numeric : null
+}
+
+function parseExactScoreToken(token: string) {
+  const match = token.match(/^(\d+)-(\d+)$/)
+  if (!match) return null
+  return {
+    home: Number.parseInt(match[1], 10),
+    away: Number.parseInt(match[2], 10),
+  }
+}
+
+type BetBallMatchSettlementContext = {
+  homeScore: number
+  awayScore: number
+  totalGoals: number
+  firstScorerPlayerId: number | null
+  topScorerPlayerIds: Set<number>
+  playerStatsByPlayerId: Map<number, { goals: number; assists: number }>
+}
+
+function evaluateBetBallSelection(
+  selection: {
+    marketId: string
+    token: string
+    category: BetBallMarketOption["category"]
+  },
+  context: BetBallMatchSettlementContext
+) {
+  switch (selection.category) {
+    case "result":
+      if (selection.marketId === "result-home") return context.homeScore > context.awayScore
+      if (selection.marketId === "result-draw") return context.homeScore === context.awayScore
+      if (selection.marketId === "result-away") return context.homeScore < context.awayScore
+      return null
+    case "mercy":
+      if (selection.marketId === "mercy-home") return context.homeScore - context.awayScore >= 7
+      if (selection.marketId === "mercy-away") return context.awayScore - context.homeScore >= 7
+      return null
+    case "btts":
+      if (selection.marketId === "btts-yes") return context.homeScore > 0 && context.awayScore > 0
+      if (selection.marketId === "btts-no") return context.homeScore === 0 || context.awayScore === 0
+      return null
+    case "clean-sheet":
+      if (selection.marketId === "clean-sheet-home") return context.awayScore === 0
+      if (selection.marketId === "clean-sheet-away") return context.homeScore === 0
+      return null
+    case "goals": {
+      const line = parseLineFromToken(selection.token)
+      if (line === null) return null
+      if (selection.token.startsWith("O")) return context.totalGoals > line
+      if (selection.token.startsWith("U")) return context.totalGoals < line
+      return null
+    }
+    case "exact-total-goals": {
+      const match = selection.token.match(/^T(\d+)$/)
+      if (!match) return null
+      return context.totalGoals === Number.parseInt(match[1], 10)
+    }
+    case "exact-score": {
+      const score = parseExactScoreToken(selection.token)
+      if (!score) return null
+      return context.homeScore === score.home && context.awayScore === score.away
+    }
+    case "scorer": {
+      const playerId = parsePlayerIdFromMarketId(selection.marketId)
+      if (!playerId) return null
+      const stats = context.playerStatsByPlayerId.get(playerId) ?? { goals: 0, assists: 0 }
+      if (selection.marketId.startsWith("anytime-scorer-")) return stats.goals > 0
+      if (selection.marketId.startsWith("anytime-assist-")) return stats.assists > 0
+      if (selection.marketId.startsWith("goal-assist-")) return stats.goals + stats.assists > 0
+      return null
+    }
+    case "player-goals": {
+      const playerId = parsePlayerIdFromMarketId(selection.marketId)
+      if (!playerId) return null
+      const stats = context.playerStatsByPlayerId.get(playerId) ?? { goals: 0, assists: 0 }
+      if (selection.marketId.startsWith("player-over-")) return stats.goals > 0
+      if (selection.marketId.startsWith("player-under-")) return stats.goals === 0
+      return null
+    }
+    case "top-scorer": {
+      const playerId = parsePlayerIdFromMarketId(selection.marketId)
+      if (!playerId) return null
+      return context.topScorerPlayerIds.has(playerId)
+    }
+    case "first-scorer": {
+      const playerId = parsePlayerIdFromMarketId(selection.marketId)
+      if (!playerId) return null
+      return context.firstScorerPlayerId === playerId
+    }
+    default:
+      return null
+  }
+}
+
+export async function settlePendingBetBallSlips(now = new Date()): Promise<BetBallSettlementResult> {
+  await dbConnect()
+
+  const pendingSlips = await BetBallSlipModel.find({ status: "pending" })
+    .sort({ createdAt: 1 })
+    .lean<Array<{
+      _id: mongoose.Types.ObjectId
+      userId: mongoose.Types.ObjectId
+      matchId: mongoose.Types.ObjectId
+      stake: number
+      potentialReturn: number
+      selections: Array<{
+        marketId: string
+        token: string
+        category: BetBallMarketOption["category"]
+      }>
+    }>>()
+
+  if (!pendingSlips.length) {
+    return { checkedMatches: 0, settledSlips: 0, wonSlips: 0, lostSlips: 0, skippedSlips: 0 }
+  }
+
+  const matchObjectIds = [...new Set(pendingSlips.map((slip) => slip.matchId.toString()))].map((id) => new mongoose.Types.ObjectId(id))
+  const rawMatches = await MatchModel.collection
+    .find(
+      { _id: { $in: matchObjectIds } },
+      { projection: { _id: 1, date: 1, score_team1: 1, score_team2: 1 } }
+    )
+    .toArray() as Array<{
+      _id: mongoose.Types.ObjectId
+      date?: Date | string | null
+      score_team1?: number
+      score_team2?: number
+    }>
+
+  const matchById = new Map(rawMatches.map((match) => [match._id.toString(), match]))
+  const dueMatches = rawMatches.filter((match) => {
+    const date = match.date ? new Date(match.date) : null
+    return Boolean(date && Number.isFinite(date.getTime()) && date.getTime() <= now.getTime())
+  })
+
+  if (!dueMatches.length) {
+    return { checkedMatches: 0, settledSlips: 0, wonSlips: 0, lostSlips: 0, skippedSlips: pendingSlips.length }
+  }
+
+  const dueMatchIds = dueMatches.map((match) => match._id)
+  const rawPlayerStats = await MatchModel.db.collection("playermatchstats")
+    .find(
+      { match_id: { $in: dueMatchIds } },
+      {
+        projection: {
+          match_id: 1,
+          player_competition_id: 1,
+          goals: 1,
+          assists: 1,
+        },
+      }
+    )
+    .toArray() as Array<{
+      match_id?: mongoose.Types.ObjectId
+      player_competition_id?: mongoose.Types.ObjectId
+      goals?: number
+      assists?: number
+    }>
+
+  const rawGoals = await GoalModel.collection
+    .find(
+      { match_id: { $in: dueMatchIds } },
+      { projection: { match_id: 1, scorer_id: 1, minute: 1 } }
+    )
+    .sort({ minute: 1, createdAt: 1 })
+    .toArray() as Array<{
+      match_id?: mongoose.Types.ObjectId
+      scorer_id?: mongoose.Types.ObjectId
+      minute?: number
+    }>
+
+  const playerCompetitionIds = Array.from(
+    new Set([
+      ...rawPlayerStats.map((row) => row.player_competition_id?.toString()).filter((value): value is string => Boolean(value)),
+      ...rawGoals.map((row) => row.scorer_id?.toString()).filter((value): value is string => Boolean(value)),
+    ])
+  ).map((id) => new mongoose.Types.ObjectId(id))
+
+  const rawPlayerCompetitions = playerCompetitionIds.length
+    ? await MatchModel.db.collection("playercompetitions")
+        .find(
+          { _id: { $in: playerCompetitionIds } },
+          { projection: { _id: 1, player_id: 1 } }
+        )
+        .toArray() as Array<{
+          _id: mongoose.Types.ObjectId
+          player_id?: mongoose.Types.ObjectId
+        }>
+    : []
+
+  const playerObjectIds = Array.from(
+    new Set(
+      rawPlayerCompetitions
+        .map((row) => row.player_id?.toString())
+        .filter((value): value is string => Boolean(value))
+    )
+  ).map((id) => new mongoose.Types.ObjectId(id))
+
+  const rawPlayers = playerObjectIds.length
+    ? await MatchModel.db.collection("players")
+        .find(
+          { _id: { $in: playerObjectIds } },
+          { projection: { _id: 1, player_id: 1 } }
+        )
+        .toArray() as Array<{
+          _id: mongoose.Types.ObjectId
+          player_id?: number
+        }>
+    : []
+
+  const numericPlayerIdByObjectId = new Map(
+    rawPlayers.map((player) => [player._id.toString(), Number(player.player_id ?? 0)])
+  )
+  const numericPlayerIdByPlayerCompetitionId = new Map(
+    rawPlayerCompetitions.map((row) => [row._id.toString(), Number(row.player_id ? numericPlayerIdByObjectId.get(row.player_id.toString()) ?? 0 : 0)])
+  )
+
+  const contextByMatchId = new Map<string, BetBallMatchSettlementContext>()
+
+  for (const match of dueMatches) {
+    const matchId = match._id.toString()
+    const playerStatsForMatch = rawPlayerStats.filter((row) => row.match_id?.toString() === matchId)
+    const goalsForMatch = rawGoals.filter((row) => row.match_id?.toString() === matchId)
+
+    const playerStatsByPlayerId = new Map<number, { goals: number; assists: number }>()
+    for (const row of playerStatsForMatch) {
+      const playerCompetitionId = row.player_competition_id?.toString()
+      if (!playerCompetitionId) continue
+      const numericPlayerId = numericPlayerIdByPlayerCompetitionId.get(playerCompetitionId)
+      if (!numericPlayerId) continue
+      const bucket = playerStatsByPlayerId.get(numericPlayerId) ?? { goals: 0, assists: 0 }
+      bucket.goals += Number(row.goals ?? 0)
+      bucket.assists += Number(row.assists ?? 0)
+      playerStatsByPlayerId.set(numericPlayerId, bucket)
+    }
+
+    const maxGoals = [...playerStatsByPlayerId.values()].reduce((max, stats) => Math.max(max, stats.goals), 0)
+    const topScorerPlayerIds = new Set<number>(
+      maxGoals > 0
+        ? [...playerStatsByPlayerId.entries()]
+            .filter(([, stats]) => stats.goals === maxGoals)
+            .map(([playerId]) => playerId)
+        : []
+    )
+
+    const firstGoal = goalsForMatch[0]
+    const firstScorerPlayerId = firstGoal?.scorer_id
+      ? numericPlayerIdByPlayerCompetitionId.get(firstGoal.scorer_id.toString()) ?? null
+      : null
+
+    contextByMatchId.set(matchId, {
+      homeScore: Number(match.score_team1 ?? 0),
+      awayScore: Number(match.score_team2 ?? 0),
+      totalGoals: Number(match.score_team1 ?? 0) + Number(match.score_team2 ?? 0),
+      firstScorerPlayerId,
+      topScorerPlayerIds,
+      playerStatsByPlayerId,
+    })
+  }
+
+  let settledSlips = 0
+  let wonSlips = 0
+  let lostSlips = 0
+  let skippedSlips = 0
+
+  for (const slip of pendingSlips) {
+    const match = matchById.get(slip.matchId.toString())
+    const matchDate = match?.date ? new Date(match.date) : null
+    if (!matchDate || !Number.isFinite(matchDate.getTime()) || matchDate.getTime() > now.getTime()) {
+      skippedSlips += 1
+      continue
+    }
+
+    const context = contextByMatchId.get(slip.matchId.toString())
+    if (!context) {
+      skippedSlips += 1
+      continue
+    }
+
+    let unresolved = false
+    let hasLoss = false
+    for (const selection of slip.selections) {
+      if (
+        (selection.category === "scorer" || selection.category === "player-goals" || selection.category === "top-scorer")
+        && context.playerStatsByPlayerId.size === 0
+      ) {
+        unresolved = true
+        break
+      }
+      if (selection.category === "first-scorer" && context.totalGoals > 0 && context.firstScorerPlayerId === null) {
+        unresolved = true
+        break
+      }
+
+      const won = evaluateBetBallSelection(selection, context)
+      if (won === null) {
+        unresolved = true
+        break
+      }
+      if (!won) {
+        hasLoss = true
+        break
+      }
+    }
+
+    if (unresolved) {
+      skippedSlips += 1
+      continue
+    }
+
+    if (hasLoss) {
+      const loseResult = await BetBallSlipModel.updateOne(
+        { _id: slip._id, status: "pending" },
+        { $set: { status: "lost", payout: 0, settledAt: now } }
+      )
+      if (!loseResult.modifiedCount) {
+        skippedSlips += 1
+        continue
+      }
+      settledSlips += 1
+      lostSlips += 1
+      continue
+    }
+
+    const winResult = await BetBallSlipModel.updateOne(
+      { _id: slip._id, status: "pending" },
+      { $set: { status: "won", payout: Number(slip.potentialReturn ?? 0), settledAt: now } }
+    )
+    if (!winResult.modifiedCount) {
+      skippedSlips += 1
+      continue
+    }
+    await UserModel.updateOne(
+      { _id: slip.userId },
+      { $inc: { betballCoins: Number(slip.potentialReturn ?? 0) } }
+    )
+    settledSlips += 1
+    wonSlips += 1
+  }
+
+  return {
+    checkedMatches: dueMatches.length,
+    settledSlips,
+    wonSlips,
+    lostSlips,
+    skippedSlips,
   }
 }
