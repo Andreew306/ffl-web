@@ -4,6 +4,7 @@ import dbConnect from "@/lib/db/mongoose"
 import CompetitionModel from "@/lib/models/Competition"
 import GoalModel from "@/lib/models/Goal"
 import MatchModel from "@/lib/models/Match"
+import BetBallMatchStateModel from "@/lib/models/BetBallMatchState"
 import BetBallSlipModel from "@/lib/models/BetBallSlip"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 import TeamModel from "@/lib/models/Team"
@@ -30,6 +31,8 @@ export type BetBallMatch = {
   scoreTeam1: number
   scoreTeam2: number
   comments: string
+  finished: boolean
+  bettingClosed: boolean
   odds: BetBallOdds
 }
 
@@ -65,6 +68,8 @@ export type BetBallUserSlip = {
   combinedOdds: number
   potentialReturn: number
   payout: number
+  voidReason?: string
+  canOpenMatch: boolean
   status: "pending" | "won" | "lost" | "void"
   selections: BetBallMarketOption[]
 }
@@ -97,6 +102,8 @@ export type BetBallMatchDetail = {
   team2Image?: string
   scoreTeam1: number
   scoreTeam2: number
+  finished: boolean
+  bettingClosed: boolean
   odds: BetBallOdds
   analysis: {
     projectedGoals: {
@@ -198,6 +205,71 @@ function toSafeIsoDate(value?: Date | string | number | null) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return ""
   return date.toISOString()
+}
+
+const BETBALL_TIMEZONE = "Europe/Madrid"
+
+function getTimezoneParts(value: Date, timeZone = BETBALL_TIMEZONE) {
+  const formatter = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+
+  const parts = formatter.formatToParts(value)
+  const read = (type: string) => Number(parts.find((part) => part.type === type)?.value ?? "0")
+
+  return {
+    year: read("year"),
+    month: read("month"),
+    day: read("day"),
+    hour: read("hour"),
+    minute: read("minute"),
+    second: read("second"),
+  }
+}
+
+function isSlipValidForMatchDate(createdAt: Date, matchDate?: Date | string | null) {
+  if (!matchDate) return true
+  const created = new Date(createdAt)
+  const match = new Date(matchDate)
+  if (!Number.isFinite(created.getTime())) return false
+  if (!Number.isFinite(match.getTime())) return true
+
+  const createdParts = getTimezoneParts(created)
+  const matchParts = getTimezoneParts(match)
+  const createdDayKey = createdParts.year * 10000 + createdParts.month * 100 + createdParts.day
+  const matchDayKey = matchParts.year * 10000 + matchParts.month * 100 + matchParts.day
+
+  if (createdDayKey < matchDayKey) return true
+  if (createdDayKey > matchDayKey) return false
+  return createdParts.hour < 20
+}
+
+function isSameDayLateBet(createdAt: Date, matchDate?: Date | string | null) {
+  if (!matchDate) return false
+  const created = new Date(createdAt)
+  const match = new Date(matchDate)
+  if (!Number.isFinite(created.getTime()) || !Number.isFinite(match.getTime())) return false
+
+  const createdParts = getTimezoneParts(created)
+  const matchParts = getTimezoneParts(match)
+  const createdDayKey = createdParts.year * 10000 + createdParts.month * 100 + createdParts.day
+  const matchDayKey = matchParts.year * 10000 + matchParts.month * 100 + matchParts.day
+  return createdDayKey === matchDayKey && createdParts.hour >= 20
+}
+
+function hasCompleteMatchScore(match?: { score_team1?: unknown; score_team2?: unknown } | null) {
+  return Number.isFinite(Number(match?.score_team1)) && Number.isFinite(Number(match?.score_team2))
+}
+
+function isScoreBasedBetBallCategory(category: BetBallMarketOption["category"]) {
+  return ["result", "mercy", "goals", "exact-total-goals", "exact-score", "clean-sheet", "btts"].includes(category)
 }
 
 function toOdds(probability: number) {
@@ -555,39 +627,88 @@ function getWeightedAverage(values: number[]) {
   return values.reduce((sum, value) => sum + value, 0) / values.length
 }
 
-async function getLatestLeagueCompetitionRows() {
-  const competitions = await CompetitionModel.collection
+type BetBallCompetitionRow = {
+  _id: mongoose.Types.ObjectId
+  competition_id: string
+  type?: string
+  name?: string
+  season?: number
+  year?: number
+  season_id?: string
+  division?: number | null
+}
+
+function getCompetitionSeasonNumber(competition: Pick<BetBallCompetitionRow, "season" | "year">) {
+  return Number(competition.season ?? competition.year ?? 0)
+}
+
+function getBetBallCompetitionLabel(competition: BetBallCompetitionRow) {
+  const season = getCompetitionSeasonNumber(competition)
+  const name = competition.name?.trim()
+
+  if (competition.type === "league") {
+    return `Season ${season}${competition.division ? ` · Division ${competition.division}` : ""}`
+  }
+
+  if (competition.type === "cup" || competition.type === "supercup") {
+    return `Season ${season}${name ? ` · ${name}` : ` · ${competition.type === "cup" ? "Cup" : "Supercup"}`}`
+  }
+
+  return name || `Season ${season}`
+}
+
+function getBetBallCompetitionSortValue(competition: BetBallCompetitionRow) {
+  const typeOrder = competition.type === "league" ? 0 : competition.type === "cup" ? 1 : competition.type === "supercup" ? 2 : 3
+  return typeOrder * 100 + Number(competition.division ?? 99)
+}
+
+async function getLatestBetBallCompetitionRows() {
+  const leagueCompetitions = await CompetitionModel.collection
     .find(
       { type: "league" },
-      { projection: { _id: 1, competition_id: 1, name: 1, season: 1, year: 1, division: 1 } }
+      { projection: { _id: 1, competition_id: 1, type: 1, name: 1, season: 1, year: 1, season_id: 1, division: 1 } }
     )
-    .toArray() as Array<{
-      _id: mongoose.Types.ObjectId
-      competition_id: string
-      name?: string
-      season?: number
-      year?: number
-      division?: number | null
-    }>
+    .toArray() as BetBallCompetitionRow[]
 
-  if (!competitions.length) {
+  if (!leagueCompetitions.length) {
     return []
   }
 
-  const highestSeason = competitions.reduce(
-    (max, competition) => Math.max(max, Number(competition.season ?? competition.year ?? 0)),
+  const highestSeason = leagueCompetitions.reduce(
+    (max, competition) => Math.max(max, getCompetitionSeasonNumber(competition)),
     0
   )
+  const latestSeasonIds = [
+    ...new Set(
+      leagueCompetitions
+        .filter((competition) => getCompetitionSeasonNumber(competition) === highestSeason)
+        .map((competition) => competition.season_id)
+        .filter((value): value is string => Boolean(value))
+    ),
+  ]
+
+  const competitions = await CompetitionModel.collection
+    .find(
+      {
+        type: { $in: ["league", "cup", "supercup"] },
+        $or: [
+          { season: highestSeason },
+          { year: highestSeason },
+          ...(latestSeasonIds.length ? [{ season_id: { $in: latestSeasonIds } }] : []),
+        ],
+      },
+      { projection: { _id: 1, competition_id: 1, type: 1, name: 1, season: 1, year: 1, season_id: 1, division: 1 } }
+    )
+    .toArray() as BetBallCompetitionRow[]
 
   return competitions
-    .filter((competition) => Number(competition.season ?? competition.year ?? 0) === highestSeason)
-    .sort((a, b) => Number(a.division ?? 99) - Number(b.division ?? 99))
+    .sort((a, b) => getBetBallCompetitionSortValue(a) - getBetBallCompetitionSortValue(b) || getBetBallCompetitionLabel(a).localeCompare(getBetBallCompetitionLabel(b)))
 }
 
 async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
   await dbConnect()
 
-  const competitions = await getLatestLeagueCompetitionRows()
+  const competitions = await getLatestBetBallCompetitionRows()
   if (!competitions.length) {
     return []
   }
@@ -698,15 +819,26 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
       score_team2?: number
     }>>()
 
+  const matchStates = matches.length
+    ? await BetBallMatchStateModel.find({ matchId: { $in: matches.map((match) => match._id) } })
+        .select("matchId bettingClosedAt")
+        .lean<Array<{ matchId: mongoose.Types.ObjectId; bettingClosedAt?: Date | null }>>()
+    : []
+  const closedMatchIds = new Set(
+    matchStates
+      .filter((state) => Boolean(state.bettingClosedAt))
+      .map((state) => state.matchId.toString())
+  )
+
   const competitionMap = new Map<string, BetBallCompetition>(
     competitions.map((competition) => [
       competition._id.toString(),
       {
         id: competition._id.toString(),
         competitionId: competition.competition_id,
-        name: competition.name?.trim() || `Season ${competition.season} · Division ${competition.division ?? "-"}`,
-        label: `Season ${competition.season}${competition.division ? ` · Division ${competition.division}` : ""}`,
-        season: Number(competition.season ?? 0),
+        name: competition.name?.trim() || getBetBallCompetitionLabel(competition),
+        label: getBetBallCompetitionLabel(competition),
+        season: getCompetitionSeasonNumber(competition),
         division: competition.division ?? null,
         weeks: [],
       },
@@ -754,6 +886,7 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
     const team2 = match.team2_competition_id
       ? competitionTeamCompetitionMap.get(match.team2_competition_id.toString())
       : null
+    const finished = hasCompleteMatchScore(match)
 
     matchdayEntry.matches.push({
       id: match._id.toString(),
@@ -769,6 +902,8 @@ async function getBetBallDataInternal(): Promise<BetBallCompetition[]> {
       scoreTeam1: Number(match.score_team1 ?? 0),
       scoreTeam2: Number(match.score_team2 ?? 0),
       comments: match.comments ?? "",
+      finished,
+      bettingClosed: finished || closedMatchIds.has(match._id.toString()),
       odds: buildOdds(team1?.strength ?? 0, team2?.strength ?? 0),
     })
   }
@@ -821,6 +956,10 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
   if (!match) {
     return null
   }
+
+  const matchState = await BetBallMatchStateModel.findOne({ matchId: match._id })
+    .select("bettingClosedAt")
+    .lean<{ bettingClosedAt?: Date | null } | null>()
 
   const competition = await CompetitionModel.collection.findOne(
     { _id: match.competition_id },
@@ -1485,6 +1624,7 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
 
   const matchday = extractMatchdayFromComments(match.comments)
   const week = matchday && matchday > 0 ? Math.ceil(matchday / 2) : 1
+  const finished = hasCompleteMatchScore(match)
 
   return {
     id: match._id.toString(),
@@ -1501,6 +1641,8 @@ export async function getBetBallMatchDetail(matchId: string): Promise<BetBallMat
     team2Image: team2?.teamImage ?? "",
     scoreTeam1: Number(match.score_team1 ?? 0),
     scoreTeam2: Number(match.score_team2 ?? 0),
+    finished,
+    bettingClosed: finished || Boolean(matchState?.bettingClosedAt),
     odds: resultOdds,
     analysis: {
       projectedGoals,
@@ -1578,6 +1720,7 @@ export async function getBetBallUserSnapshot(discordId?: string | null): Promise
       combinedOdds: number
       potentialReturn: number
       payout?: number
+      voidReason?: string
       status: "pending" | "won" | "lost" | "void"
       selections: Array<{
         marketId: string
@@ -1589,30 +1732,64 @@ export async function getBetBallUserSnapshot(discordId?: string | null): Promise
       }>
     }>>()
 
+  const slipMatchIds = [...new Set(slips.map((slip) => slip.matchId.toString()))].map((id) => new mongoose.Types.ObjectId(id))
+  const [slipMatches, slipMatchStates] = slipMatchIds.length
+    ? await Promise.all([
+        MatchModel.find({ _id: { $in: slipMatchIds } })
+          .select("_id score_team1 score_team2")
+          .lean<Array<{
+            _id: mongoose.Types.ObjectId
+            score_team1?: number | null
+            score_team2?: number | null
+          }>>(),
+        BetBallMatchStateModel.find({ matchId: { $in: slipMatchIds } })
+          .select("matchId bettingClosedAt")
+          .lean<Array<{ matchId: mongoose.Types.ObjectId; bettingClosedAt?: Date | null }>>(),
+      ])
+    : [[], []] as const
+
+  const finishedMatchIds = new Set(
+    slipMatches
+      .filter((match) => hasCompleteMatchScore(match))
+      .map((match) => match._id.toString())
+  )
+  const closedMatchIds = new Set(
+    slipMatchStates
+      .filter((state) => Boolean(state.bettingClosedAt))
+      .map((state) => state.matchId.toString())
+  )
+
   return {
     fflCoins: Number(user.betballCoins ?? 0),
-    myBets: slips.map((slip) => ({
-      id: slip._id.toString(),
-      matchId: slip.matchId.toString(),
-      matchLabel: slip.matchLabel,
-      competitionLabel: slip.competitionLabel,
-      kickoffAt: slip.kickoffAt ? slip.kickoffAt.toISOString() : "",
-      createdAt: slip.createdAt.toISOString(),
-      selectionCount: Number(slip.selectionCount ?? slip.selections.length),
-      stake: Number(slip.stake ?? 0),
-      combinedOdds: Number(slip.combinedOdds ?? 0),
-      potentialReturn: Number(slip.potentialReturn ?? 0),
-      payout: Number(slip.payout ?? 0),
-      status: slip.status ?? "pending",
-      selections: (slip.selections ?? []).map((selection) => ({
-        id: selection.marketId,
-        token: selection.token,
-        label: selection.label,
-        description: selection.description,
-        odds: Number(selection.odds ?? 0),
-        category: selection.category,
-      })),
-    })),
+    myBets: slips.map((slip) => {
+      const matchId = slip.matchId.toString()
+      const status = slip.status ?? "pending"
+
+      return {
+        id: slip._id.toString(),
+        matchId,
+        matchLabel: slip.matchLabel,
+        competitionLabel: slip.competitionLabel,
+        kickoffAt: slip.kickoffAt ? slip.kickoffAt.toISOString() : "",
+        createdAt: slip.createdAt.toISOString(),
+        selectionCount: Number(slip.selectionCount ?? slip.selections.length),
+        stake: Number(slip.stake ?? 0),
+        combinedOdds: Number(slip.combinedOdds ?? 0),
+        potentialReturn: Number(slip.potentialReturn ?? 0),
+        payout: Number(slip.payout ?? 0),
+        voidReason: slip.voidReason ?? "",
+        canOpenMatch: status === "pending" && !finishedMatchIds.has(matchId) && !closedMatchIds.has(matchId),
+        status,
+        selections: (slip.selections ?? []).map((selection) => ({
+          id: selection.marketId,
+          token: selection.token,
+          label: selection.label,
+          description: selection.description,
+          odds: Number(selection.odds ?? 0),
+          category: selection.category,
+        })),
+      }
+    }),
   }
 }
 
@@ -1628,9 +1805,47 @@ export async function placeBetBallSlipForUser(discordId: string, input: PlaceBet
   }
 
   const matchObjectId = new mongoose.Types.ObjectId(input.matchId)
-  const matchExists = await MatchModel.exists({ _id: matchObjectId })
-  if (!matchExists) {
+  const match = await MatchModel.findById(matchObjectId)
+    .select("_id date score_team1 score_team2")
+    .lean<{
+      _id: mongoose.Types.ObjectId
+      date?: Date | string | null
+      score_team1?: number | null
+      score_team2?: number | null
+    } | null>()
+  if (!match) {
     throw new Error("Match not found.")
+  }
+
+  const matchState = await BetBallMatchStateModel.findOne({ matchId: matchObjectId })
+    .select("bettingClosedAt")
+    .lean<{ bettingClosedAt?: Date | null } | null>()
+  if (matchState?.bettingClosedAt) {
+    throw new Error("Betting is closed for this match.")
+  }
+
+  const now = new Date()
+  const matchDate = match.date ? new Date(match.date) : null
+  const closesAt = matchDate && Number.isFinite(matchDate.getTime())
+    ? new Date(matchDate.getTime() - 60 * 60 * 1000)
+    : null
+  const hasStatsSignals = await Promise.all([
+    MatchModel.db.collection("teammatchstats").countDocuments({ match_id: matchObjectId }, { limit: 1 }),
+    MatchModel.db.collection("playermatchstats").countDocuments({ match_id: matchObjectId }, { limit: 1 }),
+    GoalModel.collection.countDocuments({ match_id: matchObjectId }, { limit: 1 }),
+  ])
+
+  if (
+    hasCompleteMatchScore(match)
+    || hasStatsSignals.some((count) => count > 0)
+    || (closesAt && now.getTime() >= closesAt.getTime())
+  ) {
+    await BetBallMatchStateModel.updateOne(
+      { matchId: matchObjectId },
+      { $set: { bettingClosedAt: now, lastReviewedAt: now } },
+      { upsert: true }
+    )
+    throw new Error("Betting is closed for this match.")
   }
 
   const selections = (input.selections ?? []).filter((selection) => (
@@ -1722,6 +1937,157 @@ type BetBallMatchSettlementContext = {
   playerStatsByPlayerId: Map<number, { goals: number; assists: number }>
 }
 
+type BetBallSettlementMatchDoc = {
+  _id: mongoose.Types.ObjectId
+  date?: Date | string | null
+  score_team1?: number
+  score_team2?: number
+}
+
+type ResolvedBetBallSettlementMatch = {
+  match: BetBallSettlementMatchDoc
+  actualMatchId: mongoose.Types.ObjectId
+  invertScore: boolean
+}
+
+function parseBetBallMatchLabel(label?: string | null) {
+  const parts = String(label ?? "").split(/\s+vs\s+/i).map((part) => part.trim()).filter(Boolean)
+  return parts.length === 2 ? { homeName: parts[0], awayName: parts[1] } : null
+}
+
+function escapeRegex(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+async function resolveMissingBetBallMatchesByLabel(
+  slips: Array<{ matchId: mongoose.Types.ObjectId; matchLabel: string }>
+) {
+  const resolved = new Map<string, ResolvedBetBallSettlementMatch>()
+  const seenLabels = new Set<string>()
+
+  for (const slip of slips) {
+    if (seenLabels.has(slip.matchLabel)) continue
+    seenLabels.add(slip.matchLabel)
+
+    const parsed = parseBetBallMatchLabel(slip.matchLabel)
+    if (!parsed) continue
+
+    const homeRegex = new RegExp(`^${escapeRegex(parsed.homeName)}$`, "i")
+    const awayRegex = new RegExp(`^${escapeRegex(parsed.awayName)}$`, "i")
+
+    const candidates = await MatchModel.aggregate<BetBallSettlementMatchDoc & {
+      team1Name?: string
+      team2Name?: string
+    }>([
+      { $lookup: { from: "teamcompetitions", localField: "team1_competition_id", foreignField: "_id", as: "team1Competition" } },
+      { $lookup: { from: "teamcompetitions", localField: "team2_competition_id", foreignField: "_id", as: "team2Competition" } },
+      { $lookup: { from: "teams", localField: "team1Competition.team_id", foreignField: "_id", as: "team1" } },
+      { $lookup: { from: "teams", localField: "team2Competition.team_id", foreignField: "_id", as: "team2" } },
+      {
+        $addFields: {
+          team1Name: { $ifNull: [{ $first: "$team1.teamName" }, { $first: "$team1.team_name" }] },
+          team2Name: { $ifNull: [{ $first: "$team2.teamName" }, { $first: "$team2.team_name" }] },
+        },
+      },
+      {
+        $match: {
+          $or: [
+            { team1Name: homeRegex, team2Name: awayRegex },
+            { team1Name: awayRegex, team2Name: homeRegex },
+          ],
+        },
+      },
+      { $sort: { date: -1, _id: -1 } },
+      { $limit: 1 },
+      { $project: { _id: 1, date: 1, score_team1: 1, score_team2: 1, team1Name: 1, team2Name: 1 } },
+    ])
+
+    const candidate = candidates[0]
+    if (!candidate) continue
+
+    const invertScore = awayRegex.test(candidate.team1Name ?? "") && homeRegex.test(candidate.team2Name ?? "")
+    for (const matchingSlip of slips.filter((item) => item.matchLabel === slip.matchLabel)) {
+      resolved.set(matchingSlip.matchId.toString(), {
+        match: candidate,
+        actualMatchId: candidate._id,
+        invertScore,
+      })
+    }
+  }
+
+  return resolved
+}
+
+async function refundLegacyLateBetLosses(now: Date) {
+  const lostSlips = await BetBallSlipModel.find({
+    status: "lost",
+    payout: 0,
+    voidReason: { $in: [null, ""] },
+  })
+    .select("_id userId matchId matchLabel createdAt stake")
+    .lean<Array<{
+      _id: mongoose.Types.ObjectId
+      userId: mongoose.Types.ObjectId
+      matchId: mongoose.Types.ObjectId
+      matchLabel: string
+      createdAt: Date
+      stake: number
+    }>>()
+
+  if (!lostSlips.length) {
+    return
+  }
+
+  const matchObjectIds = [...new Set(lostSlips.map((slip) => slip.matchId.toString()))].map((id) => new mongoose.Types.ObjectId(id))
+  const rawMatches = await MatchModel.collection
+    .find(
+      { _id: { $in: matchObjectIds } },
+      { projection: { _id: 1, date: 1, score_team1: 1, score_team2: 1 } }
+    )
+    .toArray() as Array<BetBallSettlementMatchDoc>
+
+  const missingMatchSlips = lostSlips.filter((slip) =>
+    !rawMatches.some((match) => match._id.toString() === slip.matchId.toString())
+  )
+  const fallbackMatchesByMissingId = missingMatchSlips.length
+    ? await resolveMissingBetBallMatchesByLabel(missingMatchSlips)
+    : new Map<string, ResolvedBetBallSettlementMatch>()
+
+  const matchBySlipMatchId = new Map<string, BetBallSettlementMatchDoc>(
+    rawMatches.map((match) => [match._id.toString(), match])
+  )
+  for (const [missingId, resolved] of fallbackMatchesByMissingId) {
+    matchBySlipMatchId.set(missingId, resolved.match)
+  }
+
+  for (const slip of lostSlips) {
+    const match = matchBySlipMatchId.get(slip.matchId.toString())
+    if (!isSameDayLateBet(slip.createdAt, match?.date)) {
+      continue
+    }
+
+    const refund = Number(slip.stake ?? 0)
+    const result = await BetBallSlipModel.updateOne(
+      { _id: slip._id, status: "lost", payout: 0, voidReason: { $in: [null, ""] } },
+      {
+        $set: {
+          status: "void",
+          payout: refund,
+          settledAt: now,
+          voidReason: "Bet voided: you must place same-day bets before 20:00 Europe/Madrid.",
+        },
+      }
+    )
+
+    if (result.modifiedCount && refund > 0) {
+      await UserModel.updateOne(
+        { _id: slip.userId },
+        { $inc: { betballCoins: refund } }
+      )
+    }
+  }
+}
+
 function evaluateBetBallSelection(
   selection: {
     marketId: string
@@ -1800,12 +2166,16 @@ function evaluateBetBallSelection(
 export async function settlePendingBetBallSlips(now = new Date()): Promise<BetBallSettlementResult> {
   await dbConnect()
 
+  await refundLegacyLateBetLosses(now)
+
   const pendingSlips = await BetBallSlipModel.find({ status: "pending" })
     .sort({ createdAt: 1 })
     .lean<Array<{
       _id: mongoose.Types.ObjectId
       userId: mongoose.Types.ObjectId
       matchId: mongoose.Types.ObjectId
+      matchLabel: string
+      createdAt: Date
       stake: number
       potentialReturn: number
       selections: Array<{
@@ -1825,17 +2195,40 @@ export async function settlePendingBetBallSlips(now = new Date()): Promise<BetBa
       { _id: { $in: matchObjectIds } },
       { projection: { _id: 1, date: 1, score_team1: 1, score_team2: 1 } }
     )
-    .toArray() as Array<{
-      _id: mongoose.Types.ObjectId
-      date?: Date | string | null
-      score_team1?: number
-      score_team2?: number
-    }>
+    .toArray() as Array<BetBallSettlementMatchDoc>
 
-  const matchById = new Map(rawMatches.map((match) => [match._id.toString(), match]))
-  const dueMatches = rawMatches.filter((match) => {
+  const missingMatchSlips = pendingSlips.filter((slip) =>
+    !rawMatches.some((match) => match._id.toString() === slip.matchId.toString())
+  )
+  const fallbackMatchesByMissingId = missingMatchSlips.length
+    ? await resolveMissingBetBallMatchesByLabel(missingMatchSlips)
+    : new Map<string, ResolvedBetBallSettlementMatch>()
+
+  const resolvedMatchBySlipMatchId = new Map<string, ResolvedBetBallSettlementMatch>(
+    rawMatches.map((match) => [
+      match._id.toString(),
+      {
+        match,
+        actualMatchId: match._id,
+        invertScore: false,
+      },
+    ])
+  )
+  for (const [missingId, resolved] of fallbackMatchesByMissingId) {
+    resolvedMatchBySlipMatchId.set(missingId, resolved)
+  }
+
+  const matchesByActualId = new Map<string, BetBallSettlementMatchDoc>()
+  for (const resolved of resolvedMatchBySlipMatchId.values()) {
+    matchesByActualId.set(resolved.actualMatchId.toString(), resolved.match)
+  }
+
+  const dueMatches = [...matchesByActualId.values()].filter((match) => {
     const date = match.date ? new Date(match.date) : null
-    return Boolean(date && Number.isFinite(date.getTime()) && date.getTime() <= now.getTime())
+    return (
+      hasCompleteMatchScore(match)
+      || Boolean(date && Number.isFinite(date.getTime()) && date.getTime() <= now.getTime())
+    )
   })
 
   if (!dueMatches.length) {
@@ -1969,22 +2362,65 @@ export async function settlePendingBetBallSlips(now = new Date()): Promise<BetBa
   let skippedSlips = 0
 
   for (const slip of pendingSlips) {
-    const match = matchById.get(slip.matchId.toString())
+    const resolvedMatch = resolvedMatchBySlipMatchId.get(slip.matchId.toString())
+    const match = resolvedMatch?.match
     const matchDate = match?.date ? new Date(match.date) : null
-    if (!matchDate || !Number.isFinite(matchDate.getTime()) || matchDate.getTime() > now.getTime()) {
+    const matchHasScore = hasCompleteMatchScore(match)
+    if (
+      !matchHasScore
+      && (!matchDate || !Number.isFinite(matchDate.getTime()) || matchDate.getTime() > now.getTime())
+    ) {
       skippedSlips += 1
       continue
     }
 
-    const context = contextByMatchId.get(slip.matchId.toString())
+    if (matchDate && !isSlipValidForMatchDate(slip.createdAt, matchDate)) {
+      const refund = Number(slip.stake ?? 0)
+      const invalidResult = await BetBallSlipModel.updateOne(
+        { _id: slip._id, status: "pending" },
+        {
+          $set: {
+            status: "void",
+            payout: refund,
+            settledAt: now,
+            voidReason: "Bet voided: you must place same-day bets before 20:00 Europe/Madrid.",
+          },
+        }
+      )
+      if (!invalidResult.modifiedCount) {
+        skippedSlips += 1
+        continue
+      }
+      if (refund > 0) {
+        await UserModel.updateOne(
+          { _id: slip.userId },
+          { $inc: { betballCoins: refund } }
+        )
+      }
+      settledSlips += 1
+      continue
+    }
+
+    const context = resolvedMatch ? contextByMatchId.get(resolvedMatch.actualMatchId.toString()) : null
     if (!context) {
       skippedSlips += 1
       continue
     }
+    const slipContext = resolvedMatch?.invertScore
+      ? {
+          ...context,
+          homeScore: context.awayScore,
+          awayScore: context.homeScore,
+        }
+      : context
 
     let unresolved = false
     let hasLoss = false
     for (const selection of slip.selections) {
+      if (isScoreBasedBetBallCategory(selection.category) && !matchHasScore) {
+        unresolved = true
+        break
+      }
       if (
         (selection.category === "scorer" || selection.category === "player-goals" || selection.category === "top-scorer")
         && context.playerStatsByPlayerId.size === 0
@@ -1997,7 +2433,7 @@ export async function settlePendingBetBallSlips(now = new Date()): Promise<BetBa
         break
       }
 
-      const won = evaluateBetBallSelection(selection, context)
+      const won = evaluateBetBallSelection(selection, slipContext)
       if (won === null) {
         unresolved = true
         break
@@ -2041,6 +2477,18 @@ export async function settlePendingBetBallSlips(now = new Date()): Promise<BetBa
     )
     settledSlips += 1
     wonSlips += 1
+  }
+
+  if (dueMatchIds.length) {
+    await BetBallMatchStateModel.bulkWrite(
+      dueMatchIds.map((matchId) => ({
+        updateOne: {
+          filter: { matchId },
+          update: { $set: { bettingClosedAt: now, lastReviewedAt: now } },
+          upsert: true,
+        },
+      }))
+    )
   }
 
   return {

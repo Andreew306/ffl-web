@@ -33,6 +33,7 @@ const betBallSlipSchema = new Schema(
     },
     settledAt: { type: Date, default: null },
     payout: { type: Number, default: 0 },
+    voidReason: { type: String, default: "" },
   },
   { timestamps: true }
 )

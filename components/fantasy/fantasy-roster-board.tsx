@@ -33,6 +33,12 @@ type RosterPlayer = {
   acquiredBy: "random" | "market" | "clausulazo"
   isOnMarket?: boolean
   weekPoints: number
+  recentFantasyPoints?: Array<{
+    matchId: number
+    label: string
+    date: string
+    points: number
+  }>
 }
 
 type FantasyRosterBoardProps = {
@@ -91,6 +97,44 @@ function getPlayerGroup(player: RosterPlayer): GroupKey {
   if (["CB", "LB", "RB"].includes(position)) return "DEF"
   if (["DM", "CM", "AM"].includes(position)) return "MID"
   return "ATT"
+}
+
+function formatRecentDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Date TBD"
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Madrid",
+    day: "2-digit",
+    month: "short",
+  }).format(parsed)
+}
+
+function RecentFantasyPoints({ entries }: { entries?: RosterPlayer["recentFantasyPoints"] }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+      <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Last 5 fantasy points</div>
+      {entries?.length ? (
+        <div className="mt-3 grid grid-cols-5 gap-2">
+          {entries.map((entry, index) => (
+            <div key={`${entry.matchId}-${entry.date}-${index}`} className="rounded-xl border border-white/10 bg-slate-950/70 px-2 py-2 text-center">
+              <div className="mx-auto max-w-[3.8rem] truncate text-[9px] uppercase tracking-[0.08em] text-slate-500" title={entry.matchId ? `#${entry.matchId}` : entry.label}>
+                {entry.matchId ? `#${entry.matchId}` : entry.label}
+              </div>
+              <div className={cn("mt-1 text-lg font-semibold", entry.points > 0 ? "text-emerald-200" : entry.points < 0 ? "text-rose-200" : "text-slate-200")}>
+                {entry.points}
+              </div>
+              <div className="mt-1 text-[10px] text-slate-500">{formatRecentDate(entry.date)}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-slate-950/45 px-3 py-3 text-sm text-slate-400">
+          No recent fantasy points yet.
+        </div>
+      )}
+    </div>
+  )
 }
 
 function PriceTrend({
@@ -508,6 +552,8 @@ export default function FantasyRosterBoard({ leagueId, currentWeek, weeks, readO
             <div className="mt-3 rounded-xl border border-cyan-300/15 bg-cyan-400/5 px-3 py-2 text-sm text-cyan-100">
               Week {activeWeek?.week} points: {selectedPlayer.weekPoints}
             </div>
+
+            <RecentFantasyPoints entries={selectedPlayer.recentFantasyPoints} />
 
             {!canEditWeek ? (
               <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300">

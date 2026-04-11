@@ -13,6 +13,7 @@ type MarketEntry = {
   playerName: string
   country: string
   avatar?: string
+  position?: string | null
   teamName?: string
   teamImage?: string
   kitImage?: string
@@ -22,8 +23,15 @@ type MarketEntry = {
   priceChangeDirection?: "up" | "down" | "flat"
   minBid: number
   highestBid: number | null
+  bidCount: number
   sellerTeamName: string | null
   userBid: number | null
+  recentFantasyPoints?: Array<{
+    matchId: number
+    label: string
+    date: string
+    points: number
+  }>
 }
 
 type FantasyMarketBoardProps = {
@@ -128,43 +136,88 @@ function FlagBadge({ country, className }: { country: string; className?: string
   )
 }
 
+function formatRecentDate(value: string) {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) return "Date TBD"
+
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Madrid",
+    day: "2-digit",
+    month: "short",
+  }).format(parsed)
+}
+
+function RecentFantasyPoints({ entries }: { entries?: MarketEntry["recentFantasyPoints"] }) {
+  return (
+    <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
+      <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Last 5 fantasy points</div>
+      {entries?.length ? (
+        <div className="mt-3 grid grid-cols-5 gap-2">
+          {entries.map((entry, index) => (
+            <div key={`${entry.matchId}-${entry.date}-${index}`} className="rounded-xl border border-white/10 bg-slate-950/70 px-2 py-2 text-center">
+              <div className="mx-auto max-w-[3.8rem] truncate text-[9px] uppercase tracking-[0.08em] text-slate-500" title={entry.matchId ? `#${entry.matchId}` : entry.label}>
+                {entry.matchId ? `#${entry.matchId}` : entry.label}
+              </div>
+              <div className={entry.points > 0 ? "mt-1 text-lg font-semibold text-emerald-200" : entry.points < 0 ? "mt-1 text-lg font-semibold text-rose-200" : "mt-1 text-lg font-semibold text-slate-200"}>
+                {entry.points}
+              </div>
+              <div className="mt-1 text-[10px] text-slate-500">{formatRecentDate(entry.date)}</div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-slate-950/45 px-3 py-3 text-sm text-slate-400">
+          No recent fantasy points yet.
+        </div>
+      )}
+    </div>
+  )
+}
+
 function PlayerVisual({ listing }: { listing: MarketEntry }) {
   const avatarIsImage = isImageUrl(listing.avatar || "")
 
   return (
-    <div className="relative">
-      <div
-        className="flex h-16 w-16 items-center justify-center rounded-full border border-slate-900/90 bg-slate-900/80 shadow-[0_14px_28px_rgba(2,6,23,0.45)]"
-        style={
-          listing.kitImage
-            ? {
-                backgroundImage: `url(${listing.kitImage})`,
-                backgroundSize: "cover",
-                backgroundPosition: "center",
-              }
-            : undefined
-        }
-      >
-        {avatarIsImage ? (
-          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-950/70 bg-slate-950/35">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={listing.avatar} alt={listing.playerName} className="h-full w-full rounded-full object-cover" />
-          </div>
+    <div className="flex w-16 shrink-0 flex-col items-center gap-2">
+      <div className="relative">
+        <div
+          className="flex h-16 w-16 items-center justify-center rounded-full border border-slate-900/90 bg-slate-900/80 shadow-[0_14px_28px_rgba(2,6,23,0.45)]"
+          style={
+            listing.kitImage
+              ? {
+                  backgroundImage: `url(${listing.kitImage})`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                }
+              : undefined
+          }
+        >
+          {avatarIsImage ? (
+            <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-950/70 bg-slate-950/35">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={listing.avatar} alt={listing.playerName} className="h-full w-full rounded-full object-cover" />
+            </div>
+          ) : null}
+        </div>
+        {listing.country ? (
+          <FlagBadge
+            country={listing.country}
+            className="absolute -bottom-1.5 -right-1.5 h-5 w-5 rounded-full ring-2 ring-slate-950"
+          />
+        ) : null}
+        {listing.teamImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={listing.teamImage}
+            alt={listing.teamName || listing.playerName}
+            className="absolute -bottom-1.5 -left-1.5 h-6 w-6 rounded-full border border-white/10 bg-slate-950 object-cover ring-2 ring-slate-950"
+          />
         ) : null}
       </div>
-      {listing.country ? (
-        <FlagBadge
-          country={listing.country}
-          className="absolute -bottom-1.5 -right-1.5 h-5 w-5 rounded-full ring-2 ring-slate-950"
-        />
-      ) : null}
-      {listing.teamImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={listing.teamImage}
-          alt={listing.teamName || listing.playerName}
-          className="absolute -bottom-1.5 -left-1.5 h-6 w-6 rounded-full border border-white/10 bg-slate-950 object-cover ring-2 ring-slate-950"
-        />
+      {listing.position ? (
+        <span className="rounded-full border border-white/10 bg-slate-800/80 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-slate-200">
+          {listing.position}
+        </span>
       ) : null}
     </div>
   )
@@ -246,8 +299,8 @@ function BidModal({
             <PlayerVisual listing={listing} />
             <div>
               <div className="text-xl font-semibold text-white">{listing.playerName}</div>
-              <div className="mt-1 text-sm text-slate-400">
-                Player #{listing.playerId}
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+                <span>Player #{listing.playerId}</span>
               </div>
               {listing.teamName ? (
                 <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/10 bg-slate-900/80 px-3 py-2">
@@ -284,8 +337,13 @@ function BidModal({
           <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
             <div className="text-[10px] uppercase tracking-[0.26em] text-slate-500">Your bid</div>
             <div className="mt-1 text-lg font-semibold text-white">{listing.userBid ?? "-"}</div>
+            <div className="mt-2 text-xs text-slate-400">
+              {listing.bidCount} bid{listing.bidCount !== 1 ? "s" : ""}
+            </div>
           </div>
         </div>
+
+        <RecentFantasyPoints entries={listing.recentFantasyPoints} />
 
         <div className="mt-4 rounded-2xl border border-white/10 bg-slate-900/60 p-4">
           <div className="text-sm text-slate-300">
@@ -363,7 +421,9 @@ function MarketCard({
             <div className="text-lg font-semibold text-white transition group-hover:text-cyan-100">
               {listing.playerName}
             </div>
-            <div className="mt-1 text-sm text-slate-400">Player #{listing.playerId}</div>
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-400">
+                <span>Player #{listing.playerId}</span>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <FflCoin value={listing.basePrice} compact />
               <PriceTrend direction={listing.priceChangeDirection} percent={listing.priceChangePercent} />
@@ -372,6 +432,9 @@ function MarketCard({
                   Your bid {listing.userBid}
                 </span>
               ) : null}
+              <span className="rounded-full border border-amber-300/20 bg-amber-400/10 px-3 py-1 text-[11px] uppercase tracking-[0.24em] text-amber-100">
+                {listing.bidCount > 0 ? `${listing.bidCount} bid${listing.bidCount !== 1 ? "s" : ""}` : "No bids yet"}
+              </span>
             </div>
           </div>
         </div>

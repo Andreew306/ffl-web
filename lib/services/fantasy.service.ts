@@ -60,11 +60,19 @@ type DashboardLeague = {
     priceChangeDirection?: "up" | "down" | "flat"
     acquiredBy: "random" | "market" | "clausulazo"
     isOnMarket?: boolean
+    recentFantasyPoints?: FantasyRecentPoints[]
   }>
 }
 
 export type FantasyRosterPlayerView = DashboardLeague["roster"][number] & {
   weekPoints: number
+}
+
+export type FantasyRecentPoints = {
+  matchId: number
+  label: string
+  date: string
+  points: number
 }
 
 export type FantasyDashboardData = {
@@ -82,6 +90,7 @@ export type FantasyMarketEntry = {
   playerName: string
   country: string
   avatar?: string
+  position?: string | null
   teamName?: string
   teamImage?: string
   kitImage?: string
@@ -91,8 +100,10 @@ export type FantasyMarketEntry = {
   priceChangeDirection?: "up" | "down" | "flat"
   minBid: number
   highestBid: number | null
+  bidCount: number
   sellerTeamName: string | null
   userBid: number | null
+  recentFantasyPoints?: FantasyRecentPoints[]
 }
 
 export type FantasyCompetitionOption = {
@@ -518,7 +529,7 @@ const WEEK_RANK_BONUS: Record<number, number> = {
   7: 200,
 }
 
-function scorePlayerMatchStats(stat: {
+export function scorePlayerMatchStats(stat: {
   position?: string | null
   goals?: number
   assists?: number
@@ -588,6 +599,122 @@ function scorePlayerMatchStats(stat: {
   else if (draw > 0) points += 0
 
   return points
+}
+
+function readFantasyStatNumber(row: Record<string, unknown>, snakeKey: string, camelKey?: string) {
+  const value = row[snakeKey] ?? (camelKey ? row[camelKey] : undefined)
+  return Number(value ?? 0)
+}
+
+async function getRecentFantasyPointsByPlayerIds(playerObjectIds: string[]): Promise<Map<string, FantasyRecentPoints[]>> {
+  const uniquePlayerIds = [...new Set(playerObjectIds.filter((id) => mongoose.Types.ObjectId.isValid(id)))]
+  if (!uniquePlayerIds.length) return new Map()
+
+  const playerObjectIdList = uniquePlayerIds.map((id) => new mongoose.Types.ObjectId(id))
+  const playerCompetitions = await PlayerCompetitionModel.find({ player_id: { $in: playerObjectIdList } })
+    .select("_id player_id position")
+    .lean<Array<{
+      _id: mongoose.Types.ObjectId
+      player_id?: mongoose.Types.ObjectId
+      position?: string | null
+    }>>()
+
+  if (!playerCompetitions.length) return new Map()
+
+  const playerIdByCompetitionId = new Map(
+    playerCompetitions
+      .filter((row) => row.player_id)
+      .map((row) => [row._id.toString(), row.player_id!.toString()])
+  )
+  const positionByCompetitionId = new Map(playerCompetitions.map((row) => [row._id.toString(), row.position ?? ""]))
+
+  const stats = await PlayerMatchStatsModel.find({
+    player_competition_id: { $in: playerCompetitions.map((row) => row._id) },
+  })
+    .select("player_competition_id team_competition_id match_id position goals assists preassists cs goals_conceded goals_connceded saves clearances recoveries shots_on_goal won draw lost")
+    .lean<Array<Record<string, unknown> & {
+      player_competition_id?: mongoose.Types.ObjectId
+      team_competition_id?: mongoose.Types.ObjectId
+      match_id?: mongoose.Types.ObjectId
+    }>>()
+
+  const matchIds = [...new Set(stats.map((row) => row.match_id?.toString()).filter((id): id is string => Boolean(id)))]
+  const matches = matchIds.length
+    ? await MatchModel.find({ _id: { $in: matchIds.map((id) => new mongoose.Types.ObjectId(id)) } })
+        .select("_id match_id date team1_competition_id team2_competition_id score_team1 score_team2")
+        .lean<Array<{
+          _id: mongoose.Types.ObjectId
+          match_id?: number
+          date?: Date
+          team1_competition_id?: mongoose.Types.ObjectId
+          team2_competition_id?: mongoose.Types.ObjectId
+          score_team1?: number
+          score_team2?: number
+        }>>()
+    : []
+
+  const matchById = new Map(matches.map((match) => [match._id.toString(), match]))
+  const recentByPlayerId = new Map<string, Array<FantasyRecentPoints & { timestamp: number }>>()
+
+  for (const row of stats) {
+    const playerCompetitionId = row.player_competition_id?.toString()
+    const playerObjectId = playerCompetitionId ? playerIdByCompetitionId.get(playerCompetitionId) : undefined
+    const match = row.match_id ? matchById.get(row.match_id.toString()) : undefined
+    if (!playerObjectId || !match?.date) continue
+
+    const teamCompetitionId = row.team_competition_id?.toString()
+    const team1CompetitionId = match.team1_competition_id?.toString()
+    const team2CompetitionId = match.team2_competition_id?.toString()
+    const score1 = Number(match.score_team1 ?? 0)
+    const score2 = Number(match.score_team2 ?? 0)
+    const teamScore = teamCompetitionId === team1CompetitionId ? score1 : teamCompetitionId === team2CompetitionId ? score2 : 0
+    const opponentScore = teamCompetitionId === team1CompetitionId ? score2 : teamCompetitionId === team2CompetitionId ? score1 : 0
+    const won = teamScore > opponentScore ? 1 : 0
+    const draw = teamScore === opponentScore ? 1 : 0
+    const lost = teamScore < opponentScore ? 1 : 0
+
+    const points = scorePlayerMatchStats({
+      position: String(row.position ?? (playerCompetitionId ? positionByCompetitionId.get(playerCompetitionId) : "") ?? ""),
+      goals: readFantasyStatNumber(row, "goals", "goals"),
+      assists: readFantasyStatNumber(row, "assists", "assists"),
+      preassists: readFantasyStatNumber(row, "preassists", "preassists"),
+      cs: readFantasyStatNumber(row, "cs", "cs"),
+      goalsConceded: readFantasyStatNumber(row, "goals_conceded", "goalsConceded") || readFantasyStatNumber(row, "goals_connceded", "goalsConceded"),
+      saves: readFantasyStatNumber(row, "saves", "saves"),
+      clearances: readFantasyStatNumber(row, "clearances", "clearances"),
+      recoveries: readFantasyStatNumber(row, "recoveries", "recoveries"),
+      shotsOnGoal: readFantasyStatNumber(row, "shots_on_goal", "shotsOnGoal"),
+      won,
+      draw,
+      lost,
+    })
+
+    const timestamp = new Date(match.date).getTime()
+    const current = recentByPlayerId.get(playerObjectId) ?? []
+    current.push({
+      matchId: Number(match.match_id ?? 0),
+      label: match.match_id ? `Match #${match.match_id}` : "Match",
+      date: toSafeIsoString(match.date),
+      points,
+      timestamp,
+    })
+    recentByPlayerId.set(playerObjectId, current)
+  }
+
+  return new Map(
+    [...recentByPlayerId.entries()].map(([playerId, entries]) => [
+      playerId,
+      entries
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 5)
+        .map((entry) => ({
+          matchId: entry.matchId,
+          label: entry.label,
+          date: entry.date,
+          points: entry.points,
+        })),
+    ])
+  )
 }
 
 async function resolveSeasonNumbers(seasonIds: Array<string | number | null | undefined>) {
@@ -938,6 +1065,27 @@ function getMarketDateKey(date = new Date()) {
   const day = Number(parts.find((part) => part.type === "day")?.value ?? "1")
 
   return new Date(Date.UTC(year, month - 1, day))
+}
+
+function isRosterSlotEligibleForFantasyWeek(
+  slot: { acquiredAt?: Date | string | null; acquiredBy?: "random" | "market" | "clausulazo" | null },
+  week: number,
+  competitionStartDate: Date
+) {
+  if (slot.acquiredBy === "random") {
+    return true
+  }
+
+  const acquiredAt = slot.acquiredAt ? new Date(slot.acquiredAt) : null
+  if (!acquiredAt || !Number.isFinite(acquiredAt.getTime())) {
+    return true
+  }
+
+  if (acquiredAt.getTime() <= competitionStartDate.getTime()) {
+    return true
+  }
+
+  return getCurrentFantasyWeekNumber(competitionStartDate, acquiredAt) < week
 }
 
 async function settleExpiredFantasyMarketDays(
@@ -1483,10 +1631,57 @@ async function ensureFantasyMarketDay(leagueId: mongoose.Types.ObjectId) {
   return marketDay
 }
 
+export async function settleExpiredFantasyMarketsForAllLeagues(now = new Date()) {
+  await dbConnect()
+
+  const marketDate = getMarketDateKey(now)
+  const leagues = await FantasyLeagueModel.find({ leagueType: "market" })
+    .select("_id fantasySeasonId competitionObjectId")
+    .lean<Array<{
+      _id: mongoose.Types.ObjectId
+      fantasySeasonId: mongoose.Types.ObjectId
+      competitionObjectId?: mongoose.Types.ObjectId | null
+    }>>()
+
+  let checkedLeagues = 0
+  let expiredMarkets = 0
+
+  for (const league of leagues) {
+    checkedLeagues += 1
+    const before = await FantasyMarketDayModel.countDocuments({
+      leagueId: league._id,
+      marketDate: { $lt: marketDate },
+      status: { $ne: "settled" },
+    })
+
+    await settleExpiredFantasyMarketDays(league, marketDate)
+
+    if (before > 0) {
+      expiredMarkets += before
+    }
+  }
+
+  return {
+    checkedLeagues,
+    expiredMarkets,
+  }
+}
+
 async function ensureFantasyWeekLineups(
   leagueId: mongoose.Types.ObjectId,
   week: number
 ) {
+  const league = await FantasyLeagueModel.findById(leagueId)
+    .select("competitionObjectId")
+    .lean<{ competitionObjectId?: mongoose.Types.ObjectId | null } | null>()
+
+  const competition = league?.competitionObjectId
+    ? await CompetitionModel.findById(league.competitionObjectId)
+        .select("start_date startDate")
+        .lean<{ start_date?: Date; startDate?: Date } | null>()
+    : null
+  const competitionStartDate = new Date(competition?.start_date ?? competition?.startDate ?? new Date())
+
   const existingLineups = await FantasyWeekLineupModel.find({ leagueId, week })
     .select("userId")
     .lean<Array<{ userId: mongoose.Types.ObjectId }>>()
@@ -1505,12 +1700,14 @@ async function ensureFantasyWeekLineups(
   }
 
   const slots = await FantasyRosterSlotModel.find({ leagueId, userId: { $in: missingUserIds } })
-    .select("userId playerObjectId player_id slot")
+    .select("userId playerObjectId player_id slot acquiredAt acquiredBy")
     .lean<Array<{
       userId: mongoose.Types.ObjectId
       playerObjectId: mongoose.Types.ObjectId
       player_id: number
       slot: "GK" | "DEF" | "MID" | "ATT" | "FLEX" | "BENCH"
+      acquiredAt?: Date | null
+      acquiredBy?: "random" | "market" | "clausulazo" | null
     }>>()
 
   const slotsByUserId = new Map<string, typeof slots>()
@@ -1522,7 +1719,9 @@ async function ensureFantasyWeekLineups(
   }
 
   const lineupDocs = missingUserIds.map((userId) => {
-    const userSlots = slotsByUserId.get(userId.toString()) ?? []
+    const userSlots = (slotsByUserId.get(userId.toString()) ?? []).filter((slot) =>
+      isRosterSlotEligibleForFantasyWeek(slot, week, competitionStartDate)
+    )
     const starters = userSlots
       .filter((slot) => slot.slot !== "BENCH")
       .map((slot) => ({
@@ -2008,7 +2207,19 @@ async function assignRandomRoster(
     .select("playerObjectId")
     .lean<Array<{ playerObjectId: mongoose.Types.ObjectId }>>()
 
-  const excludedIds = ownedPlayerIds.map((slot) => slot.playerObjectId)
+  const marketDay = await FantasyMarketDayModel.findOne({
+    leagueId: league._id,
+    marketDate: getMarketDateKey(),
+  })
+    .select("listings.playerObjectId")
+    .lean<{
+      listings?: Array<{ playerObjectId: mongoose.Types.ObjectId }>
+    } | null>()
+
+  const excludedIds = [
+    ...ownedPlayerIds.map((slot) => slot.playerObjectId),
+    ...((marketDay?.listings ?? []).map((listing) => listing.playerObjectId)),
+  ]
 
   let availablePlayers: Array<{
     _id: mongoose.Types.ObjectId
@@ -3428,10 +3639,12 @@ export async function getFantasyLeagueDetail(
       marketPrices.map((price) => [price.playerObjectId.toString(), price])
     )
     const highestBidByPlayerId = new Map<string, { amount: number; teamName: string | null }>()
+    const bidCountByPlayerId = new Map<string, number>()
     const userBidByPlayerId = new Map<string, number>()
 
     for (const bid of allMarketBids) {
       const playerId = bid.playerObjectId.toString()
+      bidCountByPlayerId.set(playerId, (bidCountByPlayerId.get(playerId) ?? 0) + 1)
       if (!highestBidByPlayerId.has(playerId)) {
         highestBidByPlayerId.set(playerId, {
           amount: bid.amount,
@@ -3454,6 +3667,7 @@ export async function getFantasyLeagueDetail(
       competitionVisuals.map((player) => [
         player._id.toString(),
         {
+          position: player.position,
           teamName: player.teamName,
           teamImage: player.teamImage,
           kitImage: player.kitImage,
@@ -3491,6 +3705,7 @@ export async function getFantasyLeagueDetail(
             playerName: player.player_name,
             country: player.country,
             avatar: player.avatar ?? undefined,
+            position: visuals?.position ?? null,
             teamName: visuals?.teamName ?? "",
             teamImage: visuals?.teamImage ?? "",
             kitImage: visuals?.kitImage ?? "",
@@ -3500,6 +3715,7 @@ export async function getFantasyLeagueDetail(
             priceChangeDirection: marketPriceByPlayerId.get(listing.playerObjectId.toString())?.changeDirection ?? "flat",
             minBid: listing.minBid,
             highestBid: highestBid?.amount ?? null,
+            bidCount: bidCountByPlayerId.get(listing.playerObjectId.toString()) ?? 0,
             sellerTeamName: "sellerUserId" in listing && listing.sellerUserId
               ? membershipByUserId.get(String(listing.sellerUserId)) ?? null
               : null,
@@ -3507,6 +3723,26 @@ export async function getFantasyLeagueDetail(
           }
         })
         .filter((listing): listing is FantasyMarketEntry => listing !== null),
+    }
+  }
+
+  const recentFantasyPointsByPlayerId = await getRecentFantasyPointsByPlayerIds([
+    ...enrichedRoster.map((player) => player.playerObjectId),
+    ...(market?.listings.map((listing) => listing.playerObjectId) ?? []),
+  ])
+
+  enrichedRoster = enrichedRoster.map((player) => ({
+    ...player,
+    recentFantasyPoints: recentFantasyPointsByPlayerId.get(player.playerObjectId) ?? [],
+  }))
+
+  if (market) {
+    market = {
+      ...market,
+      listings: market.listings.map((listing) => ({
+        ...listing,
+        recentFantasyPoints: recentFantasyPointsByPlayerId.get(listing.playerObjectId) ?? [],
+      })),
     }
   }
 
@@ -3617,7 +3853,7 @@ export async function getFantasyLeagueDetail(
 
     weeks = [...weekMap.values()].sort((a, b) => a.week - b.week)
     if (weeks.length) {
-      defaultWeek = weeks.some((entry) => entry.week === defaultWeek) ? defaultWeek : weeks[weeks.length - 1].week
+      defaultWeek = weeks[weeks.length - 1].week
     }
 
     const playerMap = await PlayerModel.find({})

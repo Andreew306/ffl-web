@@ -14,6 +14,10 @@ type BetBallMatchCard = {
   team1Image?: string
   team2Name: string
   team2Image?: string
+  scoreTeam1: number
+  scoreTeam2: number
+  finished: boolean
+  bettingClosed: boolean
 }
 
 type BetBallWeek = {
@@ -51,6 +55,8 @@ type BetBallUserSlip = {
   combinedOdds: number
   potentialReturn: number
   payout: number
+  voidReason?: string
+  canOpenMatch: boolean
   status: "pending" | "won" | "lost" | "void"
   selections: BetBallSlipSelection[]
 }
@@ -62,6 +68,8 @@ type BetBallHomeProps = {
   initialTab: "fixtures" | "my-bets"
   createdSlipId?: string
 }
+
+const myBetsPageSize = 7
 
 function formatMatchDate(value: string) {
   const parsed = new Date(value)
@@ -98,10 +106,53 @@ function FflCoin({ value }: { value: number }) {
   )
 }
 
+function PaginationControls({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onPageChange,
+}: {
+  page: number
+  pageCount: number
+  total: number
+  pageSize: number
+  onPageChange: (page: number) => void
+}) {
+  if (total <= pageSize) return null
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3">
+      <div className="text-sm text-slate-400">
+        Page {page} of {pageCount} · {total} bets
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+          disabled={page >= pageCount}
+          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function BetBallHome({ competitions, fflCoins, myBets, initialTab, createdSlipId }: BetBallHomeProps) {
   const [selectedCompetitionId, setSelectedCompetitionId] = useState(competitions[0]?.id ?? "")
-  const [selectedWeek, setSelectedWeek] = useState<number>(competitions[0]?.weeks[0]?.week ?? 1)
+  const [selectedWeek, setSelectedWeek] = useState<number>(competitions[0]?.weeks.at(-1)?.week ?? 1)
   const [activeTab, setActiveTab] = useState<"fixtures" | "my-bets">(initialTab)
+  const [myBetsPage, setMyBetsPage] = useState(1)
 
   const selectedCompetition = useMemo(
     () => competitions.find((competition) => competition.id === selectedCompetitionId) ?? competitions[0] ?? null,
@@ -111,14 +162,20 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
   useEffect(() => {
     if (!selectedCompetition) return
     if (!selectedCompetition.weeks.some((week) => week.week === selectedWeek)) {
-      setSelectedWeek(selectedCompetition.weeks[0]?.week ?? 1)
+      setSelectedWeek(selectedCompetition.weeks.at(-1)?.week ?? 1)
     }
   }, [selectedCompetition, selectedWeek])
 
-  const currentWeek = selectedCompetition?.weeks.find((week) => week.week === selectedWeek) ?? selectedCompetition?.weeks[0] ?? null
+  const currentWeek = selectedCompetition?.weeks.find((week) => week.week === selectedWeek) ?? selectedCompetition?.weeks.at(-1) ?? null
   const currentWeekIndex = selectedCompetition?.weeks.findIndex((week) => week.week === selectedWeek) ?? -1
   const hasPreviousWeek = currentWeekIndex > 0
   const hasNextWeek = currentWeekIndex >= 0 && selectedCompetition ? currentWeekIndex < selectedCompetition.weeks.length - 1 : false
+  const myBetsPageCount = Math.max(1, Math.ceil(myBets.length / myBetsPageSize))
+  const paginatedMyBets = myBets.slice((myBetsPage - 1) * myBetsPageSize, myBetsPage * myBetsPageSize)
+
+  useEffect(() => {
+    setMyBetsPage((current) => Math.min(current, myBetsPageCount))
+  }, [myBetsPageCount])
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -140,7 +197,12 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                 <div className="relative">
                   <select
                     value={selectedCompetitionId}
-                    onChange={(event) => setSelectedCompetitionId(event.target.value)}
+                    onChange={(event) => {
+                      const nextCompetitionId = event.target.value
+                      const nextCompetition = competitions.find((competition) => competition.id === nextCompetitionId)
+                      setSelectedCompetitionId(nextCompetitionId)
+                      setSelectedWeek(nextCompetition?.weeks.at(-1)?.week ?? 1)
+                    }}
                     className="h-14 w-full appearance-none rounded-[20px] border border-white/10 bg-slate-950/80 px-5 pr-14 text-base font-semibold text-white outline-none transition focus:border-sky-400/40 focus:shadow-[0_0_0_1px_rgba(56,189,248,0.18)]"
                   >
                     {competitions.map((competition) => (
@@ -172,7 +234,10 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                     <button
                       key={item.key}
                       type="button"
-                      onClick={() => setActiveTab(item.key)}
+                      onClick={() => {
+                        setActiveTab(item.key)
+                        if (item.key === "my-bets") setMyBetsPage(1)
+                      }}
                       className={cn(
                         "rounded-2xl border px-4 py-2 text-sm font-medium transition",
                         activeTab === item.key
@@ -246,16 +311,31 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                     </div>
 
                     <div className="mt-4 grid gap-4 xl:grid-cols-2">
-                      {matchday.matches.map((match) => (
-                        <Link
-                          key={match.id}
-                          href={`/betball/matches/${match.id}`}
-                          className="rounded-[24px] border border-white/10 bg-slate-900/70 p-5 text-left transition hover:border-sky-400/30 hover:bg-slate-900"
-                        >
+                      {matchday.matches.map((match) => {
+                        const locked = match.finished || match.bettingClosed
+                        const cardClassName = cn(
+                          "rounded-[24px] border border-white/10 bg-slate-900/70 p-5 text-left transition",
+                          locked
+                            ? "cursor-not-allowed opacity-70"
+                            : "hover:border-sky-400/30 hover:bg-slate-900"
+                        )
+                        const content = (
+                          <>
                           <div className="flex items-center justify-between gap-3">
                             <div className="text-xs uppercase tracking-[0.3em] text-slate-500">{formatMatchDate(match.date)}</div>
-                            <div className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs font-semibold text-slate-300">
-                              Match #{match.matchId}
+                            <div className="flex items-center gap-2">
+                              {match.finished ? (
+                                <div className="rounded-full border border-emerald-300/20 bg-emerald-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-emerald-100">
+                                  Finished {match.scoreTeam1}-{match.scoreTeam2}
+                                </div>
+                              ) : match.bettingClosed ? (
+                                <div className="rounded-full border border-rose-300/20 bg-rose-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-rose-100">
+                                  Closed
+                                </div>
+                              ) : null}
+                              <div className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1 text-xs font-semibold text-slate-300">
+                                Match #{match.matchId}
+                              </div>
                             </div>
                           </div>
 
@@ -282,8 +362,19 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                               <div className="text-lg font-semibold text-white">{match.team2Name}</div>
                             </div>
                           </div>
-                        </Link>
-                      ))}
+                          </>
+                        )
+
+                        return locked ? (
+                          <div key={match.id} className={cardClassName} aria-disabled="true">
+                            {content}
+                          </div>
+                        ) : (
+                          <Link key={match.id} href={`/betball/matches/${match.id}`} className={cardClassName}>
+                            {content}
+                          </Link>
+                        )
+                      })}
                     </div>
                   </div>
                 ))}
@@ -302,7 +393,7 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                     <h2 className="mt-2 text-3xl font-semibold text-white">My Bets</h2>
                   </div>
                   {myBets.length ? (
-                    myBets.map((bet) => (
+                    paginatedMyBets.map((bet) => (
                       <div key={bet.id} className="rounded-[24px] border border-white/10 bg-slate-950/60 p-5">
                         <div className="flex flex-wrap items-start justify-between gap-4">
                           <div>
@@ -324,12 +415,18 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                             >
                               {bet.status}
                             </span>
-                            <Link
-                              href={`/betball/matches/${bet.matchId}`}
-                              className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
-                            >
-                              Open match
-                            </Link>
+                            {bet.canOpenMatch ? (
+                              <Link
+                                href={`/betball/matches/${bet.matchId}`}
+                                className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/10 hover:text-white"
+                              >
+                                Open match
+                              </Link>
+                            ) : (
+                              <span className="cursor-not-allowed rounded-full border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-500 opacity-60">
+                                Match closed
+                              </span>
+                            )}
                           </div>
                         </div>
 
@@ -352,6 +449,12 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                           </div>
                         </div>
 
+                        {bet.status === "void" && bet.voidReason ? (
+                          <div className="mt-4 rounded-2xl border border-amber-300/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+                            {bet.voidReason}
+                          </div>
+                        ) : null}
+
                         <div className="mt-4 grid gap-3">
                           {bet.selections.map((selection) => (
                             <div key={`${bet.id}-${selection.id}`} className="rounded-2xl border border-white/10 bg-slate-900/70 px-4 py-3">
@@ -373,13 +476,20 @@ export function BetBallHome({ competitions, fflCoins, myBets, initialTab, create
                       You have no bets yet.
                     </div>
                   )}
+                  <PaginationControls
+                    page={myBetsPage}
+                    pageCount={myBetsPageCount}
+                    total={myBets.length}
+                    pageSize={myBetsPageSize}
+                    onPageChange={setMyBetsPage}
+                  />
                 </div>
               )}
             </div>
           </section>
         ) : (
           <div className="mt-8 rounded-[30px] border border-dashed border-white/10 bg-slate-900/60 px-6 py-10 text-center text-slate-400">
-            No league competitions available for BetBall yet.
+            No competitions available for BetBall yet.
           </div>
         )}
       </div>

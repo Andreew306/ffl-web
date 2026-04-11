@@ -55,6 +55,7 @@ type BetBallMatchDetail = {
   team1Image?: string
   team2Name: string
   team2Image?: string
+  bettingClosed: boolean
   analysis: {
     projectedGoals: {
       home: number
@@ -317,6 +318,7 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
   const combinedOdds = useMemo(() => selectedBets.reduce((acc, bet) => acc * bet.odds, 1), [selectedBets])
   const potentialReturn = selectedBets.length ? Math.round(numericStake * combinedOdds * 100) / 100 : 0
   const canAfford = numericStake > 0 && numericStake <= fflCoins
+  const bettingClosed = match.bettingClosed
   const exactScoreProbability = useMemo(
     () => {
       const poisson =
@@ -400,7 +402,7 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
   )
 
   const handlePrepareSlip = async () => {
-    if (!selectedBets.length || !canAfford || isSubmittingSlip) return
+    if (!selectedBets.length || !canAfford || isSubmittingSlip || bettingClosed) return
     setSlipError("")
     setIsSubmittingSlip(true)
 
@@ -455,6 +457,11 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
               BetBall
             </div>
             <h1 className="mt-4 text-3xl font-semibold text-white">{match.competitionLabel}</h1>
+            {bettingClosed ? (
+              <div className="mt-3 inline-flex items-center rounded-full border border-rose-300/20 bg-rose-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-rose-100">
+                Betting closed
+              </div>
+            ) : null}
             <div className="mt-2 text-sm uppercase tracking-[0.25em] text-slate-400">
               {match.matchdayLabel} · Week {match.week} · {formatMatchDate(match.date)}
             </div>
@@ -756,6 +763,9 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
                         {!canAfford && numericStake > 0 ? (
                           <div className="mt-3 text-sm text-rose-200">You do not have enough FFL Coins for this bet.</div>
                         ) : null}
+                        {bettingClosed ? (
+                          <div className="mt-3 text-sm text-rose-200">Betting for this match has been closed after review.</div>
+                        ) : null}
                       </div>
                       <div className="rounded-[24px] border border-white/10 bg-slate-900/80 p-4">
                         <div className="flex items-center gap-2 text-xs uppercase tracking-[0.3em] text-slate-500">
@@ -772,11 +782,11 @@ export function BetBallMatchView({ match, fflCoins }: BetBallMatchViewProps) {
                     <div className="mt-6">
                       <Button
                         type="button"
-                        disabled={!canAfford || isSubmittingSlip}
+                        disabled={!canAfford || isSubmittingSlip || bettingClosed}
                         onClick={handlePrepareSlip}
                         className="w-full bg-sky-400 text-slate-950 hover:bg-sky-300 disabled:cursor-not-allowed disabled:bg-sky-400/40"
                       >
-                        {isSubmittingSlip ? "Preparing..." : "Prepare slip"}
+                        {isSubmittingSlip ? "Preparing..." : bettingClosed ? "Betting closed" : "Prepare slip"}
                       </Button>
                     </div>
                     {slipError ? (

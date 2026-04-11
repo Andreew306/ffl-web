@@ -1,6 +1,6 @@
 ﻿"use client"
 
-import { useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { Copy, Pencil, Plus, Save, Search, Sparkles, ThumbsDown, ThumbsUp, Trash2, Upload, Users, X } from "lucide-react"
 import {
@@ -35,6 +35,8 @@ type DeleteTarget =
   | { kind: "template"; id: string; title: string }
   | { kind: "submission"; id: string; title: string }
   | null
+
+const tierListPageSize = 8
 
 const defaultTiers: EditorTier[] = [
   { id: "tier-s", label: "S", color: "#ef4444", itemIds: [] },
@@ -132,6 +134,48 @@ function createBlankTierSet() {
   return defaultTiers.map((tier) => ({ ...tier, itemIds: [] }))
 }
 
+function PaginationControls({
+  page,
+  pageCount,
+  total,
+  pageSize,
+  onPageChange,
+}: {
+  page: number
+  pageCount: number
+  total: number
+  pageSize: number
+  onPageChange: (page: number) => void
+}) {
+  if (total <= pageSize) return null
+
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-3">
+      <div className="text-sm text-slate-400">
+        Page {page} of {pageCount} · {total} items
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.max(1, page - 1))}
+          disabled={page <= 1}
+          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Previous
+        </button>
+        <button
+          type="button"
+          onClick={() => onPageChange(Math.min(pageCount, page + 1))}
+          disabled={page >= pageCount}
+          className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Next
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function TierListHome({
   players,
   teams,
@@ -157,11 +201,31 @@ export function TierListHome({
   const [voting, startVoting] = useTransition()
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget>(null)
+  const [templatesPage, setTemplatesPage] = useState(1)
+  const [communityPage, setCommunityPage] = useState(1)
 
   const sourceItems = itemType === "players" ? players : teams
   const itemMap = useMemo(() => new Map(sourceItems.map((item) => [item.id, item])), [sourceItems])
   const selectedSet = useMemo(() => new Set(selectedOptionIds), [selectedOptionIds])
   const assignedItemIds = useMemo(() => new Set(tiers.flatMap((tier) => tier.itemIds)), [tiers])
+  const templatesPageCount = Math.max(1, Math.ceil(publishedTemplates.length / tierListPageSize))
+  const communityPageCount = Math.max(1, Math.ceil(communitySubmissions.length / tierListPageSize))
+  const paginatedPublishedTemplates = publishedTemplates.slice(
+    (templatesPage - 1) * tierListPageSize,
+    templatesPage * tierListPageSize
+  )
+  const paginatedCommunitySubmissions = communitySubmissions.slice(
+    (communityPage - 1) * tierListPageSize,
+    communityPage * tierListPageSize
+  )
+
+  useEffect(() => {
+    setTemplatesPage((current) => Math.min(current, templatesPageCount))
+  }, [templatesPageCount])
+
+  useEffect(() => {
+    setCommunityPage((current) => Math.min(current, communityPageCount))
+  }, [communityPageCount])
 
   const filteredSelectedPool = useMemo(() => {
     const normalized = query.trim().toLowerCase()
@@ -418,7 +482,11 @@ export function TierListHome({
                 <button
                   key={tab.id}
                   type="button"
-                  onClick={() => setActiveView(tab.id as "create" | "mine" | "templates" | "community")}
+                  onClick={() => {
+                    setActiveView(tab.id as "create" | "mine" | "templates" | "community")
+                    if (tab.id === "templates") setTemplatesPage(1)
+                    if (tab.id === "community") setCommunityPage(1)
+                  }}
                   className={cn(
                     "rounded-full border px-5 py-2.5 text-sm font-semibold transition",
                     activeView === tab.id
@@ -787,7 +855,7 @@ export function TierListHome({
 
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
               {publishedTemplates.length ? (
-                publishedTemplates.map((list) => (
+                paginatedPublishedTemplates.map((list) => (
                   <div key={list.id} className="rounded-[24px] border border-white/10 bg-slate-950/55 p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -811,12 +879,31 @@ export function TierListHome({
                         </div>
                       ))}
                     </div>
+                    <div className="mt-4 flex justify-end">
+                      <div className="flex items-center gap-2">
+                        <button type="button" disabled={voting} onClick={() => castVote(list.id, "up")} className={cn("inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition", list.userVote === "up" ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100" : "border-white/10 bg-slate-950/80 text-slate-200 hover:text-white")}>
+                          <ThumbsUp className="h-4 w-4" />
+                          {list.upvotes}
+                        </button>
+                        <button type="button" disabled={voting} onClick={() => castVote(list.id, "down")} className={cn("inline-flex h-10 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition", list.userVote === "down" ? "border-rose-300/30 bg-rose-400/10 text-rose-100" : "border-white/10 bg-slate-950/80 text-slate-200 hover:text-white")}>
+                          <ThumbsDown className="h-4 w-4" />
+                          {list.downvotes}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ))
               ) : (
                 <div className="col-span-full flex min-h-[220px] items-center justify-center rounded-[24px] border border-dashed border-white/10 text-slate-500">No templates published yet.</div>
               )}
             </div>
+            <PaginationControls
+              page={templatesPage}
+              pageCount={templatesPageCount}
+              total={publishedTemplates.length}
+              pageSize={tierListPageSize}
+              onPageChange={setTemplatesPage}
+            />
           </section>
         ) : null}
 
@@ -835,7 +922,7 @@ export function TierListHome({
 
             <div className="mt-6 grid gap-4 xl:grid-cols-2">
               {communitySubmissions.length ? (
-                communitySubmissions.map((list) => (
+                paginatedCommunitySubmissions.map((list) => (
                   <div key={list.id} className="rounded-[24px] border border-white/10 bg-slate-950/55 p-4">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
@@ -900,6 +987,13 @@ export function TierListHome({
                 <div className="col-span-full flex min-h-[220px] items-center justify-center rounded-[24px] border border-dashed border-white/10 text-slate-500">No community submissions published yet.</div>
               )}
             </div>
+            <PaginationControls
+              page={communityPage}
+              pageCount={communityPageCount}
+              total={communitySubmissions.length}
+              pageSize={tierListPageSize}
+              onPageChange={setCommunityPage}
+            />
           </section>
         ) : null}
       </div>

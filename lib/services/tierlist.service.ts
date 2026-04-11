@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+import mongoose, { type PipelineStage } from "mongoose"
 import dbConnect from "@/lib/db/mongoose"
 import PlayerModel from "@/lib/models/Player"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
@@ -90,6 +90,15 @@ type TierListLeanRecord = {
   upvoteDiscordIds?: string[]
   downvoteDiscordIds?: string[]
   updatedAt?: Date
+}
+
+function byMostLikesPipeline(mode: TierListMode, limit: number): PipelineStage[] {
+  return [
+    { $match: { mode, published: true } },
+    { $addFields: { upvoteCount: { $size: { $ifNull: ["$upvoteDiscordIds", []] } } } },
+    { $sort: { upvoteCount: -1, updatedAt: -1 } },
+    { $limit: limit },
+  ]
 }
 
 function pickString(value?: string | null) {
@@ -252,8 +261,8 @@ export async function getTierListPageData(discordId?: string | null): Promise<Ti
     ownUser
       ? TierListModel.find({ ownerUserId: ownUser._id }).sort({ updatedAt: -1 }).lean<TierListLeanRecord[]>()
       : Promise.resolve([] as TierListLeanRecord[]),
-    TierListModel.find({ mode: "template", published: true }).sort({ updatedAt: -1 }).limit(30).lean<TierListLeanRecord[]>(),
-    TierListModel.find({ mode: "submission", published: true }).sort({ updatedAt: -1 }).limit(40).lean<TierListLeanRecord[]>(),
+    TierListModel.aggregate<TierListLeanRecord>(byMostLikesPipeline("template", 30)),
+    TierListModel.aggregate<TierListLeanRecord>(byMostLikesPipeline("submission", 40)),
   ])
 
   const ownerUserIds = [...ownRaw, ...templatesRaw, ...communityRaw]
