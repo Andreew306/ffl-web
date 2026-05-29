@@ -8,7 +8,6 @@ import CompetitionModel from "@/lib/models/Competition"
 import MatchModel from "@/lib/models/Match"
 import GoalModel from "@/lib/models/Goal"
 import UserModel from "@/lib/models/User"
-import { scorePlayerMatchStats } from "@/lib/services/fantasy.service"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 import PlayerStatsTabs from "./PlayerStatsTabs"
@@ -966,28 +965,6 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
     .filter(isNotNull)
   logTiming(`${timingLabel}:matchSeries`, seriesStart)
 
-  const recentFantasyPoints = matchSeries
-    .map((entry) => ({
-      ...entry,
-      fantasyPoints: scorePlayerMatchStats({
-        position: entry.position,
-        goals: entry.stats.goals,
-        assists: entry.stats.assists,
-        preassists: entry.stats.preassists,
-        cs: entry.stats.cs,
-        goalsConceded: entry.stats.goalsConceded,
-        saves: entry.stats.saves,
-        clearances: entry.stats.clearances,
-        recoveries: entry.stats.recoveries,
-        shotsOnGoal: entry.stats.shotsOnGoal,
-        won: entry.outcome === "win" ? 1 : 0,
-        draw: entry.outcome === "draw" ? 1 : 0,
-        lost: entry.outcome === "loss" ? 1 : 0,
-      }),
-    }))
-    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-    .slice(0, 5)
-
   const goalsByOpponent = goalRows
     .map((row) => {
       const matchId = toObjectIdString(row.match_id)
@@ -1293,47 +1270,6 @@ export default async function PlayerPage({ params }: { params: Promise<{ id: str
             </div>
           </div>
         </section>
-
-        {recentFantasyPoints.length ? (
-          <section className="rounded-3xl border border-slate-800 bg-slate-900/70 p-6">
-            <div className="flex items-end justify-between gap-4">
-              <div>
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Fantasy</p>
-                <h2 className="mt-2 text-2xl font-semibold text-white">Last 5 match points</h2>
-              </div>
-              <div className="text-sm text-slate-400">Official fantasy scoring</div>
-            </div>
-
-            <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
-              {recentFantasyPoints.map((entry) => (
-                <div
-                  key={`${entry.matchId}:${entry.playerCompetitionId}`}
-                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-4"
-                >
-                  <div className="text-[11px] uppercase tracking-[0.24em] text-slate-500">
-                    {new Date(entry.date).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "short",
-                      year: "numeric",
-                    })}
-                  </div>
-                  <div className="mt-2 line-clamp-2 text-sm font-medium text-slate-200">
-                    {entry.matchLabel}
-                  </div>
-                  <div className="mt-1 text-xs text-slate-500">
-                    {entry.competitionLabel || "Match"}
-                  </div>
-                  <div className="mt-4 text-3xl font-semibold text-cyan-200">
-                    {entry.fantasyPoints}
-                  </div>
-                  <div className="mt-2 text-xs text-slate-400">
-                    {entry.stats.goals}G • {entry.stats.assists}A • {entry.stats.preassists}PA
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        ) : null}
 
         <PlayerStatsTabs
           playerId={id}

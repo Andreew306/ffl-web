@@ -1,7 +1,6 @@
 import mongoose, { type PipelineStage } from "mongoose"
 import dbConnect from "@/lib/db/mongoose"
 import PlayerModel from "@/lib/models/Player"
-import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 import TeamModel from "@/lib/models/Team"
 import UserModel from "@/lib/models/User"
 import TierListModel from "@/lib/models/TierList"
@@ -114,22 +113,9 @@ function uniqueStrings(values: string[]) {
 }
 
 async function getEligibleTeams(): Promise<TierListTeamItem[]> {
-  const eligibleRows = (await TeamCompetitionModel.collection
-    .aggregate([
-      { $group: { _id: "$team_id", competitionIds: { $addToSet: "$competition_id" } } },
-      { $project: { competitionCount: { $size: "$competitionIds" } } },
-      { $match: { competitionCount: { $gte: 3 } } },
-    ])
-    .toArray()) as Array<{ _id: mongoose.Types.ObjectId }>
-
-  const eligibleTeamIds = eligibleRows.map((row) => row._id)
-  if (!eligibleTeamIds.length) {
-    return []
-  }
-
   const teams = (await TeamModel.collection
     .find(
-      { _id: { $in: eligibleTeamIds } },
+      { image: { $type: "string", $ne: "" } },
       { projection: { _id: 1, team_id: 1, team_name: 1, teamName: 1, image: 1 } }
     )
     .toArray()) as TeamDoc[]

@@ -4,6 +4,8 @@ import MatchModel from "@/lib/models/Match"
 import TeamCompetitionModel from "@/lib/models/TeamCompetition"
 import Link from "next/link"
 
+export const revalidate = 86400
+
 type CompetitionDoc = {
   _id?: { toString(): string }
   type?: string
