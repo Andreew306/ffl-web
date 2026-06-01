@@ -73,8 +73,8 @@ type PlayerTotalsRow = {
   goalsConceded?: number
   cs?: number
   owngoals?: number
-  avgSum?: number
-  avgCount?: number
+  avgWeightedSum?: number
+  avgWeight?: number
   TOTW?: number
   MVP?: number
   hasGK?: boolean
@@ -375,18 +375,18 @@ export default async function HomePage() {
     {
       $group: {
         _id: "$team_id",
-        matchesPlayed: { $sum: "$matches_played" },
-        matchesWon: { $sum: "$matches_won" },
-        matchesDraw: { $sum: "$matches_draw" },
-        matchesLost: { $sum: "$matches_lost" },
-        goalsScored: { $sum: "$goals_scored" },
-        goalsConceded: { $sum: "$goals_conceded" },
+        matchesPlayed: { $sum: { $ifNull: ["$matches_played", "$matchesPlayed"] } },
+        matchesWon: { $sum: { $ifNull: ["$matches_won", "$matchesWon"] } },
+        matchesDraw: { $sum: { $ifNull: ["$matches_draw", "$matchesDraw"] } },
+        matchesLost: { $sum: { $ifNull: ["$matches_lost", "$matchesLost"] } },
+        goalsScored: { $sum: { $ifNull: ["$goals_scored", "$goalsScored"] } },
+        goalsConceded: { $sum: { $ifNull: ["$goals_conceded", "$goalsConceded"] } },
         points: { $sum: "$points" },
-        possessionAvg: { $avg: "$possession_avg" },
+        possessionAvg: { $avg: { $ifNull: ["$possession_avg", "$possessionAvg"] } },
         kicks: { $sum: "$kicks" },
         passes: { $sum: "$passes" },
-        shotsOnGoal: { $sum: "$shots_on_goal" },
-        shotsOffGoal: { $sum: "$shots_off_goal" },
+        shotsOnGoal: { $sum: { $ifNull: ["$shots_on_goal", "$shotsOnGoal"] } },
+        shotsOffGoal: { $sum: { $ifNull: ["$shots_off_goal", "$shotsOffGoal"] } },
         saves: { $sum: "$saves" },
         cs: { $sum: "$cs" },
       },
@@ -455,31 +455,31 @@ export default async function HomePage() {
           teamCompetitionId: "$team_competition_id",
           competitionStart: "$competitionStart",
         },
-        matchesPlayedTeam: { $sum: "$matches_played" },
-        matchesWon: { $sum: "$matches_won" },
-        matchesDraw: { $sum: "$matches_draw" },
-        matchesLost: { $sum: "$matches_lost" },
+        matchesPlayedTeam: { $sum: { $ifNull: ["$matches_played", "$matchesPlayed"] } },
+        matchesWon: { $sum: { $ifNull: ["$matches_won", "$matchesWon"] } },
+        matchesDraw: { $sum: { $ifNull: ["$matches_draw", "$matchesDraw"] } },
+        matchesLost: { $sum: { $ifNull: ["$matches_lost", "$matchesLost"] } },
         starter: { $sum: "$starter" },
         substitute: { $sum: "$substitute" },
-        minutesPlayed: { $sum: "$minutes_played" },
+        minutesPlayed: { $sum: { $ifNull: ["$minutes_played", "$minutesPlayed"] } },
         goals: { $sum: "$goals" },
         assists: { $sum: "$assists" },
         preassists: { $sum: "$preassists" },
         kicks: { $sum: "$kicks" },
         passes: { $sum: "$passes" },
-        passesForward: { $sum: "$passes_forward" },
-        passesLateral: { $sum: "$passes_lateral" },
-        passesBackward: { $sum: "$passes_backward" },
+        passesForward: { $sum: { $ifNull: ["$passes_forward", "$passesForward"] } },
+        passesLateral: { $sum: { $ifNull: ["$passes_lateral", "$passesLateral"] } },
+        passesBackward: { $sum: { $ifNull: ["$passes_backward", "$passesBackward"] } },
         keypass: { $sum: "$keypass" },
         autopass: { $sum: "$autopass" },
         misspass: { $sum: "$misspass" },
-        shotsOnGoal: { $sum: "$shots_on_goal" },
-        shotsOffGoal: { $sum: "$shots_off_goal" },
-        shotsDefended: { $sum: "$shotsDefended" },
+        shotsOnGoal: { $sum: { $ifNull: ["$shots_on_goal", "$shotsOnGoal"] } },
+        shotsOffGoal: { $sum: { $ifNull: ["$shots_off_goal", "$shotsOffGoal"] } },
+        shotsDefended: { $sum: { $ifNull: ["$shots_defended", "$shotsDefended"] } },
         saves: { $sum: "$saves" },
         recoveries: { $sum: "$recoveries" },
         clearances: { $sum: "$clearances" },
-        goalsConceded: { $sum: "$goals_conceded" },
+        goalsConceded: { $sum: { $ifNull: ["$goals_conceded", "$goalsConceded"] } },
         cs: {
           $sum: {
             $cond: [
@@ -490,8 +490,23 @@ export default async function HomePage() {
           },
         },
         owngoals: { $sum: "$owngoals" },
-        avgSum: { $sum: "$avg" },
-        avgCount: { $sum: 1 },
+        avgWeightedSum: {
+          $sum: {
+            $multiply: [
+              { $ifNull: ["$avg", 0] },
+              { $ifNull: ["$matches_played", "$matchesPlayed"] },
+            ],
+          },
+        },
+        avgWeight: {
+          $sum: {
+            $cond: [
+              { $gt: [{ $ifNull: ["$avg", 0] }, 0] },
+              { $ifNull: ["$matches_played", "$matchesPlayed"] },
+              0,
+            ],
+          },
+        },
         TOTW: { $sum: "$TOTW" },
         MVP: { $sum: "$MVP" },
         hasGK: { $max: { $cond: [{ $eq: [{ $toUpper: { $ifNull: ["$position", ""] } }, "GK"] }, 1, 0] } },
@@ -529,8 +544,8 @@ export default async function HomePage() {
         goalsConceded: { $sum: "$goalsConceded" },
         cs: { $sum: "$cs" },
         owngoals: { $sum: "$owngoals" },
-        avgSum: { $sum: "$avgSum" },
-        avgCount: { $sum: "$avgCount" },
+        avgWeightedSum: { $sum: "$avgWeightedSum" },
+        avgWeight: { $sum: "$avgWeight" },
         TOTW: { $sum: "$TOTW" },
         MVP: { $sum: "$MVP" },
         hasGK: { $max: "$hasGK" },
@@ -599,8 +614,8 @@ export default async function HomePage() {
         goalsConceded: 1,
         cs: 1,
         owngoals: 1,
-        avgSum: 1,
-        avgCount: 1,
+        avgWeightedSum: 1,
+        avgWeight: 1,
         TOTW: 1,
         MVP: 1,
         hasGK: 1,
@@ -667,7 +682,7 @@ export default async function HomePage() {
     braces: scoringFeatsByPlayer.get(String(row.playerId))?.braces ?? 0,
     hatTricks: scoringFeatsByPlayer.get(String(row.playerId))?.hatTricks ?? 0,
     pokers: scoringFeatsByPlayer.get(String(row.playerId))?.pokers ?? 0,
-    avg: safeDivide(Number(row.avgSum ?? 0), Number(row.avgCount ?? 1)),
+    avg: safeDivide(Number(row.avgWeightedSum ?? 0), Number(row.avgWeight ?? 0)),
     TOTW: Number(row.TOTW ?? 0),
     MVP: Number(row.MVP ?? 0),
     hasGK: Boolean(row.hasGK),
@@ -1158,7 +1173,7 @@ export default async function HomePage() {
 
   const buildTopRanking = (metric: PlayerMetric) => {
     const rows = players
-      .filter((player) => player.matchesPlayed >= 7)
+      .filter((player) => player.matchesPlayed >= (metric.key === "avg" ? 5 : 7))
       .filter((player) => !metric.gkOnly || player.hasGK)
       .map((player) => {
         const base = {
@@ -1628,4 +1643,3 @@ export default async function HomePage() {
     </div>
   )
 }
-

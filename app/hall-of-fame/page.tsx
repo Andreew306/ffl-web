@@ -192,12 +192,12 @@ export default async function HallOfFamePage({
           </div>
 
           {data.entries.length ? (
-            <div className="mt-6 overflow-x-auto overflow-y-visible rounded-2xl border border-white/10 [scrollbar-width:thin] [scrollbar-color:rgba(45,212,191,0.75)_rgba(15,23,42,0.55)] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-track]:bg-slate-900/60 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-teal-400/70">
+            <div className="mt-6 max-h-[calc(100vh-12rem)] overflow-auto rounded-2xl border border-white/10 [scrollbar-width:thin] [scrollbar-color:rgba(45,212,191,0.75)_rgba(15,23,42,0.55)] [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar]:w-1 [&::-webkit-scrollbar-track]:bg-slate-900/60 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-teal-400/70">
               <table className="min-w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="text-xs uppercase tracking-[0.18em] text-slate-300">
-                    <th className="sticky top-0 z-20 bg-slate-950/95 px-4 py-3 backdrop-blur">#</th>
-                    <th className="sticky top-0 z-20 bg-slate-950/95 px-4 py-3 backdrop-blur">Player</th>
+                    <th className="sticky left-0 top-0 z-40 w-14 min-w-14 bg-slate-950 px-4 py-3 backdrop-blur">#</th>
+                    <th className="sticky left-14 top-0 z-40 min-w-56 bg-slate-950 px-4 py-3 backdrop-blur shadow-[8px_0_18px_rgba(2,6,23,0.35)]">Player</th>
                     <th className="sticky top-0 z-20 bg-slate-950/95 px-4 py-3 backdrop-blur">Total</th>
                     <th className="sticky top-0 z-20 bg-slate-950/95 px-4 py-3 backdrop-blur">Roles</th>
                     {data.roles.map((role) => (
@@ -214,8 +214,8 @@ export default async function HallOfFamePage({
                       key={entry.playerObjectId}
                       className={index % 2 === 0 ? "bg-slate-900/45" : "bg-slate-900/25"}
                     >
-                      <td className="px-4 py-3 font-semibold text-cyan-200">{entry.rank}</td>
-                      <td className="px-4 py-3">
+                      <td className="sticky left-0 z-30 w-14 min-w-14 bg-slate-900 px-4 py-3 font-semibold text-cyan-200">{entry.rank}</td>
+                      <td className="sticky left-14 z-30 min-w-56 bg-slate-900 px-4 py-3 shadow-[8px_0_18px_rgba(2,6,23,0.35)]">
                         <RankingPlayerCell
                           playerId={entry.playerId}
                           playerName={entry.playerName}

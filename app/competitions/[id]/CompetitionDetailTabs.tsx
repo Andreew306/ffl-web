@@ -275,8 +275,7 @@ export default function CompetitionDetailTabs({
           label: "Avg",
           format: "decimal",
           value: (p: PlayerRankingRow) => p.avg,
-          minGames: 5,
-          allowZero: true,
+          minGames: 2,
         },
         {
           key: "gap",
