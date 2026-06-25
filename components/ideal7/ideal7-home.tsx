@@ -20,6 +20,7 @@ type FormationKey =
   | "1-1-3-2"
 
 type ThemeKey = "champion" | "obsidian" | "emerald" | "ruby" | "diamond" | "gold" | "silver"
+type PickerMode = "player" | "team"
 
 const formations: Array<{ id: FormationKey; label: string }> = [
   { id: "1-3-2-1", label: "1-3-2-1" },
@@ -384,7 +385,9 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
   const [selectedTheme, setSelectedTheme] = useState<ThemeKey>("champion")
   const [isThemeOpen, setIsThemeOpen] = useState(false)
   const [slots, setSlots] = useState<Array<string | null>>(Array(7).fill(null))
+  const [slotTeams, setSlotTeams] = useState<Array<string | null>>(Array(7).fill(null))
   const [activeSlot, setActiveSlot] = useState<number | null>(null)
+  const [pickerMode, setPickerMode] = useState<PickerMode>("player")
   const [title, setTitle] = useState("IDEAL 7")
   const [isEditingTitle, setIsEditingTitle] = useState(false)
   const [query, setQuery] = useState("")
@@ -437,6 +440,24 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
   }, [players, query])
 
   const selectedCount = slots.filter(Boolean).length
+  const activePlayer = activeSlot !== null && slots[activeSlot] ? playersById.get(slots[activeSlot] ?? "") ?? null : null
+  const activePlayerTeams = activePlayer?.teams ?? []
+
+  function withSlotTeam(player: Ideal7Player, slotIndex: number) {
+    const selectedTeamId = slotTeams[slotIndex]
+    const selectedTeam = selectedTeamId ? player.teams.find((team) => team.id === selectedTeamId) : null
+    if (!selectedTeam) {
+      return player
+    }
+
+    return {
+      ...player,
+      teamName: selectedTeam.teamName,
+      teamImage: selectedTeam.teamImage,
+      kitImage: selectedTeam.kitImage,
+      kitTextColor: selectedTeam.kitTextColor,
+    }
+  }
 
   async function handleDownload() {
     if (!boardRef.current) {
@@ -469,7 +490,13 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
       next[activeSlot] = playerId
       return next
     })
+    setSlotTeams((current) => {
+      const next = [...current]
+      next[activeSlot] = null
+      return next
+    })
     setActiveSlot(null)
+    setPickerMode("player")
     setQuery("")
     setMessage(null)
     setIsFormationOpen(false)
@@ -478,9 +505,29 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
 
   function clearLineup() {
     setSlots(Array(7).fill(null))
+    setSlotTeams(Array(7).fill(null))
     setActiveSlot(null)
+    setPickerMode("player")
     setQuery("")
     setMessage(null)
+  }
+
+  function assignTeam(teamId: string) {
+    if (activeSlot === null) {
+      return
+    }
+
+    setSlotTeams((current) => {
+      const next = [...current]
+      next[activeSlot] = teamId
+      return next
+    })
+    setActiveSlot(null)
+    setPickerMode("player")
+    setQuery("")
+    setMessage(null)
+    setIsFormationOpen(false)
+    setIsThemeOpen(false)
   }
 
   function commitTitle() {
@@ -705,6 +752,7 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                       {formationSlots.map((point, index) => {
                         const playerId = slots[index]
                         const player = playerId ? playersById.get(playerId) ?? null : null
+                        const slotPlayer = player ? withSlotTeam(player, index) : null
 
                         return (
                           <div
@@ -715,12 +763,13 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                             <button
                               type="button"
                               onClick={() => {
-                    setActiveSlot(index)
-                    setQuery("")
-                    setMessage(null)
-                    setIsFormationOpen(false)
-                    setIsThemeOpen(false)
-                  }}
+                                setActiveSlot(index)
+                                setPickerMode("player")
+                                setQuery("")
+                                setMessage(null)
+                                setIsFormationOpen(false)
+                                setIsThemeOpen(false)
+                              }}
                               className={cn(
                                 "group flex w-[120px] flex-col items-center gap-3 rounded-[24px] px-3 py-4 text-center transition",
                                 player
@@ -730,7 +779,7 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                             >
                               {player ? (
                                 <>
-                                  <PlayerBadge player={player} />
+                                  <PlayerBadge player={slotPlayer ?? player} />
                                   <div className="line-clamp-2 text-base font-semibold leading-5 text-white">
                                     {player.playerName}
                                   </div>
@@ -765,22 +814,24 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                   {slots.some(Boolean) ? (
                     slots.map((playerId, index) => {
                       const player = playerId ? playersById.get(playerId) ?? null : null
+                      const slotPlayer = player ? withSlotTeam(player, index) : null
                       return (
                         <button
                           key={`list-${index}`}
                           type="button"
                           onClick={() => {
                             setActiveSlot(index)
+                            setPickerMode("player")
                             setQuery("")
                             setMessage(null)
                           }}
                           className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-slate-900/80 px-4 py-3 text-left transition hover:border-cyan-300/20"
                         >
                           <div className="flex items-center gap-3">
-                            {player ? <PlayerBadge player={player} size="sm" /> : <div className="h-12 w-12 rounded-full border border-dashed border-white/10 bg-slate-900/60" />}
+                            {slotPlayer ? <PlayerBadge player={slotPlayer} size="sm" /> : <div className="h-12 w-12 rounded-full border border-dashed border-white/10 bg-slate-900/60" />}
                             <div>
                               <div className="text-sm font-semibold text-white">{player?.playerName ?? `Empty slot ${index + 1}`}</div>
-                              <div className="text-xs text-slate-400">{player?.teamName ?? "Click to select a player"}</div>
+                              <div className="text-xs text-slate-400">{slotPlayer?.teamName ?? "Click to select a player"}</div>
                             </div>
                           </div>
                           <div className="text-xs uppercase tracking-[0.28em] text-slate-500">Slot {index + 1}</div>
@@ -815,6 +866,7 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                 type="button"
                 onClick={() => {
                   setActiveSlot(null)
+                  setPickerMode("player")
                   setQuery("")
                   setMessage(null)
                 }}
@@ -829,20 +881,91 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
               <span className="font-semibold text-cyan-100">{selectedFormation}</span>
             </div>
 
-            <div className="mt-4">
-              <input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value)
-                  setMessage(null)
-                }}
-                placeholder="Search player"
-                className="h-14 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-5 text-white outline-none transition focus:border-cyan-300/40"
-              />
-            </div>
+            {activePlayer ? (
+              <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-900/60 p-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerMode("player")
+                    setQuery("")
+                    setMessage(null)
+                  }}
+                  className={cn(
+                    "h-11 rounded-xl text-sm font-semibold transition",
+                    pickerMode === "player" ? "bg-cyan-400/15 text-cyan-100" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  )}
+                >
+                  Player
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPickerMode("team")
+                    setQuery("")
+                    setMessage(null)
+                  }}
+                  className={cn(
+                    "h-11 rounded-xl text-sm font-semibold transition",
+                    pickerMode === "team" ? "bg-cyan-400/15 text-cyan-100" : "text-slate-400 hover:bg-white/5 hover:text-white"
+                  )}
+                >
+                  Team logo
+                </button>
+              </div>
+            ) : null}
+
+            {pickerMode === "player" ? (
+              <div className="mt-4">
+                <input
+                  value={query}
+                  onChange={(event) => {
+                    setQuery(event.target.value)
+                    setMessage(null)
+                  }}
+                  placeholder="Search player"
+                  className="h-14 w-full rounded-2xl border border-white/10 bg-slate-950/80 px-5 text-white outline-none transition focus:border-cyan-300/40"
+                />
+              </div>
+            ) : null}
 
             <div className="mt-4 max-h-[460px] overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/70 p-3">
-              {query.trim() ? (
+              {pickerMode === "team" ? (
+                activePlayerTeams.length ? (
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {activePlayerTeams.map((team) => {
+                      const isSelected = slotTeams[activeSlot] === team.id || (!slotTeams[activeSlot] && team.teamName === activePlayer?.teamName)
+                      return (
+                        <button
+                          key={team.id}
+                          type="button"
+                          onClick={() => assignTeam(team.id)}
+                          className={cn(
+                            "flex items-center gap-3 rounded-2xl border bg-slate-900/80 px-4 py-3 text-left transition hover:border-cyan-300/25 hover:bg-slate-900",
+                            isSelected ? "border-cyan-300/30" : "border-white/10"
+                          )}
+                        >
+                          {team.teamImage ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={team.teamImage} alt={team.teamName} className="h-10 w-10 rounded-full bg-slate-950 object-cover ring-1 ring-white/10" />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 text-xs font-semibold text-slate-400">
+                              {team.teamName.slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-white">{team.teamName}</div>
+                            <div className="mt-1 text-xs text-slate-500">{isSelected ? "Selected logo" : "Use this logo"}</div>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex min-h-[200px] items-center justify-center text-sm text-slate-400">
+                    No team logos found for this player.
+                  </div>
+                )
+              ) : query.trim() ? (
                 filteredPlayers.length ? (
                   <div className="space-y-2">
                     {filteredPlayers.map((player) => (
@@ -886,7 +1009,13 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                         next[activeSlot] = null
                         return next
                       })
+                      setSlotTeams((current) => {
+                        const next = [...current]
+                        next[activeSlot] = null
+                        return next
+                      })
                       setActiveSlot(null)
+                      setPickerMode("player")
                       setQuery("")
                       setMessage(null)
                       setIsFormationOpen(false)
@@ -901,6 +1030,7 @@ export function Ideal7Home({ players }: Ideal7HomeProps) {
                   type="button"
                   onClick={() => {
                     setActiveSlot(null)
+                    setPickerMode("player")
                     setQuery("")
                     setMessage(null)
                     setIsFormationOpen(false)

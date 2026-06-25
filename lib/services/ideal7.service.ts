@@ -16,9 +16,18 @@ export type Ideal7Player = {
   teamImage?: string
   kitImage?: string
   kitTextColor?: string
+  teams: Ideal7TeamOption[]
   goals: number
   assists: number
   matchesPlayed: number
+}
+
+export type Ideal7TeamOption = {
+  id: string
+  teamName: string
+  teamImage?: string
+  kitImage?: string
+  kitTextColor?: string
 }
 
 export type Ideal7Data = {
@@ -199,6 +208,7 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
         entry._id.toString(),
         {
           season,
+          teamId,
           teamName: team?.teamName ?? "Unknown team",
           teamImage: team?.teamImage ?? "",
           kitImage: pickKitImage(entry.kits) || team?.teamKit || randomKit || globalKitFallback,
@@ -236,6 +246,16 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
       assists: number
     }
   >()
+  const teamsByPlayerId = new Map<
+    string,
+    Map<
+      string,
+      Ideal7TeamOption & {
+        season: number
+        matchesPlayed: number
+      }
+    >
+  >()
 
   for (const row of rawPlayerCompetitions) {
     if (!row.player_id || !row.team_competition_id) continue
@@ -252,6 +272,26 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
     }
 
     const key = row.player_id.toString()
+    const teamKey = visuals.teamId || row.team_competition_id.toString()
+    const currentTeams = teamsByPlayerId.get(key) ?? new Map()
+    const currentTeam = currentTeams.get(teamKey)
+    if (
+      !currentTeam
+      || normalized.season > currentTeam.season
+      || (normalized.season === currentTeam.season && normalized.matchesPlayed > currentTeam.matchesPlayed)
+    ) {
+      currentTeams.set(teamKey, {
+        id: teamKey,
+        teamName: visuals.teamName,
+        teamImage: visuals.teamImage || undefined,
+        kitImage: visuals.kitImage || undefined,
+        kitTextColor: visuals.kitTextColor || undefined,
+        season: normalized.season,
+        matchesPlayed: normalized.matchesPlayed,
+      })
+      teamsByPlayerId.set(key, currentTeams)
+    }
+
     const current = bestByPlayerId.get(key)
 
     if (
@@ -304,6 +344,19 @@ export async function getIdeal7Data(): Promise<Ideal7Data> {
         teamImage: visuals.teamImage || undefined,
         kitImage: visuals.kitImage || undefined,
         kitTextColor: visuals.kitTextColor || undefined,
+        teams: [...(teamsByPlayerId.get(entry.playerObjectId.toString())?.values() ?? [])]
+          .sort((a, b) =>
+            b.season - a.season
+            || b.matchesPlayed - a.matchesPlayed
+            || a.teamName.localeCompare(b.teamName)
+          )
+          .map((team) => ({
+            id: team.id,
+            teamName: team.teamName,
+            teamImage: team.teamImage,
+            kitImage: team.kitImage,
+            kitTextColor: team.kitTextColor,
+          })),
         goals: entry.goals,
         assists: entry.assists,
         matchesPlayed: entry.matchesPlayed,
