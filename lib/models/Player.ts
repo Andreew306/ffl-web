@@ -5,6 +5,7 @@ export interface IPlayer extends Document {
   player_name: string;
   country: string;
   avatar?: string;
+  discord_id?: string;
 }
 
 const playerSchema = new Schema<IPlayer>({
@@ -12,6 +13,7 @@ const playerSchema = new Schema<IPlayer>({
   player_name: { type: String, required: true, unique: true },
   country: { type: String, required: true },
   avatar: { type: String },
+  discord_id: { type: String, default: "" },
 });
 
 const PlayerModel = models.Player || mongoose.model<IPlayer>("Player", playerSchema);

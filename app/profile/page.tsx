@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ObjectivesMap } from "@/components/profile/objectives-map"
 import { getFlagBackgroundStyle, isImageUrl, shouldOverlayFlag } from "@/lib/utils"
+import { requestProfileCardAction } from "@/app/profile/actions"
 
 function getTwemojiUrl(emoji: string) {
   const codePoints = Array.from(emoji)
@@ -66,8 +67,13 @@ function getRoleSeasonNumber(roleName: string) {
   return -1
 }
 
-export default async function ProfilePage() {
+type ProfilePageProps = {
+  searchParams?: Promise<{ card?: string }>
+}
+
+export default async function ProfilePage({ searchParams }: ProfilePageProps) {
   const session = await getServerSession(authOptions)
+  const resolvedSearchParams = await searchParams
 
   if (!session?.user?.discordId) {
     redirect("/api/auth/signin/discord?callbackUrl=/profile")
@@ -137,9 +143,16 @@ export default async function ProfilePage() {
                   </div>
                 </div>
                 {profile.player ? (
-                  <Button asChild className="mt-5 bg-teal-500 text-slate-950 hover:bg-teal-400">
-                    <Link href={`/players/${profile.player.playerId}`}>View stats profile</Link>
-                  </Button>
+                  <div className="mt-5 flex flex-col gap-3">
+                    <Button asChild className="bg-teal-500 text-slate-950 hover:bg-teal-400">
+                      <Link href={`/players/${profile.player.playerId}`}>View stats profile</Link>
+                    </Button>
+                    <form action={requestProfileCardAction}>
+                      <Button type="submit" className="w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+                        Request Card
+                      </Button>
+                    </form>
+                  </div>
                 ) : null}
               </div>
 
@@ -216,6 +229,18 @@ export default async function ProfilePage() {
             </div>
           </div>
         </section>
+
+        {resolvedSearchParams?.card === "requested" ? (
+          <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-100">
+            Card request sent to Discord for staff review.
+          </div>
+        ) : null}
+
+        {resolvedSearchParams?.card === "failed" ? (
+          <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-100">
+            Could not send the card request to Discord. Please try again later.
+          </div>
+        ) : null}
 
         {profile.player ? <ObjectivesMap objectives={profile.objectives} /> : null}
 

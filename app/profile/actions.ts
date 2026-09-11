@@ -5,6 +5,7 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { assignProfileRoleToPlayer, removeProfileRoleFromPlayer, setProfileRolePoints } from "@/lib/services/profile.service"
+import { requestCardForPlayer } from "@/lib/services/card-request.service"
 
 function buildReturnPath(roleId: string, query?: string | null, roleQuery?: string | null) {
   const params = new URLSearchParams()
@@ -78,4 +79,25 @@ export async function setProfileRolePointsAction(formData: FormData) {
   await setProfileRolePoints(session.user.discordId, roleId, pointsRaw)
   revalidatePath("/profile/manage-roles")
   redirect(buildReturnPath(roleId, query, roleQuery))
+}
+
+export async function requestProfileCardAction() {
+  const session = await getServerSession(authOptions)
+  if (!session?.user?.discordId) {
+    redirect("/api/auth/signin/discord?callbackUrl=/profile")
+  }
+
+  if (!session.user.playerId) {
+    redirect("/profile?card=missing-player")
+  }
+
+  try {
+    await requestCardForPlayer(session.user.discordId, session.user.playerId)
+  } catch (error) {
+    console.error("Failed to request profile card", error)
+    redirect("/profile?card=failed")
+  }
+
+  revalidatePath("/profile")
+  redirect("/profile?card=requested")
 }
