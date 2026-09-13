@@ -198,10 +198,10 @@ function fitText(text: string, maxChars: number) {
   return `${text.slice(0, Math.max(1, maxChars - 1))}.`
 }
 
-function textAvatar(avatar: string | undefined, fallback: string) {
+function textAvatar(avatar: string | undefined) {
   const value = avatar?.trim()
   if (value && !isImageUrl(value)) return value
-  return fallback.charAt(0).toUpperCase()
+  return ""
 }
 
 function statValue(value: number, centerX: number) {
@@ -289,9 +289,16 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const avatarSource = avatarIsEmoji
     ? twemojiUrl(card.player.avatar || "")
     : card.player.avatar
-  const [avatarImage, crest, flag] = await Promise.all([
+  const [avatarImage, crest, kitBadge, flag] = await Promise.all([
     imageToDataUri(avatarSource, avatarIsEmoji ? {} : { width: sx(352), height: sx(352), fit: "cover" }),
     imageToDataUri(card.team.image, {
+      width: CREST_BADGE_SIZE,
+      height: CREST_BADGE_SIZE,
+      fit: "contain",
+      trim: true,
+      sharpen: true,
+    }),
+    imageToDataUri(card.team.kit, {
       width: CREST_BADGE_SIZE,
       height: CREST_BADGE_SIZE,
       fit: "contain",
@@ -302,7 +309,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   ])
   const name = fitText(card.player.name.toUpperCase(), 16)
   const position = card.position.toUpperCase()
-  const avatarText = textAvatar(card.player.avatar, card.player.name)
+  const avatarText = textAvatar(card.player.avatar)
   const rating = card.rating
   const fontFace = await azonixFontFace()
   currentAzonixFont = await loadAzonixFont()
@@ -322,8 +329,8 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   ${azonixTextBox(String(rating.ovr), OVR_CENTER.x, OVR_CENTER.y, ss(65), "#f9fffb")}
 
   ${
-    crest
-      ? `<image href="${crest}" x="${CREST_CENTER.x - CREST_BADGE_SIZE / 2}" y="${CREST_CENTER.y - CREST_BADGE_SIZE / 2}" width="${CREST_BADGE_SIZE}" height="${CREST_BADGE_SIZE}" preserveAspectRatio="xMidYMid meet"/>`
+    crest || kitBadge
+      ? `<image href="${crest || kitBadge}" x="${CREST_CENTER.x - CREST_BADGE_SIZE / 2}" y="${CREST_CENTER.y - CREST_BADGE_SIZE / 2}" width="${CREST_BADGE_SIZE}" height="${CREST_BADGE_SIZE}" preserveAspectRatio="xMidYMid meet"/>`
       : `${azonixText("FC", CREST_CENTER.x, CREST_CENTER.y + ss(8), ss(24), "#111", "middle")}`
   }
 
@@ -338,7 +345,9 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       ? avatarIsEmoji
         ? `<image href="${avatarImage}" x="${sx(229)}" y="${sy(309)}" width="${ss(212)}" height="${ss(212)}" preserveAspectRatio="xMidYMid meet"/>`
         : `<image href="${avatarImage}" x="${sx(159)}" y="${sy(222)}" width="${ss(352)}" height="${ss(352)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid meet"/>`
-      : `${azonixText(avatarText, sx(335), sy(463), ss(avatarText.length <= 2 ? 150 : 112), "#ffffff", "middle")}`
+      : avatarText
+        ? `${azonixText(avatarText, sx(335), sy(463), ss(avatarText.length <= 2 ? 150 : 112), "#ffffff", "middle")}`
+        : ""
   }
 
   ${azonixTextBox(name, NAME_CENTER.x, NAME_CENTER.y, ss(35), "#151515")}

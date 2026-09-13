@@ -9,6 +9,20 @@ import { renderPlayerCardPng } from "@/lib/services/card-image.service"
 import { generateCardRatingForPlayer } from "@/lib/services/card-rating.service"
 
 type BlockingCardRequestStatus = "open" | "pending_approval" | "approved"
+type CardRequestLockDoc = {
+  _id: string
+  playerId: mongoose.Types.ObjectId
+  requestedByDiscordId: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+const ACTIVE_CARD_REQUEST_STATUSES = ["open", "pending_approval", "approved"] satisfies BlockingCardRequestStatus[]
+const LOCK_STALE_MS = 2 * 60 * 1000
+
+function cardRequestLockId(playerId: mongoose.Types.ObjectId) {
+  return `card-request:${playerId.toString()}`
+}
 
 async function resolvePlayerId(playerIdentifier: string) {
   if (mongoose.Types.ObjectId.isValid(playerIdentifier)) {
@@ -34,12 +48,12 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
   const playerId = await resolvePlayerId(playerIdentifier)
   await PlayerModel.updateOne({ _id: playerId }, { $set: { discord_id: discordId } })
 
-  const existingRequest = await CardRequestModel.findOne({
+  const existingRequestFilter = {
     playerId,
-    requestedByDiscordId: discordId,
-    status: { $in: ["open", "pending_approval", "approved"] satisfies BlockingCardRequestStatus[] },
-    discordThreadId: { $ne: null },
-  })
+    status: { $in: ACTIVE_CARD_REQUEST_STATUSES },
+  }
+
+  const existingRequest = await CardRequestModel.findOne(existingRequestFilter)
     .sort({ createdAt: -1 })
     .lean<{
       _id: mongoose.Types.ObjectId
@@ -48,33 +62,97 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
       approvedImageUrl?: string | null
     } | null>()
 
-  if (existingRequest?.discordThreadId) {
+  if (existingRequest) {
     return {
       reused: true,
       status: existingRequest.status,
       requestId: existingRequest._id.toString(),
-      discordThreadId: existingRequest.discordThreadId,
+      discordThreadId: existingRequest.discordThreadId ?? null,
       approvedImageUrl: existingRequest.approvedImageUrl ?? null,
     }
   }
 
-  const card = await generateCardRatingForPlayer(playerId.toString())
-  const closesAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
-  const request = await CardRequestModel.create({
-    playerId,
-    requestedByDiscordId: discordId,
-    status: "open",
-    botRating: card.rating,
-    reviewRound: 1,
-    closesAt,
-  })
+  const db = mongoose.connection.db
+  if (!db) {
+    throw new Error("MongoDB connection is not ready.")
+  }
 
-  await Promise.all([
-    CardVoteModel.deleteMany({ cardRequestId: request._id }),
-    CardApprovalVoteModel.deleteMany({ cardRequestId: request._id }),
-  ])
+  const locks = db.collection<CardRequestLockDoc>("cardrequestlocks")
+  const lockId = cardRequestLockId(playerId)
+  let replacedStaleLock = false
+  try {
+    await locks.insertOne({
+      _id: lockId,
+      playerId,
+      requestedByDiscordId: discordId,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    })
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === 11000) {
+      const request = await CardRequestModel.findOne(existingRequestFilter)
+        .sort({ createdAt: -1 })
+        .lean<{
+          _id: mongoose.Types.ObjectId
+          discordThreadId?: string | null
+          status: BlockingCardRequestStatus
+          approvedImageUrl?: string | null
+        } | null>()
+
+      if (request) {
+        return {
+          reused: true,
+          status: request.status,
+          requestId: request._id.toString(),
+          discordThreadId: request.discordThreadId ?? null,
+          approvedImageUrl: request.approvedImageUrl ?? null,
+        }
+      }
+
+      const lock = await locks.findOne({ _id: lockId })
+      if (lock && Date.now() - lock.createdAt.getTime() < LOCK_STALE_MS) {
+        return {
+          reused: true,
+          status: "open" as const,
+          requestId: lockId,
+          discordThreadId: null,
+          approvedImageUrl: null,
+        }
+      }
+
+      await locks.deleteOne({ _id: lockId })
+      await locks.insertOne({
+        _id: lockId,
+        playerId,
+        requestedByDiscordId: discordId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      replacedStaleLock = true
+    }
+
+    if (!replacedStaleLock) {
+      throw error
+    }
+  }
 
   try {
+    const card = await generateCardRatingForPlayer(playerId.toString())
+    const closesAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
+    const request = await CardRequestModel.create({
+      playerId,
+      requestedByDiscordId: discordId,
+      status: "open",
+      botRating: card.rating,
+      reviewRound: 1,
+      closesAt,
+    })
+
+    await Promise.all([
+      CardVoteModel.deleteMany({ cardRequestId: request._id }),
+      CardApprovalVoteModel.deleteMany({ cardRequestId: request._id }),
+    ])
+
     const image = await renderPlayerCardPng(card)
     const discordThread = await createDiscordCardReviewThread(card, image)
 
@@ -90,9 +168,17 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
       approvedImageUrl: null,
     }
   } catch (error) {
-    request.status = "failed"
-    request.error = error instanceof Error ? error.message : "Unknown card request error."
-    await request.save()
+    await CardRequestModel.findOneAndUpdate(
+      { playerId, requestedByDiscordId: discordId, status: "open", discordThreadId: null },
+      {
+        $set: {
+          status: "failed",
+          error: error instanceof Error ? error.message : "Unknown card request error.",
+        },
+      },
+      { sort: { createdAt: -1 } },
+    )
+    await locks.deleteOne({ _id: lockId })
     throw error
   }
 }

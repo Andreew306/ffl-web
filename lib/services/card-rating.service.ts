@@ -2,6 +2,7 @@ import mongoose from "mongoose"
 import dbConnect from "@/lib/db/mongoose"
 import PlayerModel from "@/lib/models/Player"
 import type { CardRating } from "@/lib/models/CardRequest"
+import { normalizeTeamImageUrl } from "@/lib/utils"
 
 const cardEngine = require("./ffl-card-engine.js")
 
@@ -16,6 +17,7 @@ export type GeneratedCardData = {
   team: {
     name?: string
     image?: string
+    kit?: string
   }
   position: string
   rating: CardRating
@@ -115,42 +117,77 @@ function dateMs(value: unknown) {
   return 0
 }
 
-async function latestTeamForPlayer(db: mongoose.mongo.Db, playerObjectId: mongoose.Types.ObjectId) {
-  const playerCompetitions = await db
-    .collection("playercompetitions")
-    .find({ player_id: playerObjectId })
-    .project({ team_competition_id: 1 })
-    .toArray()
+type RawKit = string | Record<string, unknown> | null | undefined
 
-  const teamCompetitionIds = playerCompetitions
-    .map((row) => row.team_competition_id)
-    .filter((value): value is mongoose.Types.ObjectId => value instanceof mongoose.Types.ObjectId)
+type RawTeamCompetition = {
+  _id: mongoose.Types.ObjectId
+  team_id?: mongoose.Types.ObjectId
+  competition_id?: mongoose.Types.ObjectId
+  team_competition_id?: number | string
+  kits?: RawKit[]
+}
 
-  if (!teamCompetitionIds.length) return null
+type RawCompetition = {
+  _id: mongoose.Types.ObjectId
+  competition_id?: number | string
+  season?: number | string
+  start_date?: Date | string
+  end_date?: Date | string
+}
 
-  const teamCompetitions = await db
-    .collection("teamcompetitions")
-    .find({ _id: { $in: teamCompetitionIds } })
-    .project({ _id: 1, team_id: 1, competition_id: 1, team_competition_id: 1 })
-    .toArray()
+type RawTeam = {
+  _id: mongoose.Types.ObjectId
+  team_name?: string
+  teamName?: string
+  image?: string
+  kits?: RawKit[]
+}
 
-  const competitionIds = teamCompetitions
-    .map((row) => row.competition_id)
-    .filter((value): value is mongoose.Types.ObjectId => value instanceof mongoose.Types.ObjectId)
+type TeamVisuals = {
+  name: string
+  image: string
+  kit: string
+}
 
-  const competitions = competitionIds.length
-    ? await db
-        .collection("competitions")
-        .find({ _id: { $in: competitionIds } })
-        .project({ _id: 1, competition_id: 1, season: 1, start_date: 1, end_date: 1 })
-        .toArray()
-    : []
+function isObjectId(value: unknown): value is mongoose.Types.ObjectId {
+  return value instanceof mongoose.Types.ObjectId
+}
 
-  const competitionById = new Map(competitions.map((competition) => [String(competition._id), competition]))
+function recordValue(value: RawKit, key: string) {
+  if (!value || typeof value !== "object") return ""
+  const raw = value[key]
+  return typeof raw === "string" ? raw : ""
+}
 
-  const latestTeamCompetition = teamCompetitions.sort((a, b) => {
-    const competitionA = competitionById.get(String(a.competition_id))
-    const competitionB = competitionById.get(String(b.competition_id))
+function pickKitImage(kits?: RawKit[] | null) {
+  if (!Array.isArray(kits)) return ""
+
+  for (const kit of kits) {
+    if (!kit) continue
+    if (typeof kit === "string") {
+      const normalized = normalizeTeamImageUrl(kit)
+      if (normalized) return normalized
+      continue
+    }
+
+    const normalized =
+      normalizeTeamImageUrl(recordValue(kit, "image")) ||
+      normalizeTeamImageUrl(recordValue(kit, "imageUrl")) ||
+      normalizeTeamImageUrl(recordValue(kit, "url")) ||
+      normalizeTeamImageUrl(recordValue(kit, "src"))
+    if (normalized) return normalized
+  }
+
+  return ""
+}
+
+function sortTeamCompetitions(
+  teamCompetitions: RawTeamCompetition[],
+  competitionById: Map<string, RawCompetition>,
+) {
+  return [...teamCompetitions].sort((a, b) => {
+    const competitionA = a.competition_id ? competitionById.get(String(a.competition_id)) : undefined
+    const competitionB = b.competition_id ? competitionById.get(String(b.competition_id)) : undefined
     const competitionIdDiff = num(competitionB?.competition_id) - num(competitionA?.competition_id)
     if (competitionIdDiff) return competitionIdDiff
     const seasonDiff = num(competitionB?.season) - num(competitionA?.season)
@@ -159,11 +196,103 @@ async function latestTeamForPlayer(db: mongoose.mongo.Db, playerObjectId: mongoo
     const dateB = Math.max(dateMs(competitionB?.start_date), dateMs(competitionB?.end_date))
     if (dateA !== dateB) return dateB - dateA
     return num(b.team_competition_id) - num(a.team_competition_id)
-  })[0]
+  })
+}
 
-  return latestTeamCompetition?.team_id
-    ? db.collection("teams").findOne({ _id: latestTeamCompetition.team_id })
-    : null
+async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId: mongoose.Types.ObjectId): Promise<TeamVisuals> {
+  const playerCompetitions = await db
+    .collection("playercompetitions")
+    .find({ player_id: playerObjectId })
+    .project({ team_competition_id: 1 })
+    .toArray()
+
+  const teamCompetitionIds = playerCompetitions
+    .map((row) => row.team_competition_id)
+    .filter(isObjectId)
+
+  if (!teamCompetitionIds.length) return { name: "", image: "", kit: "" }
+
+  const playerTeamCompetitions = (await db
+    .collection("teamcompetitions")
+    .find({ _id: { $in: teamCompetitionIds } })
+    .project({ _id: 1, team_id: 1, competition_id: 1, team_competition_id: 1, kits: 1 })
+    .toArray()) as RawTeamCompetition[]
+
+  const competitionIds = playerTeamCompetitions
+    .map((row) => row.competition_id)
+    .filter(isObjectId)
+
+  const competitions = (competitionIds.length
+    ? await db
+        .collection("competitions")
+        .find({ _id: { $in: competitionIds } })
+        .project({ _id: 1, competition_id: 1, season: 1, start_date: 1, end_date: 1 })
+        .toArray()
+    : []) as RawCompetition[]
+
+  const competitionById = new Map(competitions.map((competition) => [String(competition._id), competition]))
+  const sortedPlayerTeamCompetitions = sortTeamCompetitions(playerTeamCompetitions, competitionById)
+  const latestTeamCompetition = sortedPlayerTeamCompetitions[0]
+  const teamIds = sortedPlayerTeamCompetitions.map((row) => row.team_id).filter(isObjectId)
+
+  const teams = (teamIds.length
+    ? await db
+        .collection("teams")
+        .find({ _id: { $in: teamIds } })
+        .project({ _id: 1, team_name: 1, teamName: 1, image: 1, kits: 1 })
+        .toArray()
+    : []) as RawTeam[]
+  const teamById = new Map(teams.map((team) => [String(team._id), team]))
+  const latestTeam = latestTeamCompetition?.team_id ? teamById.get(String(latestTeamCompetition.team_id)) : undefined
+
+  let image = normalizeTeamImageUrl(latestTeam?.image)
+  if (!image) {
+    for (const teamCompetition of sortedPlayerTeamCompetitions) {
+      const team = teamCompetition.team_id ? teamById.get(String(teamCompetition.team_id)) : undefined
+      image = normalizeTeamImageUrl(team?.image)
+      if (image) break
+    }
+  }
+
+  let kit = pickKitImage(latestTeamCompetition?.kits)
+
+  if (!kit && latestTeamCompetition?.team_id) {
+    const sameTeamCompetitions = (await db
+      .collection("teamcompetitions")
+      .find({ team_id: latestTeamCompetition.team_id, "kits.0": { $exists: true } })
+      .project({ _id: 1, team_id: 1, competition_id: 1, team_competition_id: 1, kits: 1 })
+      .toArray()) as RawTeamCompetition[]
+    kit = pickKitImage(sortTeamCompetitions(sameTeamCompetitions, competitionById).find((row) => pickKitImage(row.kits))?.kits)
+  }
+
+  if (!kit) {
+    for (const teamCompetition of sortedPlayerTeamCompetitions) {
+      kit = pickKitImage(teamCompetition.kits)
+      if (kit) break
+    }
+  }
+
+  if (!kit && latestTeam) {
+    kit = pickKitImage(latestTeam.kits)
+  }
+
+  if (!kit) {
+    const randomTeamCompetitions = (await db
+      .collection("teamcompetitions")
+      .aggregate([
+        { $match: { "kits.0": { $exists: true } } },
+        { $sample: { size: 10 } },
+        { $project: { kits: 1 } },
+      ])
+      .toArray()) as RawTeamCompetition[]
+    kit = pickKitImage(randomTeamCompetitions.find((row) => pickKitImage(row.kits))?.kits)
+  }
+
+  return {
+    name: str(latestTeam?.team_name) || str(latestTeam?.teamName),
+    image,
+    kit,
+  }
 }
 
 export async function generateCardRatingForPlayer(playerObjectId: string): Promise<GeneratedCardData> {
@@ -215,7 +344,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
       avgWeight += rowMatches
     }
 
-    const team = await latestTeamForPlayer(db, player._id)
+    const team = await latestTeamVisualsForPlayer(db, player._id)
 
     return {
       player: {
@@ -226,8 +355,9 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
         avatar: str(player.avatar),
       },
       team: {
-        name: str(team?.team_name),
-        image: str(team?.image),
+        name: team.name,
+        image: team.image,
+        kit: team.kit,
       },
       position: validatedRating.position,
       rating: {
@@ -257,6 +387,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
   const team = teamCompetition?.team_id
     ? await db.collection("teams").findOne({ _id: teamCompetition.team_id })
     : null
+  const teamVisuals = await latestTeamVisualsForPlayer(db, player._id)
 
   const matches = num(engineCard.stats?.matches || engineCard.stats?.matches_played)
   const minutes = num(engineCard.stats?.minutes || engineCard.stats?.minutes_played)
@@ -278,8 +409,9 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
       avatar: str(engineCard.avatar) || str(player.avatar),
     },
     team: {
-      name: str(team?.team_name),
-      image: str(team?.image),
+      name: str(team?.team_name) || str(team?.teamName) || teamVisuals.name,
+      image: normalizeTeamImageUrl(team?.image) || teamVisuals.image,
+      kit: pickKitImage(teamCompetition?.kits) || teamVisuals.kit,
     },
     position: str(engineCard.position) || "CM",
     rating,
