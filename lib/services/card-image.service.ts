@@ -67,12 +67,20 @@ function isEmojiLike(value?: string) {
   return Boolean(value && /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u.test(value))
 }
 
-function twemojiUrl(emoji: string) {
-  const codePoints = Array.from(emoji.trim())
+function twemojiCode(value: string, stripVariationSelectors = false) {
+  return Array.from(value.trim())
+    .filter((character) => !stripVariationSelectors || character.codePointAt(0) !== 0xfe0f)
     .map((character) => character.codePointAt(0)?.toString(16))
     .filter(Boolean)
     .join("-")
-  return codePoints ? `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${codePoints}.svg` : ""
+}
+
+function twemojiUrls(emoji: string) {
+  const fullCode = twemojiCode(emoji)
+  const strippedCode = twemojiCode(emoji, true)
+  return Array.from(new Set([fullCode, strippedCode].filter(Boolean))).map(
+    (code) => `https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/svg/${code}.svg`,
+  )
 }
 
 type ImageDataUriOptions = {
@@ -140,6 +148,14 @@ async function imageToDataUri(url?: string, options: ImageDataUriOptions = {}) {
   }
 }
 
+async function firstImageToDataUri(urls: string[], options: ImageDataUriOptions = {}) {
+  for (const url of urls) {
+    const image = await imageToDataUri(url, options)
+    if (image) return image
+  }
+  return ""
+}
+
 async function circularImageToDataUri(
   url: string | undefined,
   size: number,
@@ -202,6 +218,23 @@ function textAvatar(avatar: string | undefined) {
   const value = avatar?.trim()
   if (value && !isImageUrl(value)) return value
   return ""
+}
+
+function avatarTextBox(text: string) {
+  const fontSize = ss(text.length <= 2 ? 150 : 112)
+  return `<text x="${sx(335)}" y="${sy(408)}"
+    text-anchor="middle"
+    dominant-baseline="central"
+    font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, Segoe UI Symbol, Noto Sans Symbols, Arial Unicode MS, Arial, sans-serif"
+    font-size="${fontSize}"
+    fill="#ffffff">${escapeXml(text)}</text>`
+}
+
+function avatarTextMarkup(text: string) {
+  if (/^[\x20-\x7E]+$/.test(text)) {
+    return azonixText(text, sx(335), sy(463), ss(text.length <= 2 ? 150 : 112), "#ffffff", "middle")
+  }
+  return avatarTextBox(text)
 }
 
 function statValue(value: number, centerX: number) {
@@ -286,11 +319,10 @@ function azonixTextBox(text: string, centerX: number, centerY: number, fontSize:
 export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const code = countryCode(card.player.country)
   const avatarIsEmoji = isEmojiLike(card.player.avatar) && !isImageUrl(card.player.avatar)
-  const avatarSource = avatarIsEmoji
-    ? twemojiUrl(card.player.avatar || "")
-    : card.player.avatar
   const [avatarImage, crest, kitBadge, flag] = await Promise.all([
-    imageToDataUri(avatarSource, avatarIsEmoji ? {} : { width: sx(352), height: sx(352), fit: "cover" }),
+    avatarIsEmoji
+      ? firstImageToDataUri(twemojiUrls(card.player.avatar || ""))
+      : imageToDataUri(card.player.avatar, { width: sx(352), height: sx(352), fit: "cover" }),
     imageToDataUri(card.team.image, {
       width: CREST_BADGE_SIZE,
       height: CREST_BADGE_SIZE,
@@ -346,7 +378,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
         ? `<image href="${avatarImage}" x="${sx(229)}" y="${sy(309)}" width="${ss(212)}" height="${ss(212)}" preserveAspectRatio="xMidYMid meet"/>`
         : `<image href="${avatarImage}" x="${sx(159)}" y="${sy(222)}" width="${ss(352)}" height="${ss(352)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid meet"/>`
       : avatarText
-        ? `${azonixText(avatarText, sx(335), sy(463), ss(avatarText.length <= 2 ? 150 : 112), "#ffffff", "middle")}`
+        ? avatarTextMarkup(avatarText)
         : ""
   }
 
