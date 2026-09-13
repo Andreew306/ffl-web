@@ -8,6 +8,8 @@ import { createDiscordCardReviewThread } from "@/lib/services/discord-card.servi
 import { renderPlayerCardPng } from "@/lib/services/card-image.service"
 import { generateCardRatingForPlayer } from "@/lib/services/card-rating.service"
 
+type BlockingCardRequestStatus = "open" | "pending_approval" | "approved"
+
 async function resolvePlayerId(playerIdentifier: string) {
   if (mongoose.Types.ObjectId.isValid(playerIdentifier)) {
     const playerId = new mongoose.Types.ObjectId(playerIdentifier)
@@ -32,19 +34,27 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
   const playerId = await resolvePlayerId(playerIdentifier)
   await PlayerModel.updateOne({ _id: playerId }, { $set: { discord_id: discordId } })
 
-  const existingOpenRequest = await CardRequestModel.findOne({
+  const existingRequest = await CardRequestModel.findOne({
     playerId,
     requestedByDiscordId: discordId,
-    status: "open",
-    closesAt: { $gt: new Date() },
+    status: { $in: ["open", "pending_approval", "approved"] satisfies BlockingCardRequestStatus[] },
     discordThreadId: { $ne: null },
-  }).lean<{ _id: mongoose.Types.ObjectId; discordThreadId?: string | null } | null>()
+  })
+    .sort({ createdAt: -1 })
+    .lean<{
+      _id: mongoose.Types.ObjectId
+      discordThreadId?: string | null
+      status: BlockingCardRequestStatus
+      approvedImageUrl?: string | null
+    } | null>()
 
-  if (existingOpenRequest?.discordThreadId) {
+  if (existingRequest?.discordThreadId) {
     return {
       reused: true,
-      requestId: existingOpenRequest._id.toString(),
-      discordThreadId: existingOpenRequest.discordThreadId,
+      status: existingRequest.status,
+      requestId: existingRequest._id.toString(),
+      discordThreadId: existingRequest.discordThreadId,
+      approvedImageUrl: existingRequest.approvedImageUrl ?? null,
     }
   }
 
@@ -74,8 +84,10 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
 
     return {
       reused: false,
+      status: "open" as const,
       requestId: request._id.toString(),
       discordThreadId: request.discordThreadId,
+      approvedImageUrl: null,
     }
   } catch (error) {
     request.status = "failed"

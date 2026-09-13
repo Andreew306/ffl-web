@@ -5,6 +5,7 @@ import { getServerSession } from "next-auth"
 import { Shield, UserCircle2 } from "lucide-react"
 import { authOptions, syncDiscordUser } from "@/lib/auth"
 import { PROFILE_ROLE_MANAGER_ID, getUserProfileData } from "@/lib/services/profile.service"
+import { getProfileCardGallery, type ProfileCardGalleryItem } from "@/lib/services/profile-card-gallery.service"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ObjectivesMap } from "@/components/profile/objectives-map"
@@ -69,7 +70,98 @@ function getRoleSeasonNumber(roleName: string) {
 }
 
 type ProfilePageProps = {
-  searchParams?: Promise<{ card?: string }>
+  searchParams?: Promise<{ card?: string; tab?: string }>
+}
+
+function getCardStatusLabel(status: ProfileCardGalleryItem["status"]) {
+  if (status === "open") return "In Review"
+  if (status === "pending_approval") return "Pending Approval"
+  if (status === "approved") return "Approved"
+  if (status === "rejected") return "Rejected"
+  return "Failed"
+}
+
+function getCardStatusClass(status: ProfileCardGalleryItem["status"]) {
+  if (status === "approved") return "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"
+  if (status === "open" || status === "pending_approval") return "border-cyan-400/25 bg-cyan-500/10 text-cyan-100"
+  return "border-red-400/25 bg-red-500/10 text-red-100"
+}
+
+function formatCardDate(value: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value))
+}
+
+function CardGallery({ cards }: { cards: ProfileCardGalleryItem[] }) {
+  return (
+    <section className="mt-8">
+      <div className="mb-5 flex items-end justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold text-white">My Cards</h2>
+          <p className="mt-1 text-sm text-slate-400">Requested cards linked to your Discord account.</p>
+        </div>
+      </div>
+
+      {cards.length ? (
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+          {cards.map((card) => {
+            const rating = card.finalRating || card.botRating
+            return (
+              <article
+                key={card.id}
+                className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 shadow-[0_18px_45px_rgba(0,0,0,0.22)]"
+              >
+                <div className="flex aspect-[670/1080] items-center justify-center bg-slate-950">
+                  {card.approvedImageUrl ? (
+                    <img
+                      src={card.approvedImageUrl}
+                      alt={`${card.playerName} card`}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : (
+                    <div className="px-6 text-center">
+                      <div className="text-5xl font-semibold text-white">{rating.ovr}</div>
+                      <div className="mt-3 text-lg font-semibold text-white">{card.playerName}</div>
+                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
+                        <span>SHO {rating.sho}</span>
+                        <span>PAS {rating.pas}</span>
+                        <span>DEF {rating.def}</span>
+                        <span>DRI {rating.dri}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-semibold text-white">{card.playerName}</div>
+                      <div className="text-xs text-slate-400">#{card.playerId || "unknown"} · Round {card.reviewRound}</div>
+                    </div>
+                    <span className={`shrink-0 rounded-full border px-3 py-1 text-xs ${getCardStatusClass(card.status)}`}>
+                      {getCardStatusLabel(card.status)}
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-400">
+                    Requested {formatCardDate(card.createdAt)}
+                    {card.status === "open" ? ` · Closes ${formatCardDate(card.closesAt)}` : null}
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-10 text-center text-slate-300">
+          You do not have any requested cards yet.
+        </div>
+      )}
+    </section>
+  )
 }
 
 export default async function ProfilePage({ searchParams }: ProfilePageProps) {
@@ -116,6 +208,8 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
     ? getTwemojiUrl(profile.player.country)
     : ""
   const canManageRoles = profile.user.roles.some((role) => role.id === PROFILE_ROLE_MANAGER_ID)
+  const activeTab = resolvedSearchParams?.tab === "cards" ? "cards" : "profile"
+  const cards = await getProfileCardGallery(session.user.discordId, profile.player?.id ?? session.user.playerId)
 
   return (
     <div className="min-h-screen bg-slate-950 text-white">
@@ -235,13 +329,52 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
           </div>
         ) : null}
 
+        {resolvedSearchParams?.card === "in-review" ? (
+          <div className="mt-6 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-5 py-4 text-sm text-cyan-100">
+            Your card is already under staff review.
+          </div>
+        ) : null}
+
+        {resolvedSearchParams?.card === "pending-approval" ? (
+          <div className="mt-6 rounded-2xl border border-cyan-400/20 bg-cyan-500/10 px-5 py-4 text-sm text-cyan-100">
+            Your fixed card is waiting for final staff approval.
+          </div>
+        ) : null}
+
+        {resolvedSearchParams?.card === "already-approved" ? (
+          <div className="mt-6 rounded-2xl border border-emerald-400/20 bg-emerald-500/10 px-5 py-4 text-sm text-emerald-100">
+            Your card has already been approved. You can see it in My Cards.
+          </div>
+        ) : null}
+
         {resolvedSearchParams?.card === "failed" ? (
           <div className="mt-6 rounded-2xl border border-red-400/20 bg-red-500/10 px-5 py-4 text-sm text-red-100">
             Could not send the card request to Discord. Please try again later.
           </div>
         ) : null}
 
-        {profile.player ? <ObjectivesMap objectives={profile.objectives} /> : null}
+        <div className="mt-8 flex gap-2 border-b border-white/10">
+          <Button
+            asChild
+            variant="ghost"
+            className={activeTab === "profile" ? "rounded-b-none border-b-2 border-teal-300 text-white" : "text-slate-400"}
+          >
+            <Link href="/profile">Profile</Link>
+          </Button>
+          <Button
+            asChild
+            variant="ghost"
+            className={activeTab === "cards" ? "rounded-b-none border-b-2 border-teal-300 text-white" : "text-slate-400"}
+          >
+            <Link href="/profile?tab=cards">My Cards</Link>
+          </Button>
+        </div>
+
+        {activeTab === "cards" ? (
+          <CardGallery cards={cards} />
+        ) : profile.player ? (
+          <ObjectivesMap objectives={profile.objectives} />
+        ) : null}
 
         {!profile.player ? (
           <Card className="mt-8 border-amber-400/20 bg-amber-500/10 text-white">

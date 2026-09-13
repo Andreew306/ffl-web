@@ -91,13 +91,23 @@ export async function requestProfileCardAction() {
     redirect("/profile?card=missing-player")
   }
 
+  let requestResult: Awaited<ReturnType<typeof requestCardForPlayer>>
   try {
-    await requestCardForPlayer(session.user.discordId, session.user.playerId)
+    requestResult = await requestCardForPlayer(session.user.discordId, session.user.playerId)
   } catch (error) {
     console.error("Failed to request profile card", error)
     redirect("/profile?card=failed")
   }
 
   revalidatePath("/profile")
+  if (requestResult.reused) {
+    if (requestResult.status === "pending_approval") {
+      redirect("/profile?card=pending-approval")
+    }
+    if (requestResult.status === "approved") {
+      redirect("/profile?card=already-approved&tab=cards")
+    }
+    redirect("/profile?card=in-review")
+  }
   redirect("/profile?card=requested")
 }
