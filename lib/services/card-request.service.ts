@@ -6,14 +6,28 @@ import { createDiscordCardReviewThread } from "@/lib/services/discord-card.servi
 import { renderPlayerCardPng } from "@/lib/services/card-image.service"
 import { generateCardRatingForPlayer } from "@/lib/services/card-rating.service"
 
-export async function requestCardForPlayer(discordId: string, playerObjectId: string) {
-  await dbConnect()
-
-  if (!mongoose.Types.ObjectId.isValid(playerObjectId)) {
-    throw new Error("Invalid player id.")
+async function resolvePlayerId(playerIdentifier: string) {
+  if (mongoose.Types.ObjectId.isValid(playerIdentifier)) {
+    const playerId = new mongoose.Types.ObjectId(playerIdentifier)
+    const player = await PlayerModel.findById(playerId).select("_id").lean<{ _id: mongoose.Types.ObjectId } | null>()
+    if (player) return playerId
   }
 
-  const playerId = new mongoose.Types.ObjectId(playerObjectId)
+  const numericPlayerId = Number(playerIdentifier)
+  if (Number.isInteger(numericPlayerId)) {
+    const player = await PlayerModel.findOne({ player_id: numericPlayerId })
+      .select("_id")
+      .lean<{ _id: mongoose.Types.ObjectId } | null>()
+    if (player?._id) return player._id
+  }
+
+  throw new Error("Invalid player id.")
+}
+
+export async function requestCardForPlayer(discordId: string, playerIdentifier: string) {
+  await dbConnect()
+
+  const playerId = await resolvePlayerId(playerIdentifier)
   await PlayerModel.updateOne({ _id: playerId }, { $set: { discord_id: discordId } })
 
   const existingOpenRequest = await CardRequestModel.findOne({
@@ -32,7 +46,7 @@ export async function requestCardForPlayer(discordId: string, playerObjectId: st
     }
   }
 
-  const card = await generateCardRatingForPlayer(playerObjectId)
+  const card = await generateCardRatingForPlayer(playerId.toString())
   const closesAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
   const request = await CardRequestModel.create({
     playerId,

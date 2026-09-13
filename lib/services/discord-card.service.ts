@@ -1,11 +1,26 @@
 import type { GeneratedCardData } from "@/lib/services/card-rating.service"
 
-const DEFAULT_FORUM_CHANNEL_ID = "1548109425070309470"
+const DEFAULT_FORUM_CHANNEL_ID = "1548111097284923473"
 
 type DiscordThreadResponse = {
   id?: string
   message?: {
     id?: string
+  }
+}
+
+async function fetchDiscordWithTimeout(url: string, init: RequestInit, timeoutMs = 10000) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), timeoutMs)
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal,
+      cache: "no-store",
+    })
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
@@ -36,6 +51,7 @@ export async function createDiscordCardReviewThread(card: GeneratedCardData, ima
         "DEF 00",
         "DRI 00",
         "```",
+        "If you send another vote in this thread, your previous vote will be updated.",
       ].join("\n"),
       attachments: [{ id: 0, filename: "player-card.png" }],
     },
@@ -45,13 +61,12 @@ export async function createDiscordCardReviewThread(card: GeneratedCardData, ima
   formData.append("payload_json", JSON.stringify(payload))
   formData.append("files[0]", new Blob([image], { type: "image/png" }), "player-card.png")
 
-  const response = await fetch(`https://discord.com/api/v10/channels/${forumChannelId}/threads`, {
+  const response = await fetchDiscordWithTimeout(`https://discord.com/api/v10/channels/${forumChannelId}/threads`, {
     method: "POST",
     headers: {
       Authorization: `Bot ${botToken}`,
     },
     body: formData,
-    cache: "no-store",
   })
 
   if (!response.ok) {
@@ -60,4 +75,31 @@ export async function createDiscordCardReviewThread(card: GeneratedCardData, ima
   }
 
   return (await response.json()) as DiscordThreadResponse
+}
+
+export async function sendDiscordCardReviewReply(threadId: string, content: string) {
+  const botToken = process.env.DISCORD_BOT_TOKEN
+
+  if (!botToken) {
+    throw new Error("DISCORD_BOT_TOKEN is not configured.")
+  }
+
+  const response = await fetchDiscordWithTimeout(`https://discord.com/api/v10/channels/${threadId}/messages`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bot ${botToken}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      content,
+      allowed_mentions: { parse: [] },
+    }),
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Discord reply failed (${response.status}): ${errorText}`)
+  }
+
+  return response.json()
 }

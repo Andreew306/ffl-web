@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ObjectivesMap } from "@/components/profile/objectives-map"
 import { getFlagBackgroundStyle, isImageUrl, shouldOverlayFlag } from "@/lib/utils"
 import { requestProfileCardAction } from "@/app/profile/actions"
+import { RequestCardButton } from "@/components/profile/request-card-button"
 
 function getTwemojiUrl(emoji: string) {
   const codePoints = Array.from(emoji)
@@ -148,9 +149,7 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
                       <Link href={`/players/${profile.player.playerId}`}>View stats profile</Link>
                     </Button>
                     <form action={requestProfileCardAction}>
-                      <Button type="submit" className="w-full bg-emerald-500 text-slate-950 hover:bg-emerald-400">
-                        Request Card
-                      </Button>
+                      <RequestCardButton />
                     </form>
                   </div>
                 ) : null}

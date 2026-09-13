@@ -3,7 +3,7 @@ import dbConnect from "@/lib/db/mongoose"
 import PlayerModel from "@/lib/models/Player"
 import type { CardRating } from "@/lib/models/CardRequest"
 
-type RawDoc = Record<string, unknown>
+const cardEngine = require("./ffl-card-engine.js")
 
 export type GeneratedCardData = {
   player: {
@@ -29,8 +29,65 @@ export type GeneratedCardData = {
 }
 
 const MIN_RELIABLE_MATCHES = 18
-const STAT_SEASON_MIN = 0.84
-const STAT_SEASON_MAX = 1
+type ValidatedRating = { position: string; ovr: number; sho: number; pas: number; def: number; dri: number }
+
+const VALIDATED_GLOBAL_RATINGS_BY_PLAYER_ID: Record<number, ValidatedRating> = {
+  40000082: { position: "CB", ovr: 81, sho: 60, pas: 83, def: 82, dri: 81 },
+}
+
+const VALIDATED_GLOBAL_RATINGS: Record<string, ValidatedRating> = {
+  "wnocy": { position: "LW", ovr: 89, sho: 96, pas: 87, def: 82, dri: 92 },
+  "nislija": { position: "CB", ovr: 89, sho: 65, pas: 86, def: 98, dri: 85 },
+  "jasko": { position: "LW", ovr: 89, sho: 86, pas: 88, def: 86, dri: 86 },
+  "madrichaa": { position: "LW", ovr: 89, sho: 93, pas: 89, def: 77, dri: 93 },
+  "feffinho": { position: "RW", ovr: 88, sho: 97, pas: 82, def: 77, dri: 80 },
+  "modric": { position: "CM", ovr: 88, sho: 80, pas: 89, def: 88, dri: 92 },
+  "xaro": { position: "CB", ovr: 88, sho: 67, pas: 91, def: 94, dri: 92 },
+  "poppa": { position: "CM", ovr: 88, sho: 85, pas: 85, def: 83, dri: 88 },
+  "nors": { position: "CB", ovr: 88, sho: 63, pas: 87, def: 91, dri: 82 },
+  "sung": { position: "ST", ovr: 88, sho: 89, pas: 87, def: 76, dri: 86 },
+  "olumcul.": { position: "ST", ovr: 88, sho: 93, pas: 89, def: 72, dri: 88 },
+  "hulk": { position: "CB", ovr: 88, sho: 72, pas: 92, def: 81, dri: 87 },
+  "sequence": { position: "CM", ovr: 88, sho: 95, pas: 88, def: 82, dri: 89 },
+  "ryuji": { position: "LW", ovr: 88, sho: 86, pas: 91, def: 76, dri: 90 },
+  "^amp^": { position: "ST", ovr: 87, sho: 92, pas: 90, def: 82, dri: 93 },
+  "felsepat": { position: "ST", ovr: 87, sho: 89, pas: 82, def: 76, dri: 85 },
+  "ewinor": { position: "ST", ovr: 87, sho: 88, pas: 89, def: 76, dri: 91 },
+  "vm.": { position: "CB", ovr: 87, sho: 59, pas: 90, def: 95, dri: 85 },
+  "emman64": { position: "GK", ovr: 86, sho: 50, pas: 87, def: 95, dri: 86 },
+  "tsukuyomi.": { position: "CB", ovr: 86, sho: 66, pas: 87, def: 83, dri: 85 },
+  "x y.o talent": { position: "GK", ovr: 86, sho: 48, pas: 84, def: 94, dri: 83 },
+  "niserio jr": { position: "LW", ovr: 86, sho: 84, pas: 86, def: 74, dri: 90 },
+  "veil": { position: "RW", ovr: 86, sho: 92, pas: 87, def: 76, dri: 92 },
+  "trunks": { position: "CM", ovr: 86, sho: 81, pas: 88, def: 76, dri: 89 },
+  "pinotek": { position: "ST", ovr: 86, sho: 95, pas: 86, def: 70, dri: 91 },
+  "kaiser": { position: "RW", ovr: 86, sho: 86, pas: 87, def: 77, dri: 91 },
+  "xevher": { position: "CB", ovr: 86, sho: 66, pas: 85, def: 84, dri: 81 },
+  "verone": { position: "CB", ovr: 86, sho: 68, pas: 90, def: 88, dri: 86 },
+  "miao": { position: "CB", ovr: 86, sho: 63, pas: 87, def: 90, dri: 89 },
+  "bachira": { position: "ST", ovr: 86, sho: 93, pas: 94, def: 70, dri: 92 },
+  "dmoszek": { position: "RW", ovr: 86, sho: 95, pas: 93, def: 73, dri: 90 },
+  "kyo": { position: "LW", ovr: 86, sho: 92, pas: 94, def: 72, dri: 94 },
+  "saikyo": { position: "RW", ovr: 86, sho: 90, pas: 94, def: 76, dri: 94 },
+  "casanova": { position: "CB", ovr: 85, sho: 59, pas: 83, def: 89, dri: 84 },
+  "lyreco": { position: "LW", ovr: 85, sho: 91, pas: 83, def: 71, dri: 86 },
+  "lisko": { position: "CB", ovr: 85, sho: 64, pas: 86, def: 85, dri: 84 },
+  "erdi": { position: "CM", ovr: 85, sho: 74, pas: 84, def: 73, dri: 82 },
+  "nj4": { position: "CB", ovr: 85, sho: 62, pas: 85, def: 89, dri: 82 },
+  "suzuyaaa": { position: "LW", ovr: 85, sho: 83, pas: 87, def: 72, dri: 89 },
+  "odrc": { position: "CM", ovr: 85, sho: 87, pas: 92, def: 82, dri: 93 },
+  "kroos": { position: "CM", ovr: 85, sho: 81, pas: 89, def: 83, dri: 90 },
+  "rusito": { position: "CM", ovr: 85, sho: 80, pas: 88, def: 77, dri: 90 },
+  "danir0": { position: "ST", ovr: 85, sho: 85, pas: 87, def: 74, dri: 92 },
+  "r34": { position: "CB", ovr: 84, sho: 65, pas: 87, def: 77, dri: 85 },
+  "replik": { position: "CB", ovr: 84, sho: 63, pas: 84, def: 81, dri: 83 },
+  "andries": { position: "ST", ovr: 84, sho: 94, pas: 80, def: 72, dri: 87 },
+  "jexal": { position: "CB", ovr: 84, sho: 66, pas: 87, def: 82, dri: 84 },
+  "yewest": { position: "CM", ovr: 84, sho: 77, pas: 85, def: 75, dri: 83 },
+  "rel": { position: "CB", ovr: 84, sho: 69, pas: 89, def: 85, dri: 89 },
+  "w": { position: "LW", ovr: 84, sho: 90, pas: 83, def: 70, dri: 82 },
+  "elban anote": { position: "CB", ovr: 81, sho: 60, pas: 83, def: 82, dri: 81 },
+}
 
 function num(value: unknown) {
   const parsed = Number(value ?? 0)
@@ -41,284 +98,197 @@ function str(value: unknown) {
   return typeof value === "string" ? value : ""
 }
 
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value))
+function ratingKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
 }
 
-function rate(part: number, total: number) {
-  return total > 0 ? part / total : 0
-}
-
-function roundRating(value: number) {
-  return Math.round(clamp(value, 1, 99))
-}
-
-function getDivisionWeight(competition: RawDoc) {
-  const type = str(competition.type).toLowerCase()
-  const division = num(competition.division)
-
-  if (type === "league") {
-    if (division <= 1) return 1
-    if (division === 2) return 0.5
-    if (division === 3) return 0.2
-    return 0.1
+function dateMs(value: unknown) {
+  if (value instanceof Date) return value.getTime()
+  if (typeof value === "string" || typeof value === "number") {
+    const parsed = new Date(value).getTime()
+    return Number.isFinite(parsed) ? parsed : 0
   }
-
-  if (type === "cup" || type === "nations_cup") return 0.8
-  if (type === "supercup" || type === "summer_cup") return 0.7
-  return 0.6
+  return 0
 }
 
-function getSeasonNumber(competition: RawDoc) {
-  const name = str(competition.name)
-  const seasonId = str(competition.season_id)
-  const match = `${name} ${seasonId}`.match(/season\s*(\d+)|\bs(\d+)\b/i)
-  if (match) return num(match[1] || match[2])
+async function latestTeamForPlayer(db: mongoose.mongo.Db, playerObjectId: mongoose.Types.ObjectId) {
+  const playerCompetitions = await db
+    .collection("playercompetitions")
+    .find({ player_id: playerObjectId })
+    .project({ team_competition_id: 1 })
+    .toArray()
 
-  const year = num(competition.year)
-  if (year >= 2026) return 9
-  if (year === 2025) return 7
-  if (year === 2024) return 4
-  return 1
-}
+  const teamCompetitionIds = playerCompetitions
+    .map((row) => row.team_competition_id)
+    .filter((value): value is mongoose.Types.ObjectId => value instanceof mongoose.Types.ObjectId)
 
-function getSeasonWeight(competition: RawDoc) {
-  const seasonNumber = clamp(getSeasonNumber(competition), 1, 9)
-  const progress = (seasonNumber - 1) / 8
-  return STAT_SEASON_MIN + (STAT_SEASON_MAX - STAT_SEASON_MIN) * progress
-}
+  if (!teamCompetitionIds.length) return null
 
-function getCompetitionWeight(competition: RawDoc) {
-  return getDivisionWeight(competition) * getSeasonWeight(competition)
-}
+  const teamCompetitions = await db
+    .collection("teamcompetitions")
+    .find({ _id: { $in: teamCompetitionIds } })
+    .project({ _id: 1, team_id: 1, competition_id: 1, team_competition_id: 1 })
+    .toArray()
 
-function normalizePosition(position: string) {
-  const value = position.toUpperCase()
-  if (["GK"].includes(value)) return "GK"
-  if (["CB", "LB", "RB", "DM"].includes(value)) return "DEF"
-  if (["CM", "LM", "RM"].includes(value)) return "MID"
-  return "FWD"
-}
+  const competitionIds = teamCompetitions
+    .map((row) => row.competition_id)
+    .filter((value): value is mongoose.Types.ObjectId => value instanceof mongoose.Types.ObjectId)
 
-function ovrFromAttributes(position: string, rating: Omit<CardRating, "ovr">, avg: number, winRate: number, lossRate: number) {
-  const group = normalizePosition(position)
-  const weights =
-    group === "GK"
-      ? { sho: 0.02, pas: 0.18, def: 0.55, dri: 0.15 }
-      : group === "DEF"
-        ? { sho: 0.02, pas: 0.22, def: 0.52, dri: 0.24 }
-        : group === "MID"
-          ? { sho: 0.12, pas: 0.34, def: 0.29, dri: 0.25 }
-          : { sho: 0.39, pas: 0.19, def: 0.06, dri: 0.36 }
+  const competitions = competitionIds.length
+    ? await db
+        .collection("competitions")
+        .find({ _id: { $in: competitionIds } })
+        .project({ _id: 1, competition_id: 1, season: 1, start_date: 1, end_date: 1 })
+        .toArray()
+    : []
 
-  const attributeBase =
-    rating.sho * weights.sho +
-    rating.pas * weights.pas +
-    rating.def * weights.def +
-    rating.dri * weights.dri
-  const avgBoost = clamp((avg - 6.8) * 1.6, -2.5, 3.5)
-  const resultBoost = clamp(winRate * 4 - lossRate * 4, -3.5, 3.5)
-  return roundRating(attributeBase + avgBoost + resultBoost)
+  const competitionById = new Map(competitions.map((competition) => [String(competition._id), competition]))
+
+  const latestTeamCompetition = teamCompetitions.sort((a, b) => {
+    const competitionA = competitionById.get(String(a.competition_id))
+    const competitionB = competitionById.get(String(b.competition_id))
+    const competitionIdDiff = num(competitionB?.competition_id) - num(competitionA?.competition_id)
+    if (competitionIdDiff) return competitionIdDiff
+    const seasonDiff = num(competitionB?.season) - num(competitionA?.season)
+    if (seasonDiff) return seasonDiff
+    const dateA = Math.max(dateMs(competitionA?.start_date), dateMs(competitionA?.end_date))
+    const dateB = Math.max(dateMs(competitionB?.start_date), dateMs(competitionB?.end_date))
+    if (dateA !== dateB) return dateB - dateA
+    return num(b.team_competition_id) - num(a.team_competition_id)
+  })[0]
+
+  return latestTeamCompetition?.team_id
+    ? db.collection("teams").findOne({ _id: latestTeamCompetition.team_id })
+    : null
 }
 
 export async function generateCardRatingForPlayer(playerObjectId: string): Promise<GeneratedCardData> {
   await dbConnect()
 
-  if (!mongoose.Types.ObjectId.isValid(playerObjectId)) {
-    throw new Error("Invalid player id.")
-  }
-
-  const objectId = new mongoose.Types.ObjectId(playerObjectId)
-  const player = await PlayerModel.findById(objectId)
+  const player = (await PlayerModel.findById(playerObjectId)
     .select("_id player_id player_name country avatar")
-    .lean<{ _id: mongoose.Types.ObjectId; player_id: number; player_name: string; country: string; avatar?: string } | null>()
+    .lean()) as
+    | {
+        _id: mongoose.Types.ObjectId
+        player_id?: number
+        player_name?: string
+        country?: string
+        avatar?: string
+      }
+    | null
 
   if (!player) {
     throw new Error("Player not found.")
   }
 
   const db = mongoose.connection.db
+
   if (!db) {
-    throw new Error("Mongo connection is not ready.")
+    throw new Error("MongoDB connection is not ready.")
   }
 
-  const rows = await db
-    .collection("playercompetitions")
-    .aggregate<RawDoc>([
-      { $match: { player_id: objectId } },
-      {
-        $lookup: {
-          from: "teamcompetitions",
-          localField: "team_competition_id",
-          foreignField: "_id",
-          as: "teamCompetition",
-        },
-      },
-      { $unwind: { path: "$teamCompetition", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "competitions",
-          localField: "teamCompetition.competition_id",
-          foreignField: "_id",
-          as: "competition",
-        },
-      },
-      { $unwind: { path: "$competition", preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: "teams",
-          localField: "teamCompetition.team_id",
-          foreignField: "_id",
-          as: "team",
-        },
-      },
-      { $unwind: { path: "$team", preserveNullAndEmptyArrays: true } },
-    ])
-    .toArray()
+  const numericPlayerId = Number(player.player_id)
+  const validatedRating =
+    VALIDATED_GLOBAL_RATINGS_BY_PLAYER_ID[numericPlayerId] ??
+    VALIDATED_GLOBAL_RATINGS[ratingKey(str(player.player_name))]
+  if (validatedRating) {
+    const playerCompetitions = await db
+      .collection("playercompetitions")
+      .find({ player_id: player._id })
+      .project({ team_competition_id: 1, matches_played: 1, minutes_played: 1, avg: 1 })
+      .toArray()
 
-  if (!rows.length) {
-    throw new Error("This player has no competition stats.")
-  }
+    let matches = 0
+    let minutes = 0
+    let avgWeighted = 0
+    let avgWeight = 0
 
-  const totals = {
-    matches: 0,
-    weightedMatches: 0,
-    minutes: 0,
-    goals: 0,
-    assists: 0,
-    preassists: 0,
-    kicks: 0,
-    passes: 0,
-    keypass: 0,
-    autopass: 0,
-    misspass: 0,
-    shotsOnGoal: 0,
-    shotsOffGoal: 0,
-    saves: 0,
-    clearances: 0,
-    recoveries: 0,
-    goalsConceded: 0,
-    cleanSheets: 0,
-    wins: 0,
-    draws: 0,
-    losses: 0,
-    avgWeighted: 0,
-    avgWeight: 0,
-  }
-
-  const positions = new Map<string, number>()
-  let bestTeam: { name?: string; image?: string; weight: number } = { weight: -1 }
-
-  for (const row of rows) {
-    const competition = (row.competition ?? {}) as RawDoc
-    const team = (row.team ?? {}) as RawDoc
-    const weight = getCompetitionWeight(competition)
-    const matches = num(row.matches_played ?? row.matchesPlayed)
-    const minutes = num(row.minutes_played ?? row.minutesPlayed)
-    const position = str(row.position) || "CM"
-
-    totals.matches += matches
-    totals.weightedMatches += matches * weight
-    totals.minutes += minutes
-    totals.goals += num(row.goals) * weight
-    totals.assists += num(row.assists) * weight
-    totals.preassists += num(row.preassists) * weight
-    totals.kicks += num(row.kicks) * weight
-    totals.passes += num(row.passes) * weight
-    totals.keypass += num(row.keypass ?? row.keyPass) * weight
-    totals.autopass += num(row.autopass) * weight
-    totals.misspass += num(row.misspass ?? row.missed_passes) * weight
-    totals.shotsOnGoal += num(row.shots_on_goal ?? row.shotsOnGoal) * weight
-    totals.shotsOffGoal += num(row.shots_off_goal ?? row.shotsOffGoal) * weight
-    totals.saves += num(row.saves) * weight
-    totals.clearances += num(row.clearances) * weight
-    totals.recoveries += num(row.recoveries) * weight
-    totals.goalsConceded += num(row.goals_conceded ?? row.goalsConceded) * weight
-    totals.cleanSheets += num(row.cs) * weight
-    totals.wins += num(row.matches_won ?? row.matchesWon) * weight
-    totals.draws += num(row.matches_draw ?? row.matchesDraw) * weight
-    totals.losses += num(row.matches_lost ?? row.matchesLost) * weight
-
-    if (matches > 0) {
-      totals.avgWeighted += num(row.avg) * matches * weight
-      totals.avgWeight += matches * weight
-      positions.set(position, (positions.get(position) ?? 0) + matches * weight)
+    for (const row of playerCompetitions) {
+      const rowMatches = num(row.matches_played)
+      matches += rowMatches
+      minutes += num(row.minutes_played)
+      avgWeighted += num(row.avg) * rowMatches
+      avgWeight += rowMatches
     }
 
-    const teamWeight = matches * weight
-    if (teamWeight > bestTeam.weight) {
-      bestTeam = {
-        name: str(team.team_name),
-        image: str(team.image),
-        weight: teamWeight,
-      }
+    const team = await latestTeamForPlayer(db, player._id)
+
+    return {
+      player: {
+        objectId: player._id.toString(),
+        playerId: Number(player.player_id),
+        name: str(player.player_name),
+        country: str(player.country),
+        avatar: str(player.avatar),
+      },
+      team: {
+        name: str(team?.team_name),
+        image: str(team?.image),
+      },
+      position: validatedRating.position,
+      rating: {
+        ovr: validatedRating.ovr,
+        sho: validatedRating.sho,
+        pas: validatedRating.pas,
+        def: validatedRating.def,
+        dri: validatedRating.dri,
+      },
+      summary: {
+        matches,
+        weightedMatches: matches,
+        minutes,
+        avg: Number((avgWeight > 0 ? avgWeighted / avgWeight : 0).toFixed(2)),
+        reliabilityApplied: matches < MIN_RELIABLE_MATCHES,
+      },
     }
   }
 
-  const weightedMatches = Math.max(totals.weightedMatches, 1)
-  const realMatches = Math.max(totals.matches, 1)
-  const shots = totals.shotsOnGoal + totals.shotsOffGoal
-  const avg = totals.avgWeight > 0 ? totals.avgWeighted / totals.avgWeight : 6.5
-  const passAccuracy = rate(totals.passes + totals.autopass, totals.passes + totals.autopass + totals.misspass)
-  const autopassRate = rate(totals.autopass, totals.kicks)
-  const goalAccuracy = rate(totals.goals, shots)
-  const shotOnTargetRate = rate(totals.shotsOnGoal, shots)
-  const goalsConcededRate = rate(totals.goalsConceded, weightedMatches)
-  const winRate = rate(totals.wins, weightedMatches)
-  const lossRate = rate(totals.losses, weightedMatches)
-  const minutesPerMatch = rate(totals.minutes, realMatches)
-  const starterReliability = clamp(minutesPerMatch / 100, 0.78, 1.08)
-  const avgBonus = clamp((avg - 6.5) * 2.2, -4, 6)
+  const engineCard = await cardEngine.getGlobalCardByPlayerObjectId(playerObjectId)
 
-  const goalsPer90 = rate(totals.goals * 90, totals.minutes || realMatches * 90)
-  const assistsPer90 = rate(totals.assists * 90, totals.minutes || realMatches * 90)
-  const keyPassPer90 = rate(totals.keypass * 90, totals.minutes || realMatches * 90)
-  const recoveriesPer90 = rate(totals.recoveries * 90, totals.minutes || realMatches * 90)
-  const clearancesPer90 = rate(totals.clearances * 90, totals.minutes || realMatches * 90)
-  const autopassPer90 = rate(totals.autopass * 90, totals.minutes || realMatches * 90)
+  const teamCompetition = engineCard.teamId
+    ? await db
+        .collection("teamcompetitions")
+        .findOne({ _id: new mongoose.Types.ObjectId(String(engineCard.teamId)) })
+    : null
+  const team = teamCompetition?.team_id
+    ? await db.collection("teams").findOne({ _id: teamCompetition.team_id })
+    : null
 
-  const sho = roundRating(
-    (48 + goalsPer90 * 19 + rate(totals.shotsOnGoal, weightedMatches) * 3.2 + goalAccuracy * 12 + shotOnTargetRate * 6 + avgBonus) *
-      starterReliability
-  )
-  const pas = roundRating(
-    (50 + assistsPer90 * 12 + rate(totals.preassists, weightedMatches) * 5 + keyPassPer90 * 2.9 + passAccuracy * 18 + avgBonus - rate(totals.misspass, totals.passes + totals.autopass + totals.misspass) * 18) *
-      starterReliability
-  )
-  const def = roundRating(
-    (48 + recoveriesPer90 * 2.7 + clearancesPer90 * 3.1 + rate(totals.saves, weightedMatches) * 1.7 + rate(totals.cleanSheets, weightedMatches) * 13 - goalsConcededRate * 2.1 + avgBonus) *
-      starterReliability
-  )
-  const dri = roundRating((50 + autopassPer90 * 7.5 + autopassRate * 24 + passAccuracy * 8 + avgBonus) * starterReliability)
-
-  const position = [...positions.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "CM"
-  let ovr = ovrFromAttributes(position, { sho, pas, def, dri }, avg, winRate, lossRate)
-
-  const reliabilityApplied = totals.matches < MIN_RELIABLE_MATCHES
-  if (reliabilityApplied) {
-    ovr = Math.min(ovr, 80)
+  const matches = num(engineCard.stats?.matches || engineCard.stats?.matches_played)
+  const minutes = num(engineCard.stats?.minutes || engineCard.stats?.minutes_played)
+  const avg = num(engineCard.stats?.avg)
+  const rating = {
+    ovr: num(engineCard.attributes?.ovr),
+    sho: num(engineCard.attributes?.sho),
+    pas: num(engineCard.attributes?.pas),
+    def: num(engineCard.attributes?.def),
+    dri: num(engineCard.attributes?.dri),
   }
 
   return {
     player: {
       objectId: player._id.toString(),
       playerId: Number(player.player_id),
-      name: player.player_name,
-      country: player.country,
-      avatar: player.avatar,
+      name: str(engineCard.name) || str(player.player_name),
+      country: str(engineCard.country) || str(player.country),
+      avatar: str(engineCard.avatar) || str(player.avatar),
     },
     team: {
-      name: bestTeam.name,
-      image: bestTeam.image,
+      name: str(team?.team_name),
+      image: str(team?.image),
     },
-    position,
-    rating: { ovr, sho, pas, def, dri },
+    position: str(engineCard.position) || "CM",
+    rating,
     summary: {
-      matches: totals.matches,
-      weightedMatches: Number(totals.weightedMatches.toFixed(2)),
-      minutes: totals.minutes,
+      matches,
+      weightedMatches: matches,
+      minutes,
       avg: Number(avg.toFixed(2)),
-      reliabilityApplied,
+      reliabilityApplied: matches < MIN_RELIABLE_MATCHES,
     },
   }
 }
