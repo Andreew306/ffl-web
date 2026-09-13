@@ -230,8 +230,17 @@ function avatarTextBox(text: string) {
     fill="#ffffff">${escapeXml(text)}</text>`
 }
 
+function azonixSupportsText(text: string) {
+  const font = currentAzonixFont
+  if (!font) return false
+  return Array.from(text).every((character) => {
+    const glyph = font.charToGlyph(character)
+    return glyph && glyph.index !== 0 && glyph.name !== ".notdef"
+  })
+}
+
 function avatarTextMarkup(text: string) {
-  if (/^[\x20-\x7E]+$/.test(text)) {
+  if (/^[\x20-\x7E]+$/.test(text) && azonixSupportsText(text)) {
     return azonixText(text, sx(335), sy(463), ss(text.length <= 2 ? 150 : 112), "#ffffff", "middle")
   }
   return avatarTextBox(text)
