@@ -1,6 +1,8 @@
 import mongoose from "mongoose"
 import dbConnect from "@/lib/db/mongoose"
 import CardRequestModel from "@/lib/models/CardRequest"
+import CardVoteModel from "@/lib/models/CardVote"
+import CardApprovalVoteModel from "@/lib/models/CardApprovalVote"
 import PlayerModel from "@/lib/models/Player"
 import { createDiscordCardReviewThread } from "@/lib/services/discord-card.service"
 import { renderPlayerCardPng } from "@/lib/services/card-image.service"
@@ -47,14 +49,20 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
   }
 
   const card = await generateCardRatingForPlayer(playerId.toString())
-  const closesAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
+  const closesAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
   const request = await CardRequestModel.create({
     playerId,
     requestedByDiscordId: discordId,
     status: "open",
     botRating: card.rating,
+    reviewRound: 1,
     closesAt,
   })
+
+  await Promise.all([
+    CardVoteModel.deleteMany({ cardRequestId: request._id }),
+    CardApprovalVoteModel.deleteMany({ cardRequestId: request._id }),
+  ])
 
   try {
     const image = await renderPlayerCardPng(card)

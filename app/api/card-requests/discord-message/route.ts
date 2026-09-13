@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { sendDiscordCardReviewReply } from "@/lib/services/discord-card.service"
 import { registerDiscordCardVote } from "@/lib/services/card-vote.service"
+import { isAuthorizedCardWebhook, unauthorizedCardWebhook } from "@/lib/services/card-webhook-auth"
 
 export const runtime = "nodejs"
 
@@ -15,22 +16,9 @@ type DiscordMessagePayload = {
   replyToDiscord?: boolean
 }
 
-function unauthorized() {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-}
-
-function isAuthorized(request: Request) {
-  const secret = process.env.CARD_REVIEW_WEBHOOK_SECRET
-  if (!secret) return true
-
-  const auth = request.headers.get("authorization")
-  const headerSecret = request.headers.get("x-card-review-secret")
-  return auth === `Bearer ${secret}` || headerSecret === secret
-}
-
 export async function POST(request: Request) {
-  if (!isAuthorized(request)) {
-    return unauthorized()
+  if (!isAuthorizedCardWebhook(request)) {
+    return unauthorizedCardWebhook()
   }
 
   const payload = (await request.json().catch(() => null)) as DiscordMessagePayload | null

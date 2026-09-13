@@ -13,9 +13,12 @@ export interface ICardRequest extends Document {
   requestedByDiscordId: string
   discordThreadId?: string | null
   discordStarterMessageId?: string | null
-  status: "open" | "closed" | "failed"
+  status: "open" | "pending_approval" | "approved" | "rejected" | "failed"
   botRating: CardRating
   finalRating?: CardRating | null
+  reviewRound: number
+  approvalMessageId?: string | null
+  approvedImageUrl?: string | null
   closesAt: Date
   error?: string | null
 }
@@ -37,9 +40,12 @@ const cardRequestSchema = new Schema<ICardRequest>(
     requestedByDiscordId: { type: String, required: true, index: true },
     discordThreadId: { type: String, default: null, index: true },
     discordStarterMessageId: { type: String, default: null },
-    status: { type: String, enum: ["open", "closed", "failed"], default: "open", index: true },
+    status: { type: String, enum: ["open", "pending_approval", "approved", "rejected", "failed"], default: "open", index: true },
     botRating: { type: cardRatingSchema, required: true },
     finalRating: { type: cardRatingSchema, default: null },
+    reviewRound: { type: Number, default: 1 },
+    approvalMessageId: { type: String, default: null },
+    approvedImageUrl: { type: String, default: null },
     closesAt: { type: Date, required: true, index: true },
     error: { type: String, default: null },
   },
