@@ -25,7 +25,11 @@ export async function getProfileCardGallery(discordId: string, playerObjectId?: 
     filters.push({ playerId: new mongoose.Types.ObjectId(playerObjectId) })
   }
 
-  const requests = await CardRequestModel.find({ $or: filters })
+  const requests = await CardRequestModel.find({
+    $or: filters,
+    status: "approved",
+    approvedImageUrl: { $type: "string", $ne: "" },
+  })
     .sort({ createdAt: -1 })
     .limit(100)
     .lean<Array<{

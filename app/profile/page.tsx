@@ -73,20 +73,6 @@ type ProfilePageProps = {
   searchParams?: Promise<{ card?: string; tab?: string }>
 }
 
-function getCardStatusLabel(status: ProfileCardGalleryItem["status"]) {
-  if (status === "open") return "In Review"
-  if (status === "pending_approval") return "Pending Approval"
-  if (status === "approved") return "Approved"
-  if (status === "rejected") return "Rejected"
-  return "Failed"
-}
-
-function getCardStatusClass(status: ProfileCardGalleryItem["status"]) {
-  if (status === "approved") return "border-emerald-400/25 bg-emerald-500/10 text-emerald-100"
-  if (status === "open" || status === "pending_approval") return "border-cyan-400/25 bg-cyan-500/10 text-cyan-100"
-  return "border-red-400/25 bg-red-500/10 text-red-100"
-}
-
 function formatCardDate(value: string) {
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -103,38 +89,24 @@ function CardGallery({ cards }: { cards: ProfileCardGalleryItem[] }) {
       <div className="mb-5 flex items-end justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold text-white">My Cards</h2>
-          <p className="mt-1 text-sm text-slate-400">Requested cards linked to your Discord account.</p>
+          <p className="mt-1 text-sm text-slate-400">Approved cards linked to your Discord account.</p>
         </div>
       </div>
 
       {cards.length ? (
         <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {cards.map((card) => {
-            const rating = card.finalRating || card.botRating
             return (
               <article
                 key={card.id}
                 className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 shadow-[0_18px_45px_rgba(0,0,0,0.22)]"
               >
                 <div className="flex aspect-[670/1080] items-center justify-center bg-slate-950">
-                  {card.approvedImageUrl ? (
-                    <img
-                      src={card.approvedImageUrl}
-                      alt={`${card.playerName} card`}
-                      className="h-full w-full object-contain"
-                    />
-                  ) : (
-                    <div className="px-6 text-center">
-                      <div className="text-5xl font-semibold text-white">{rating.ovr}</div>
-                      <div className="mt-3 text-lg font-semibold text-white">{card.playerName}</div>
-                      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
-                        <span>SHO {rating.sho}</span>
-                        <span>PAS {rating.pas}</span>
-                        <span>DEF {rating.def}</span>
-                        <span>DRI {rating.dri}</span>
-                      </div>
-                    </div>
-                  )}
+                  <img
+                    src={card.approvedImageUrl!}
+                    alt={`${card.playerName} card`}
+                    className="h-full w-full object-contain"
+                  />
                 </div>
                 <div className="space-y-3 p-4">
                   <div className="flex items-center justify-between gap-3">
@@ -142,13 +114,12 @@ function CardGallery({ cards }: { cards: ProfileCardGalleryItem[] }) {
                       <div className="truncate text-base font-semibold text-white">{card.playerName}</div>
                       <div className="text-xs text-slate-400">#{card.playerId || "unknown"} · Round {card.reviewRound}</div>
                     </div>
-                    <span className={`shrink-0 rounded-full border px-3 py-1 text-xs ${getCardStatusClass(card.status)}`}>
-                      {getCardStatusLabel(card.status)}
+                    <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
+                      Approved
                     </span>
                   </div>
                   <div className="text-xs text-slate-400">
                     Requested {formatCardDate(card.createdAt)}
-                    {card.status === "open" ? ` · Closes ${formatCardDate(card.closesAt)}` : null}
                   </div>
                 </div>
               </article>
@@ -157,7 +128,7 @@ function CardGallery({ cards }: { cards: ProfileCardGalleryItem[] }) {
         </div>
       ) : (
         <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-10 text-center text-slate-300">
-          You do not have any requested cards yet.
+          You do not have any approved cards yet.
         </div>
       )}
     </section>

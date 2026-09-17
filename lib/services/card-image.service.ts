@@ -343,6 +343,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       width: ss(352),
       height: ss(352),
       fit: "cover",
+      trim: true,
       sharpen: true,
     }),
     circularImageToDataUri(code ? `https://flagcdn.com/w640/${code}.png` : "", FLAG_BADGE_SIZE, { fit: "cover" }),
