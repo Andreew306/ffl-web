@@ -15,6 +15,7 @@ const CREST_CENTER = { x: 304, y: 277 }
 const FLAG_CENTER = { x: 886, y: 277 }
 const CREST_BADGE_SIZE = 154
 const FLAG_BADGE_SIZE = 158
+const KIT_BACKGROUND_SIZE = 430
 const STAT_VALUE_CENTERS = [159, 449, 739, 1029] as const
 const NAME_CENTER = { x: 432, y: 1248 }
 const POSITION_CENTER = { x: 1010, y: 1248 }
@@ -340,8 +341,8 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       sharpen: true,
     }),
     imageToDataUri(card.team.kit, {
-      width: ss(352),
-      height: ss(352),
+      width: ss(KIT_BACKGROUND_SIZE),
+      height: ss(KIT_BACKGROUND_SIZE),
       fit: "cover",
       trim: true,
       sharpen: true,
@@ -365,6 +366,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       .statLabel { font-family: Azonix, Orbitron, Eurostile, "Arial Black", Arial, sans-serif; font-size: ${ss(34)}px; font-weight: 400; fill: #050607; }
       .statValue { font-family: Azonix, Orbitron, Eurostile, "Arial Black", Arial, sans-serif; font-size: ${ss(35)}px; font-weight: 400; fill: #f9fffb; }
     </style>
+    <clipPath id="kitClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(195)}"/></clipPath>
     <clipPath id="avatarClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(176)}"/></clipPath>
   </defs>
 
@@ -378,7 +380,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
 
   ${
     kitBackground
-      ? `<image href="${kitBackground}" x="${sx(159)}" y="${sy(232)}" width="${ss(352)}" height="${ss(352)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
+      ? `<image href="${kitBackground}" x="${sx(335) - ss(KIT_BACKGROUND_SIZE) / 2}" y="${sy(408) - ss(KIT_BACKGROUND_SIZE) / 2}" width="${ss(KIT_BACKGROUND_SIZE)}" height="${ss(KIT_BACKGROUND_SIZE)}" clip-path="url(#kitClip)" preserveAspectRatio="xMidYMid slice"/>`
       : ""
   }
 
