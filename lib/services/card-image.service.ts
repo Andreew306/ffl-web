@@ -20,7 +20,8 @@ const KIT_CENTER_Y = 413
 const STAT_VALUE_CENTERS = [159, 449, 739, 1029] as const
 const NAME_CENTER = { x: 432, y: 1248 }
 const POSITION_CENTER = { x: 1010, y: 1248 }
-const TEMPLATE_PATH = path.join(process.cwd(), "public", "card-templates", "base.png")
+const COMMON_TEMPLATE_PATH = path.join(process.cwd(), "public", "card-templates", "base_comun.png")
+const SHINY_TEMPLATE_PATH = path.join(process.cwd(), "public", "card-templates", "base_brillante.png")
 const FONT_PATHS = [
   path.join(process.cwd(), "public", "fonts", "Azonix.otf"),
   path.join(process.cwd(), "public", "fonts", "Azonix.ttf"),
@@ -265,11 +266,12 @@ function statValue(value: number, centerX: number) {
   return azonixTextBox(String(value), centerX, sy(885), ss(35), "#f9fffb")
 }
 
-async function readTemplate() {
+async function readTemplate(ovr: number) {
+  const templatePath = ovr >= 81 ? SHINY_TEMPLATE_PATH : COMMON_TEMPLATE_PATH
   try {
-    return await fs.readFile(TEMPLATE_PATH)
+    return await fs.readFile(templatePath)
   } catch {
-    throw new Error(`Card template not found. Put the clean template PNG at ${TEMPLATE_PATH}.`)
+    throw new Error(`Card template not found. Put the clean template PNG at ${templatePath}.`)
   }
 }
 
@@ -438,7 +440,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
 }
 
 export async function renderPlayerCardPng(card: GeneratedCardData) {
-  const template = await readTemplate()
+  const template = await readTemplate(card.rating.ovr)
   const overlay = await renderPlayerCardOverlaySvg(card)
 
   return sharp(template)
