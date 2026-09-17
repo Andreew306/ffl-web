@@ -16,6 +16,7 @@ const FLAG_CENTER = { x: 886, y: 277 }
 const CREST_BADGE_SIZE = 154
 const FLAG_BADGE_SIZE = 158
 const KIT_BACKGROUND_SIZE = 444
+const KIT_CENTER_Y = 413
 const STAT_VALUE_CENTERS = [159, 449, 739, 1029] as const
 const NAME_CENTER = { x: 432, y: 1248 }
 const POSITION_CENTER = { x: 1010, y: 1248 }
@@ -370,10 +371,16 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const fontFace = await azonixFontFace()
   currentAzonixFont = await loadAzonixFont()
 
-  if (card.team.image && !crest) {
+  if (!card.team.image) {
+    throw new Error(`No team crest is available for ${card.team.name || card.player.name}.`)
+  }
+  if (!card.team.kit) {
+    throw new Error(`No team kit is available for ${card.team.name || card.player.name}.`)
+  }
+  if (!crest) {
     throw new Error(`Could not download the team crest for ${card.team.name || card.player.name}.`)
   }
-  if (card.team.kit && !kitBackground) {
+  if (!kitBackground) {
     throw new Error(`Could not download the team kit for ${card.team.name || card.player.name}.`)
   }
 
@@ -386,7 +393,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       .statLabel { font-family: Azonix, Orbitron, Eurostile, "Arial Black", Arial, sans-serif; font-size: ${ss(34)}px; font-weight: 400; fill: #050607; }
       .statValue { font-family: Azonix, Orbitron, Eurostile, "Arial Black", Arial, sans-serif; font-size: ${ss(35)}px; font-weight: 400; fill: #f9fffb; }
     </style>
-    <clipPath id="kitClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(198)}"/></clipPath>
+    <clipPath id="kitClip"><circle cx="${sx(335)}" cy="${sy(KIT_CENTER_Y)}" r="${ss(195)}"/></clipPath>
     <clipPath id="avatarClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(176)}"/></clipPath>
   </defs>
 
@@ -400,7 +407,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
 
   ${
     kitBackground
-      ? `<image href="${kitBackground}" x="${sx(335) - ss(KIT_BACKGROUND_SIZE) / 2}" y="${sy(408) - ss(KIT_BACKGROUND_SIZE) / 2}" width="${ss(KIT_BACKGROUND_SIZE)}" height="${ss(KIT_BACKGROUND_SIZE)}" clip-path="url(#kitClip)" preserveAspectRatio="xMidYMid slice"/>`
+      ? `<image href="${kitBackground}" x="${sx(335) - ss(KIT_BACKGROUND_SIZE) / 2}" y="${sy(KIT_CENTER_Y) - ss(KIT_BACKGROUND_SIZE) / 2}" width="${ss(KIT_BACKGROUND_SIZE)}" height="${ss(KIT_BACKGROUND_SIZE)}" clip-path="url(#kitClip)" preserveAspectRatio="xMidYMid slice"/>`
       : ""
   }
 
