@@ -95,20 +95,33 @@ type ImageDataUriOptions = {
 async function fetchImageBuffer(url?: string) {
   if (!isImageUrl(url)) return null
 
-  try {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    const response = await fetch(url!.trim(), { signal: controller.signal, cache: "no-store" })
-    clearTimeout(timeout)
+    const timeout = setTimeout(() => controller.abort(), 12000)
 
-    if (!response.ok) return null
+    try {
+      const response = await fetch(url!.trim(), {
+        signal: controller.signal,
+        cache: "force-cache",
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+          "User-Agent": "FFL-Card-Renderer/1.0",
+        },
+      })
 
-    const buffer = Buffer.from(await response.arrayBuffer())
-    const contentType = response.headers.get("content-type") || "image/png"
-    return { buffer, contentType }
-  } catch {
-    return null
+      if (response.ok) {
+        const buffer = Buffer.from(await response.arrayBuffer())
+        const contentType = response.headers.get("content-type") || "image/png"
+        return { buffer, contentType }
+      }
+    } catch {
+      // Retry transient image-host or network failures.
+    } finally {
+      clearTimeout(timeout)
+    }
   }
+
+  return null
 }
 
 function bufferToDataUri(buffer: Buffer, contentType = "image/png") {
@@ -356,6 +369,13 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const rating = card.rating
   const fontFace = await azonixFontFace()
   currentAzonixFont = await loadAzonixFont()
+
+  if (card.team.image && !crest) {
+    throw new Error(`Could not download the team crest for ${card.team.name || card.player.name}.`)
+  }
+  if (card.team.kit && !kitBackground) {
+    throw new Error(`Could not download the team kit for ${card.team.name || card.player.name}.`)
+  }
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}">

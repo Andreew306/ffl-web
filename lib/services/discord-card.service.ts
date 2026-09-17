@@ -10,7 +10,7 @@ type DiscordThreadResponse = {
   }
 }
 
-async function fetchDiscordWithTimeout(url: string, init: RequestInit, timeoutMs = 10000) {
+async function fetchDiscordWithTimeout(url: string, init: RequestInit, timeoutMs = 30000) {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), timeoutMs)
 
