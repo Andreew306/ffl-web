@@ -15,7 +15,7 @@ const CREST_CENTER = { x: 304, y: 277 }
 const FLAG_CENTER = { x: 886, y: 277 }
 const CREST_BADGE_SIZE = 154
 const FLAG_BADGE_SIZE = 158
-const KIT_BACKGROUND_SIZE = 430
+const KIT_BACKGROUND_SIZE = 444
 const STAT_VALUE_CENTERS = [159, 449, 739, 1029] as const
 const NAME_CENTER = { x: 432, y: 1248 }
 const POSITION_CENTER = { x: 1010, y: 1248 }
@@ -386,7 +386,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       .statLabel { font-family: Azonix, Orbitron, Eurostile, "Arial Black", Arial, sans-serif; font-size: ${ss(34)}px; font-weight: 400; fill: #050607; }
       .statValue { font-family: Azonix, Orbitron, Eurostile, "Arial Black", Arial, sans-serif; font-size: ${ss(35)}px; font-weight: 400; fill: #f9fffb; }
     </style>
-    <clipPath id="kitClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(195)}"/></clipPath>
+    <clipPath id="kitClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(198)}"/></clipPath>
     <clipPath id="avatarClip"><circle cx="${sx(335)}" cy="${sy(408)}" r="${ss(176)}"/></clipPath>
   </defs>
 
