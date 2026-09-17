@@ -318,6 +318,9 @@ export async function registerCardApprovalVote(input: CardApprovalInput) {
     return {
       ok: true,
       status: "approved",
+      accepts,
+      rejects,
+      target: APPROVAL_TARGET,
       responseContent: imageUrl
         ? `Card approved by ${accepts} staff voters and uploaded to ImgBB: ${imageUrl}`
         : `Card approved by ${accepts} staff voters. ImgBB upload skipped because IMGBB_API_KEY is not configured.`,
@@ -345,6 +348,9 @@ export async function registerCardApprovalVote(input: CardApprovalInput) {
     return {
       ok: true,
       status: "reopened",
+      accepts,
+      rejects,
+      target: APPROVAL_TARGET,
       responseContent: `Reject registered. Reopened fix period. Accept ${accepts}/${APPROVAL_TARGET} | Reject ${rejects}/${APPROVAL_TARGET}`,
     }
   }
@@ -352,6 +358,9 @@ export async function registerCardApprovalVote(input: CardApprovalInput) {
   return {
     ok: true,
     status: "recorded",
+    accepts,
+    rejects,
+    target: APPROVAL_TARGET,
     responseContent: `${input.decision === "accept" ? "Accept" : "Reject"} registered. Accept ${accepts}/${APPROVAL_TARGET} | Reject ${rejects}/${APPROVAL_TARGET}`,
   }
 }
