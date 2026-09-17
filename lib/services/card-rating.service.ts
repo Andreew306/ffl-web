@@ -149,6 +149,7 @@ type TeamVisuals = {
   image: string
   kit: string
   kitColor: string
+  position: string
 }
 
 type KitVisual = {
@@ -240,7 +241,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
   const playerCompetitions = await db
     .collection("playercompetitions")
     .find({ player_id: playerObjectId })
-    .project({ team_competition_id: 1 })
+    .project({ team_competition_id: 1, player_competition_id: 1, position: 1 })
     .toArray()
 
   const teamCompetitionIds = playerCompetitions
@@ -249,7 +250,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
 
   if (!teamCompetitionIds.length) {
     const randomKit = await randomKitVisual(db)
-    return { name: "", image: "", kit: randomKit.image, kitColor: randomKit.color }
+    return { name: "", image: "", kit: randomKit.image, kitColor: randomKit.color, position: "" }
   }
 
   const playerTeamCompetitions = (await db
@@ -273,6 +274,15 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
   const competitionById = new Map(competitions.map((competition) => [String(competition._id), competition]))
   const sortedPlayerTeamCompetitions = sortTeamCompetitions(playerTeamCompetitions, competitionById)
   const latestTeamCompetition = sortedPlayerTeamCompetitions[0]
+  const teamCompetitionRank = new Map(
+    sortedPlayerTeamCompetitions.map((teamCompetition, index) => [String(teamCompetition._id), index]),
+  )
+  const latestPlayerCompetition = [...playerCompetitions].sort((a, b) => {
+    const rankA = teamCompetitionRank.get(String(a.team_competition_id)) ?? Number.MAX_SAFE_INTEGER
+    const rankB = teamCompetitionRank.get(String(b.team_competition_id)) ?? Number.MAX_SAFE_INTEGER
+    if (rankA !== rankB) return rankA - rankB
+    return num(b.player_competition_id) - num(a.player_competition_id)
+  })[0]
   const teamIds = sortedPlayerTeamCompetitions.map((row) => row.team_id).filter(isObjectId)
 
   const teams = (teamIds.length
@@ -327,6 +337,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
     image,
     kit: kitVisual.image,
     kitColor: kitVisual.color,
+    position: str(latestPlayerCompetition?.position).toUpperCase(),
   }
 }
 
@@ -395,7 +406,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
         kit: team.kit,
         kitColor: team.kitColor,
       },
-      position: validatedRating.position,
+      position: team.position || validatedRating.position,
       rating: {
         ovr: validatedRating.ovr,
         sho: validatedRating.sho,
@@ -451,7 +462,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
       kit: directKit.image || teamVisuals.kit,
       kitColor: directKit.image ? directKit.color : teamVisuals.kitColor,
     },
-    position: str(engineCard.position) || "CM",
+    position: teamVisuals.position || str(engineCard.position) || "CM",
     rating,
     summary: {
       matches,
