@@ -18,6 +18,7 @@ export type GeneratedCardData = {
     name?: string
     image?: string
     kit?: string
+    kitColor?: string
   }
   position: string
   rating: CardRating
@@ -147,6 +148,12 @@ type TeamVisuals = {
   name: string
   image: string
   kit: string
+  kitColor: string
+}
+
+type KitVisual = {
+  image: string
+  color: string
 }
 
 function isObjectId(value: unknown): value is mongoose.Types.ObjectId {
@@ -159,14 +166,22 @@ function recordValue(value: RawKit, key: string) {
   return typeof raw === "string" ? raw : ""
 }
 
-function pickKitImage(kits?: RawKit[] | null) {
-  if (!Array.isArray(kits)) return ""
+function parseKitTextColor(color: string) {
+  const normalized = color.trim()
+  const value = /^[0-9a-f]{6}$/i.test(normalized)
+    ? normalized
+    : normalized.split(/\s+/)[3] || ""
+  return /^[0-9a-f]{6}$/i.test(value) ? `#${value.toUpperCase()}` : ""
+}
+
+function pickKitVisual(kits?: RawKit[] | null): KitVisual {
+  if (!Array.isArray(kits)) return { image: "", color: "" }
 
   for (const kit of kits) {
     if (!kit) continue
     if (typeof kit === "string") {
       const normalized = normalizeTeamImageUrl(kit)
-      if (normalized) return normalized
+      if (normalized) return { image: normalized, color: "" }
       continue
     }
 
@@ -175,10 +190,32 @@ function pickKitImage(kits?: RawKit[] | null) {
       normalizeTeamImageUrl(recordValue(kit, "imageUrl")) ||
       normalizeTeamImageUrl(recordValue(kit, "url")) ||
       normalizeTeamImageUrl(recordValue(kit, "src"))
-    if (normalized) return normalized
+    if (normalized) {
+      return {
+        image: normalized,
+        color: parseKitTextColor(recordValue(kit, "color")),
+      }
+    }
   }
 
-  return ""
+  return { image: "", color: "" }
+}
+
+function pickKitImage(kits?: RawKit[] | null) {
+  return pickKitVisual(kits).image
+}
+
+async function randomKitVisual(db: mongoose.mongo.Db) {
+  const candidates = (await db
+    .collection("teamcompetitions")
+    .aggregate([
+      { $match: { "kits.0": { $exists: true } } },
+      { $sample: { size: 10 } },
+      { $project: { kits: 1 } },
+    ])
+    .toArray()) as RawTeamCompetition[]
+
+  return pickKitVisual(candidates.find((row) => pickKitImage(row.kits))?.kits)
 }
 
 function sortTeamCompetitions(
@@ -210,7 +247,10 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
     .map((row) => row.team_competition_id)
     .filter(isObjectId)
 
-  if (!teamCompetitionIds.length) return { name: "", image: "", kit: "" }
+  if (!teamCompetitionIds.length) {
+    const randomKit = await randomKitVisual(db)
+    return { name: "", image: "", kit: randomKit.image, kitColor: randomKit.color }
+  }
 
   const playerTeamCompetitions = (await db
     .collection("teamcompetitions")
@@ -254,44 +294,39 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
     }
   }
 
-  let kit = pickKitImage(latestTeamCompetition?.kits)
+  let kitVisual = pickKitVisual(latestTeamCompetition?.kits)
 
-  if (!kit && latestTeamCompetition?.team_id) {
+  if (!kitVisual.image && latestTeamCompetition?.team_id) {
     const sameTeamCompetitions = (await db
       .collection("teamcompetitions")
       .find({ team_id: latestTeamCompetition.team_id, "kits.0": { $exists: true } })
       .project({ _id: 1, team_id: 1, competition_id: 1, team_competition_id: 1, kits: 1 })
       .toArray()) as RawTeamCompetition[]
-    kit = pickKitImage(sortTeamCompetitions(sameTeamCompetitions, competitionById).find((row) => pickKitImage(row.kits))?.kits)
+    const sameTeamCompetition = sortTeamCompetitions(sameTeamCompetitions, competitionById)
+      .find((row) => pickKitImage(row.kits))
+    kitVisual = pickKitVisual(sameTeamCompetition?.kits)
   }
 
-  if (!kit) {
+  if (!kitVisual.image) {
     for (const teamCompetition of sortedPlayerTeamCompetitions) {
-      kit = pickKitImage(teamCompetition.kits)
-      if (kit) break
+      kitVisual = pickKitVisual(teamCompetition.kits)
+      if (kitVisual.image) break
     }
   }
 
-  if (!kit && latestTeam) {
-    kit = pickKitImage(latestTeam.kits)
+  if (!kitVisual.image && latestTeam) {
+    kitVisual = pickKitVisual(latestTeam.kits)
   }
 
-  if (!kit) {
-    const randomTeamCompetitions = (await db
-      .collection("teamcompetitions")
-      .aggregate([
-        { $match: { "kits.0": { $exists: true } } },
-        { $sample: { size: 10 } },
-        { $project: { kits: 1 } },
-      ])
-      .toArray()) as RawTeamCompetition[]
-    kit = pickKitImage(randomTeamCompetitions.find((row) => pickKitImage(row.kits))?.kits)
+  if (!kitVisual.image) {
+    kitVisual = await randomKitVisual(db)
   }
 
   return {
     name: str(latestTeam?.team_name) || str(latestTeam?.teamName),
     image,
-    kit,
+    kit: kitVisual.image,
+    kitColor: kitVisual.color,
   }
 }
 
@@ -358,6 +393,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
         name: team.name,
         image: team.image,
         kit: team.kit,
+        kitColor: team.kitColor,
       },
       position: validatedRating.position,
       rating: {
@@ -388,6 +424,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
     ? await db.collection("teams").findOne({ _id: teamCompetition.team_id })
     : null
   const teamVisuals = await latestTeamVisualsForPlayer(db, player._id)
+  const directKit = pickKitVisual(teamCompetition?.kits)
 
   const matches = num(engineCard.stats?.matches || engineCard.stats?.matches_played)
   const minutes = num(engineCard.stats?.minutes || engineCard.stats?.minutes_played)
@@ -411,7 +448,8 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
     team: {
       name: str(team?.team_name) || str(team?.teamName) || teamVisuals.name,
       image: normalizeTeamImageUrl(team?.image) || teamVisuals.image,
-      kit: pickKitImage(teamCompetition?.kits) || teamVisuals.kit,
+      kit: directKit.image || teamVisuals.kit,
+      kitColor: directKit.image ? directKit.color : teamVisuals.kitColor,
     },
     position: str(engineCard.position) || "CM",
     rating,

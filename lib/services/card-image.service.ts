@@ -220,14 +220,14 @@ function textAvatar(avatar: string | undefined) {
   return ""
 }
 
-function avatarTextBox(text: string) {
+function avatarTextBox(text: string, fill: string) {
   const fontSize = ss(text.length <= 2 ? 150 : 112)
   return `<text x="${sx(335)}" y="${sy(408)}"
     text-anchor="middle"
     dominant-baseline="central"
     font-family="Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, Segoe UI Symbol, Noto Sans Symbols, Arial Unicode MS, Arial, sans-serif"
     font-size="${fontSize}"
-    fill="#ffffff">${escapeXml(text)}</text>`
+    fill="${fill}">${escapeXml(text)}</text>`
 }
 
 function azonixSupportsText(text: string) {
@@ -239,11 +239,11 @@ function azonixSupportsText(text: string) {
   })
 }
 
-function avatarTextMarkup(text: string) {
+function avatarTextMarkup(text: string, fill: string) {
   if (/^[\x20-\x7E]+$/.test(text) && azonixSupportsText(text)) {
-    return azonixText(text, sx(335), sy(463), ss(text.length <= 2 ? 150 : 112), "#ffffff", "middle")
+    return azonixText(text, sx(335), sy(463), ss(text.length <= 2 ? 150 : 112), fill, "middle")
   }
-  return avatarTextBox(text)
+  return avatarTextBox(text, fill)
 }
 
 function statValue(value: number, centerX: number) {
@@ -328,7 +328,7 @@ function azonixTextBox(text: string, centerX: number, centerY: number, fontSize:
 export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const code = countryCode(card.player.country)
   const avatarIsEmoji = isEmojiLike(card.player.avatar) && !isImageUrl(card.player.avatar)
-  const [avatarImage, crest, kitBadge, flag] = await Promise.all([
+  const [avatarImage, crest, kitBackground, flag] = await Promise.all([
     avatarIsEmoji
       ? firstImageToDataUri(twemojiUrls(card.player.avatar || ""))
       : imageToDataUri(card.player.avatar, { width: sx(352), height: sx(352), fit: "cover" }),
@@ -340,10 +340,9 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
       sharpen: true,
     }),
     imageToDataUri(card.team.kit, {
-      width: CREST_BADGE_SIZE,
-      height: CREST_BADGE_SIZE,
-      fit: "contain",
-      trim: true,
+      width: ss(352),
+      height: ss(352),
+      fit: "cover",
       sharpen: true,
     }),
     circularImageToDataUri(code ? `https://flagcdn.com/w640/${code}.png` : "", FLAG_BADGE_SIZE, { fit: "cover" }),
@@ -351,6 +350,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const name = fitText(card.player.name.toUpperCase(), 16)
   const position = card.position.toUpperCase()
   const avatarText = textAvatar(card.player.avatar)
+  const avatarTextColor = card.team.kitColor || "#ffffff"
   const rating = card.rating
   const fontFace = await azonixFontFace()
   currentAzonixFont = await loadAzonixFont()
@@ -370,9 +370,15 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   ${azonixTextBox(String(rating.ovr), OVR_CENTER.x, OVR_CENTER.y, ss(65), "#f9fffb")}
 
   ${
-    crest || kitBadge
-      ? `<image href="${crest || kitBadge}" x="${CREST_CENTER.x - CREST_BADGE_SIZE / 2}" y="${CREST_CENTER.y - CREST_BADGE_SIZE / 2}" width="${CREST_BADGE_SIZE}" height="${CREST_BADGE_SIZE}" preserveAspectRatio="xMidYMid meet"/>`
+    crest
+      ? `<image href="${crest}" x="${CREST_CENTER.x - CREST_BADGE_SIZE / 2}" y="${CREST_CENTER.y - CREST_BADGE_SIZE / 2}" width="${CREST_BADGE_SIZE}" height="${CREST_BADGE_SIZE}" preserveAspectRatio="xMidYMid meet"/>`
       : `${azonixText("FC", CREST_CENTER.x, CREST_CENTER.y + ss(8), ss(24), "#111", "middle")}`
+  }
+
+  ${
+    kitBackground
+      ? `<image href="${kitBackground}" x="${sx(159)}" y="${sy(232)}" width="${ss(352)}" height="${ss(352)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid slice"/>`
+      : ""
   }
 
   ${
@@ -387,7 +393,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
         ? `<image href="${avatarImage}" x="${sx(229)}" y="${sy(309)}" width="${ss(212)}" height="${ss(212)}" preserveAspectRatio="xMidYMid meet"/>`
         : `<image href="${avatarImage}" x="${sx(159)}" y="${sy(222)}" width="${ss(352)}" height="${ss(352)}" clip-path="url(#avatarClip)" preserveAspectRatio="xMidYMid meet"/>`
       : avatarText
-        ? avatarTextMarkup(avatarText)
+        ? avatarTextMarkup(avatarText, avatarTextColor)
         : ""
   }
 
