@@ -273,16 +273,12 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
 
   const competitionById = new Map(competitions.map((competition) => [String(competition._id), competition]))
   const sortedPlayerTeamCompetitions = sortTeamCompetitions(playerTeamCompetitions, competitionById)
-  const latestTeamCompetition = sortedPlayerTeamCompetitions[0]
-  const teamCompetitionRank = new Map(
-    sortedPlayerTeamCompetitions.map((teamCompetition, index) => [String(teamCompetition._id), index]),
-  )
   const latestPlayerCompetition = [...playerCompetitions].sort((a, b) => {
-    const rankA = teamCompetitionRank.get(String(a.team_competition_id)) ?? Number.MAX_SAFE_INTEGER
-    const rankB = teamCompetitionRank.get(String(b.team_competition_id)) ?? Number.MAX_SAFE_INTEGER
-    if (rankA !== rankB) return rankA - rankB
     return num(b.player_competition_id) - num(a.player_competition_id)
   })[0]
+  const latestTeamCompetition = playerTeamCompetitions.find(
+    (teamCompetition) => String(teamCompetition._id) === String(latestPlayerCompetition?.team_competition_id),
+  )
   const teamIds = sortedPlayerTeamCompetitions.map((row) => row.team_id).filter(isObjectId)
 
   const teams = (teamIds.length
@@ -295,14 +291,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
   const teamById = new Map(teams.map((team) => [String(team._id), team]))
   const latestTeam = latestTeamCompetition?.team_id ? teamById.get(String(latestTeamCompetition.team_id)) : undefined
 
-  let image = normalizeTeamImageUrl(latestTeam?.image)
-  if (!image) {
-    for (const teamCompetition of sortedPlayerTeamCompetitions) {
-      const team = teamCompetition.team_id ? teamById.get(String(teamCompetition.team_id)) : undefined
-      image = normalizeTeamImageUrl(team?.image)
-      if (image) break
-    }
-  }
+  const image = normalizeTeamImageUrl(latestTeam?.image)
 
   let kitVisual = pickKitVisual(latestTeamCompetition?.kits)
 
@@ -315,13 +304,6 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
     const sameTeamCompetition = sortTeamCompetitions(sameTeamCompetitions, competitionById)
       .find((row) => pickKitImage(row.kits))
     kitVisual = pickKitVisual(sameTeamCompetition?.kits)
-  }
-
-  if (!kitVisual.image) {
-    for (const teamCompetition of sortedPlayerTeamCompetitions) {
-      kitVisual = pickKitVisual(teamCompetition.kits)
-      if (kitVisual.image) break
-    }
   }
 
   if (!kitVisual.image && latestTeam) {
