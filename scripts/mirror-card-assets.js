@@ -1,4 +1,3 @@
-const crypto = require("crypto")
 const fs = require("fs/promises")
 const path = require("path")
 const mongoose = require("mongoose")
@@ -17,8 +16,13 @@ function kitUrl(kit) {
   return imageUrl(kit.image) || imageUrl(kit.imageUrl) || imageUrl(kit.url) || imageUrl(kit.src)
 }
 
-function assetName(url) {
-  return `${crypto.createHash("sha256").update(url).digest("hex").slice(0, 24)}.png`
+function slug(value) {
+  return String(value || "asset")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "asset"
 }
 
 async function downloadPng(url) {
@@ -63,30 +67,47 @@ async function main() {
   if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is required")
   await mongoose.connect(process.env.MONGODB_URI)
   const db = mongoose.connection.db
-  const teams = await db.collection("teams").find({}).project({ image: 1 }).toArray()
-  const teamCompetitions = await db.collection("teamcompetitions").find({}).project({ kits: 1 }).toArray()
+  const teams = await db.collection("teams").find({}).project({ team_id: 1, team_name: 1, teamName: 1, image: 1 }).toArray()
+  const teamCompetitions = await db
+    .collection("teamcompetitions")
+    .find({})
+    .project({ team_id: 1, team_competition_id: 1, kits: 1 })
+    .sort({ team_competition_id: -1 })
+    .toArray()
+  const teamById = new Map(teams.map((team) => [String(team._id), team]))
 
   const assets = new Map()
   for (const team of teams) {
     const url = imageUrl(team.image)
-    if (url) assets.set(url, "crests")
+    const teamName = team.team_name || team.teamName || "team"
+    if (url) assets.set(url, {
+      category: "crests",
+      name: `${slug(teamName)}-${team.team_id || team._id}.png`,
+    })
   }
   for (const row of teamCompetitions) {
-    for (const kit of row.kits || []) {
+    const team = teamById.get(String(row.team_id))
+    const teamName = team?.team_name || team?.teamName || "team"
+    for (const [kitIndex, kit] of (row.kits || []).entries()) {
       const url = kitUrl(kit)
-      if (url && !assets.has(url)) assets.set(url, "kits")
+      const kind = typeof kit === "object" && kit ? kit.kind : "kit"
+      if (url && !assets.has(url)) assets.set(url, {
+        category: "kits",
+        name: `${slug(teamName)}-${slug(kind || "kit")}-${kitIndex}-${row.team_competition_id || row._id}.png`,
+      })
     }
   }
 
+  await fs.rm(OUTPUT_ROOT, { recursive: true, force: true })
   await fs.mkdir(path.join(OUTPUT_ROOT, "crests"), { recursive: true })
   await fs.mkdir(path.join(OUTPUT_ROOT, "kits"), { recursive: true })
 
-  const entries = [...assets].map(([url, category]) => ({ url, category }))
+  const entries = [...assets].map(([url, asset]) => ({ url, ...asset }))
   const manifest = {}
   const failures = []
   let completed = 0
-  await mapLimit(entries, CONCURRENCY, async ({ url, category }) => {
-    const relativePath = `/card-assets/${category}/${assetName(url)}`
+  await mapLimit(entries, CONCURRENCY, async ({ url, category, name }) => {
+    const relativePath = `/card-assets/${category}/${name}`
     const outputPath = path.join(process.cwd(), "public", relativePath.slice(1))
     try {
       const png = await downloadPng(url)
