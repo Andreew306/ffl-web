@@ -27,8 +27,10 @@ const FONT_PATHS = [
   path.join(process.cwd(), "public", "fonts", "Azonix.otf"),
   path.join(process.cwd(), "public", "fonts", "Azonix.ttf"),
 ]
+const SYMBOL_FONT_PATH = path.join(process.cwd(), "public", "fonts", "NotoSansMath-Regular.ttf")
 
 let azonixFontPromise: Promise<any | null> | null = null
+let symbolFontPromise: Promise<any | null> | null = null
 
 function sx(value: number) {
   return Math.round((value / DESIGN_WIDTH) * CARD_WIDTH)
@@ -265,8 +267,7 @@ function avatarTextBox(text: string, fill: string) {
     fill="${fill}">${escapeXml(text)}</text>`
 }
 
-function azonixSupportsText(text: string) {
-  const font = currentAzonixFont
+function fontSupportsText(font: any, text: string) {
   if (!font) return false
   return Array.from(text).every((character) => {
     const glyph = font.charToGlyph(character)
@@ -275,8 +276,11 @@ function azonixSupportsText(text: string) {
 }
 
 function avatarTextMarkup(text: string, fill: string) {
-  if (/^[\x20-\x7E]+$/.test(text) && azonixSupportsText(text)) {
+  if (/^[\x20-\x7E]+$/.test(text) && fontSupportsText(currentAzonixFont, text)) {
     return azonixText(text, sx(335), sy(463), ss(text.length <= 2 ? 150 : 112), fill, "middle")
+  }
+  if (fontSupportsText(currentSymbolFont, text)) {
+    return fontTextBox(currentSymbolFont, text, sx(335), sy(408), ss(text.length <= 2 ? 150 : 112), fill)
   }
   return avatarTextBox(text, fill)
 }
@@ -326,7 +330,27 @@ async function loadAzonixFont() {
   return azonixFontPromise
 }
 
+async function loadSymbolFont() {
+  if (!symbolFontPromise) {
+    symbolFontPromise = (async () => {
+      try {
+        const fontBuffer = await fs.readFile(SYMBOL_FONT_PATH)
+        const arrayBuffer = fontBuffer.buffer.slice(
+          fontBuffer.byteOffset,
+          fontBuffer.byteOffset + fontBuffer.byteLength,
+        )
+        return opentype.parse(arrayBuffer)
+      } catch {
+        return null
+      }
+    })()
+  }
+
+  return symbolFontPromise
+}
+
 let currentAzonixFont: any = null
+let currentSymbolFont: any = null
 
 function azonixText(
   text: string,
@@ -353,6 +377,15 @@ function azonixTextBox(text: string, centerX: number, centerY: number, fontSize:
     return `<text x="${centerX}" y="${centerY}" text-anchor="middle" dominant-baseline="central" class="azonix" font-size="${fontSize}" fill="${fill}">${escapeXml(text)}</text>`
   }
 
+  const probe = font.getPath(text, 0, 0, fontSize)
+  const box = probe.getBoundingBox()
+  const offsetX = centerX - (box.x1 + box.x2) / 2
+  const offsetY = centerY - (box.y1 + box.y2) / 2
+  const pathData = font.getPath(text, offsetX, offsetY, fontSize).toPathData(2)
+  return `<path d="${pathData}" fill="${fill}"/>`
+}
+
+function fontTextBox(font: any, text: string, centerX: number, centerY: number, fontSize: number, fill: string) {
   const probe = font.getPath(text, 0, 0, fontSize)
   const box = probe.getBoundingBox()
   const offsetX = centerX - (box.x1 + box.x2) / 2
@@ -390,7 +423,7 @@ export async function renderPlayerCardOverlaySvg(card: GeneratedCardData) {
   const avatarTextColor = card.team.kitColor || "#ffffff"
   const rating = card.rating
   const fontFace = await azonixFontFace()
-  currentAzonixFont = await loadAzonixFont()
+  ;[currentAzonixFont, currentSymbolFont] = await Promise.all([loadAzonixFont(), loadSymbolFont()])
 
   if (!card.team.image) {
     throw new Error(`No team crest is available for ${card.team.name || card.player.name}.`)
