@@ -5,7 +5,7 @@ import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth"
 import { assignProfileRoleToPlayer, removeProfileRoleFromPlayer, setProfileRolePoints } from "@/lib/services/profile.service"
-import { requestCardForPlayer } from "@/lib/services/card-request.service"
+import { CardRequestEligibilityError, requestCardForPlayer } from "@/lib/services/card-request.service"
 
 function buildReturnPath(roleId: string, query?: string | null, roleQuery?: string | null) {
   const params = new URLSearchParams()
@@ -95,6 +95,9 @@ export async function requestProfileCardAction() {
   try {
     requestResult = await requestCardForPlayer(session.user.discordId, session.user.playerId)
   } catch (error) {
+    if (error instanceof CardRequestEligibilityError) {
+      redirect("/profile?card=season-10-required")
+    }
     console.error("Failed to request profile card", error)
     redirect("/profile?card=failed")
   }

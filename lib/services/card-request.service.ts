@@ -20,6 +20,15 @@ type CardRequestLockDoc = {
 const ACTIVE_CARD_REQUEST_STATUSES = ["open", "pending_approval", "approved"] satisfies BlockingCardRequestStatus[]
 const LOCK_STALE_MS = 2 * 60 * 1000
 
+export class CardRequestEligibilityError extends Error {
+  readonly code = "SEASON_10_REQUIRED"
+
+  constructor() {
+    super("The player must be registered in Season 10 to request a card.")
+    this.name = "CardRequestEligibilityError"
+  }
+}
+
 function cardRequestLockId(playerId: mongoose.Types.ObjectId) {
   return `card-request:${playerId.toString()}`
 }
@@ -46,6 +55,26 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
   await dbConnect()
 
   const playerId = await resolvePlayerId(playerIdentifier)
+  const db = mongoose.connection.db
+  if (!db) {
+    throw new Error("MongoDB connection is not ready.")
+  }
+
+  const seasonTenRegistration = await db.collection("playercompetitions").aggregate([
+    { $match: { player_id: playerId } },
+    { $lookup: { from: "teamcompetitions", localField: "team_competition_id", foreignField: "_id", as: "teamCompetition" } },
+    { $unwind: "$teamCompetition" },
+    { $lookup: { from: "competitions", localField: "teamCompetition.competition_id", foreignField: "_id", as: "competition" } },
+    { $unwind: "$competition" },
+    { $match: { "competition.season": { $in: [10, "10"] } } },
+    { $limit: 1 },
+    { $project: { _id: 1 } },
+  ]).next()
+
+  if (!seasonTenRegistration) {
+    throw new CardRequestEligibilityError()
+  }
+
   await PlayerModel.updateOne({ _id: playerId }, { $set: { discord_id: discordId } })
 
   const existingRequestFilter = {
@@ -70,11 +99,6 @@ export async function requestCardForPlayer(discordId: string, playerIdentifier: 
       discordThreadId: existingRequest.discordThreadId ?? null,
       approvedImageUrl: existingRequest.approvedImageUrl ?? null,
     }
-  }
-
-  const db = mongoose.connection.db
-  if (!db) {
-    throw new Error("MongoDB connection is not ready.")
   }
 
   const locks = db.collection<CardRequestLockDoc>("cardrequestlocks")

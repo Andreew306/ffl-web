@@ -324,6 +324,12 @@ export default async function ProfilePage({ searchParams }: ProfilePageProps) {
           </div>
         ) : null}
 
+        {resolvedSearchParams?.card === "season-10-required" ? (
+          <div className="mt-6 rounded-2xl border border-amber-400/20 bg-amber-500/10 px-5 py-4 text-sm text-amber-100">
+            You must be registered in Season 10 to request a card.
+          </div>
+        ) : null}
+
         <div className="mt-8 flex gap-2 border-b border-white/10">
           <Button
             asChild
