@@ -426,16 +426,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
 
   const engineCard = await cardEngine.getGlobalCardByPlayerObjectId(playerObjectId)
 
-  const teamCompetition = engineCard.teamId
-    ? await db
-        .collection("teamcompetitions")
-        .findOne({ _id: new mongoose.Types.ObjectId(String(engineCard.teamId)) })
-    : null
-  const team = teamCompetition?.team_id
-    ? await db.collection("teams").findOne({ _id: teamCompetition.team_id })
-    : null
   const teamVisuals = await latestTeamVisualsForPlayer(db, player._id)
-  const directKit = pickKitVisual(teamCompetition?.kits)
 
   const matches = num(engineCard.stats?.matches || engineCard.stats?.matches_played)
   const minutes = num(engineCard.stats?.minutes || engineCard.stats?.minutes_played)
@@ -457,10 +448,10 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
       avatar: str(engineCard.avatar) || str(player.avatar),
     },
     team: {
-      name: str(team?.team_name) || str(team?.teamName) || teamVisuals.name,
-      image: normalizeTeamImageUrl(team?.image) || teamVisuals.image,
-      kit: directKit.image || teamVisuals.kit,
-      kitColor: directKit.image ? directKit.color : teamVisuals.kitColor,
+      name: teamVisuals.name,
+      image: teamVisuals.image,
+      kit: teamVisuals.kit,
+      kitColor: teamVisuals.kitColor,
     },
     position: teamVisuals.position || str(engineCard.position) || "CM",
     rating,
