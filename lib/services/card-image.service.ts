@@ -2,6 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import type { GeneratedCardData } from "@/lib/services/card-rating.service"
+import cardAssetManifest from "@/public/card-assets/manifest.json"
 import sharp from "sharp"
 
 const opentype = require("opentype.js")
@@ -94,8 +95,26 @@ type ImageDataUriOptions = {
   sharpen?: boolean
 }
 
+const localCardAssets = cardAssetManifest as Record<string, string>
+
+async function localImageBuffer(url?: string) {
+  if (!url) return null
+  const relativePath = localCardAssets[url.trim()]
+  if (!relativePath) return null
+
+  try {
+    const buffer = await fs.readFile(path.join(process.cwd(), "public", relativePath.replace(/^\/+/, "")))
+    return { buffer, contentType: "image/png" }
+  } catch {
+    return null
+  }
+}
+
 async function fetchImageBuffer(url?: string) {
   if (!isImageUrl(url)) return null
+
+  const localImage = await localImageBuffer(url)
+  if (localImage) return localImage
 
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const controller = new AbortController()
