@@ -340,7 +340,8 @@ async function loadSymbolFont() {
           fontBuffer.byteOffset + fontBuffer.byteLength,
         )
         return opentype.parse(arrayBuffer)
-      } catch {
+      } catch (error) {
+        console.error("Failed to load the bundled Unicode card font.", error)
         return null
       }
     })()
