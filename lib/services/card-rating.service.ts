@@ -16,6 +16,7 @@ export type GeneratedCardData = {
   }
   team: {
     name?: string
+    division?: number | string
     image?: string
     kit?: string
     kitColor?: string
@@ -132,6 +133,7 @@ type RawCompetition = {
   _id: mongoose.Types.ObjectId
   competition_id?: number | string
   season?: number | string
+  division?: number | string
   start_date?: Date | string
   end_date?: Date | string
 }
@@ -146,6 +148,7 @@ type RawTeam = {
 
 type TeamVisuals = {
   name: string
+  division: number | string
   image: string
   kit: string
   kitColor: string
@@ -250,7 +253,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
 
   if (!teamCompetitionIds.length) {
     const randomKit = await randomKitVisual(db)
-    return { name: "", image: "", kit: randomKit.image, kitColor: randomKit.color, position: "" }
+    return { name: "", division: "", image: "", kit: randomKit.image, kitColor: randomKit.color, position: "" }
   }
 
   const playerTeamCompetitions = (await db
@@ -267,7 +270,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
     ? await db
         .collection("competitions")
         .find({ _id: { $in: competitionIds } })
-        .project({ _id: 1, competition_id: 1, season: 1, start_date: 1, end_date: 1 })
+        .project({ _id: 1, competition_id: 1, season: 1, division: 1, start_date: 1, end_date: 1 })
         .toArray()
     : []) as RawCompetition[]
 
@@ -279,6 +282,9 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
   const latestTeamCompetition = playerTeamCompetitions.find(
     (teamCompetition) => String(teamCompetition._id) === String(latestPlayerCompetition?.team_competition_id),
   )
+  const latestCompetition = latestTeamCompetition?.competition_id
+    ? competitionById.get(String(latestTeamCompetition.competition_id))
+    : undefined
   const teamIds = sortedPlayerTeamCompetitions.map((row) => row.team_id).filter(isObjectId)
 
   const teams = (teamIds.length
@@ -316,6 +322,7 @@ async function latestTeamVisualsForPlayer(db: mongoose.mongo.Db, playerObjectId:
 
   return {
     name: str(latestTeam?.team_name) || str(latestTeam?.teamName),
+    division: latestCompetition?.division ?? "",
     image,
     kit: kitVisual.image,
     kitColor: kitVisual.color,
@@ -384,6 +391,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
       },
       team: {
         name: team.name,
+        division: team.division,
         image: team.image,
         kit: team.kit,
         kitColor: team.kitColor,
@@ -431,6 +439,7 @@ export async function generateCardRatingForPlayer(playerObjectId: string): Promi
     },
     team: {
       name: teamVisuals.name,
+      division: teamVisuals.division,
       image: teamVisuals.image,
       kit: teamVisuals.kit,
       kitColor: teamVisuals.kitColor,
