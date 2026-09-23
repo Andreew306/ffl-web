@@ -120,7 +120,16 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
             </div>
           </div>
 
-          <div className="relative aspect-[16/13] min-h-[570px] overflow-hidden border border-white/10 bg-slate-950 bg-cover bg-center" style={{ backgroundImage: "linear-gradient(rgba(2,10,18,.18),rgba(2,10,18,.36)),url('/ffl-cards/squad-stadium.png')" }}>
+          <div className="relative aspect-[16/13] min-h-[570px] overflow-hidden border border-white/10 bg-[#414141]">
+            <div className="pointer-events-none absolute inset-[3%] border-2 border-white/30" />
+            <div className="pointer-events-none absolute left-[3%] right-[3%] top-1/2 h-px bg-white/25" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-[24%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/20" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border border-white/35 bg-[#414141]" />
+            <div className="pointer-events-none absolute left-1/2 top-[3%] h-[16%] w-[36%] -translate-x-1/2 rounded-b-[50%] border-2 border-t-0 border-white/20" />
+            <div className="pointer-events-none absolute bottom-[3%] left-1/2 h-[16%] w-[36%] -translate-x-1/2 rounded-t-[50%] border-2 border-b-0 border-white/20" />
+            <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#414141]/85 p-3 opacity-55">
+              <img src="/ffl-logo.png" alt="" className="h-full w-full object-contain grayscale" />
+            </div>
             <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
               {links.map(([a, b]) => <line key={`${a}-${b}`} x1={slots[a].x} y1={slots[a].y} x2={slots[b].x} y2={slots[b].y} stroke={chemistryColor(a, b)} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />)}
             </svg>
@@ -142,8 +151,8 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
         <aside className="border border-white/10 bg-slate-900/60 p-4">
           <div className="flex items-end justify-between"><div><h3 className="font-semibold">Collection</h3><p className="mt-1 text-xs text-slate-400">Base cards</p></div><span className="text-xs text-slate-400">{filteredCards.length}</span></div>
           <label className="mt-4 flex h-10 items-center gap-2 border border-white/10 bg-slate-950 px-3 focus-within:border-amber-300/50"><Search className="h-4 w-4 text-slate-500" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search player" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-600" /></label>
-          <div className="mt-4 grid max-h-[720px] grid-cols-2 gap-3 overflow-y-auto pr-1">
-            {filteredCards.map((card) => <button key={card.id} type="button" draggable onDragStart={(event) => { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "copyMove" }} onClick={() => chooseCard(card.id)} className={`bg-transparent text-left transition ${selectedIds.has(card.id) ? "drop-shadow-[0_0_8px_rgba(252,211,77,.75)]" : "opacity-90 hover:opacity-100"}`}><div className="aspect-[670/1080]"><img src={card.approvedImageUrl!} alt={`${card.playerName} card`} className="h-full w-full object-contain" /></div><div className="px-1 pb-2"><div className="truncate text-xs font-semibold">{card.playerName}</div><div className="mt-1 text-[11px] text-slate-400">OVR {overall(card)}</div></div></button>)}
+          <div className="mt-4 grid max-h-[720px] grid-cols-5 gap-1.5 overflow-y-auto pr-1">
+            {filteredCards.map((card) => <button key={card.id} type="button" draggable title={`${card.playerName} · OVR ${overall(card)}`} onDragStart={(event) => { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "copyMove" }} onClick={() => chooseCard(card.id)} className={`min-w-0 bg-transparent text-left transition ${selectedIds.has(card.id) ? "drop-shadow-[0_0_6px_rgba(252,211,77,.9)]" : "opacity-90 hover:opacity-100"}`}><div className="aspect-[670/1080]"><img src={card.approvedImageUrl!} alt={`${card.playerName} card`} className="h-full w-full object-contain" /></div><div className="truncate px-0.5 pb-1 text-center text-[9px] font-medium text-slate-300">{card.playerName}</div></button>)}
           </div>
         </aside>
       </div>
