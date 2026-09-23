@@ -4,6 +4,7 @@ import { Shield } from "lucide-react"
 import { getUserProfileDataByPlayerId } from "@/lib/services/profile.service"
 import { ObjectivesMap } from "@/components/profile/objectives-map"
 import { getFlagBackgroundStyle, isImageUrl, shouldOverlayFlag } from "@/lib/utils"
+import { getPlayerCardGallery } from "@/lib/services/profile-card-gallery.service"
 
 function getTwemojiUrl(emoji: string) {
   const codePoints = Array.from(emoji)
@@ -68,6 +69,8 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
   if (!profile || !profile.player) {
     return notFound()
   }
+
+  const cards = await getPlayerCardGallery(profile.player.id)
 
   const visibleRoles = profile.user.roles
     .filter((role) => isSeasonRole(role.name))
@@ -182,6 +185,45 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
         <div className="mt-10">
           <ObjectivesMap objectives={profile.objectives} />
         </div>
+
+        <section className="mt-10">
+          <div className="mb-5">
+            <h2 className="text-2xl font-semibold text-white">Cards</h2>
+            <p className="mt-1 text-sm text-slate-400">Approved cards for {profile.player.name}.</p>
+          </div>
+
+          {cards.length ? (
+            <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+              {cards.map((card) => (
+                <article
+                  key={card.id}
+                  className="overflow-hidden rounded-2xl border border-white/10 bg-slate-900/70 shadow-[0_18px_45px_rgba(0,0,0,0.22)]"
+                >
+                  <div className="flex aspect-[670/1080] items-center justify-center bg-slate-950">
+                    <img
+                      src={card.approvedImageUrl!}
+                      alt={`${card.playerName} card`}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 p-4">
+                    <div className="min-w-0">
+                      <div className="truncate text-base font-semibold text-white">{card.playerName}</div>
+                      <div className="text-xs text-slate-400">#{card.playerId || "unknown"} · Round {card.reviewRound}</div>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
+                      Approved
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/10 bg-slate-900/70 px-5 py-10 text-center text-slate-300">
+              This player does not have any approved cards yet.
+            </div>
+          )}
+        </section>
       </div>
     </div>
   )

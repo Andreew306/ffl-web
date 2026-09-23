@@ -68,3 +68,46 @@ export async function getProfileCardGallery(discordId: string, playerObjectId?: 
     }
   })
 }
+
+export async function getPlayerCardGallery(playerObjectId: string) {
+  if (!mongoose.Types.ObjectId.isValid(playerObjectId)) return []
+
+  await dbConnect()
+  const playerId = new mongoose.Types.ObjectId(playerObjectId)
+  const requests = await CardRequestModel.find({
+    playerId,
+    status: "approved",
+    approvedImageUrl: { $type: "string", $ne: "" },
+  })
+    .sort({ createdAt: -1 })
+    .limit(100)
+    .lean<Array<{
+      _id: mongoose.Types.ObjectId
+      status: ProfileCardGalleryItem["status"]
+      approvedImageUrl?: string | null
+      botRating: CardRating
+      finalRating?: CardRating | null
+      reviewRound?: number
+      closesAt: Date
+      createdAt?: Date
+      updatedAt?: Date
+    }>>()
+
+  const player = await PlayerModel.findById(playerId)
+    .select("player_id player_name")
+    .lean<{ player_id?: number; player_name?: string } | null>()
+
+  return requests.map((request): ProfileCardGalleryItem => ({
+    id: request._id.toString(),
+    status: request.status,
+    playerName: player?.player_name || "Unknown player",
+    playerId: typeof player?.player_id === "number" ? player.player_id : null,
+    approvedImageUrl: request.approvedImageUrl || null,
+    botRating: request.botRating,
+    finalRating: request.finalRating || null,
+    reviewRound: request.reviewRound || 1,
+    closesAt: request.closesAt.toISOString(),
+    createdAt: (request.createdAt || request.closesAt).toISOString(),
+    updatedAt: (request.updatedAt || request.closesAt).toISOString(),
+  }))
+}
