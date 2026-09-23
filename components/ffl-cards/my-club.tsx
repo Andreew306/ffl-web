@@ -128,7 +128,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     if (first.country && second.country && first.country.trim().toLowerCase() === second.country.trim().toLowerCase()) points += 1
     if (first.teamId && second.teamId && first.teamId === second.teamId) points += 1
 
-    return points === 3 ? "#22c55e" : points === 2 ? "#f59e0b" : "#ef4444"
+    return points >= 2 ? "#22c55e" : points === 1 ? "#f59e0b" : "#ef4444"
   }
 
   return (
@@ -176,7 +176,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               )
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400"><span><i className="mr-1 inline-block h-2 w-5 bg-green-500" />3 points</span><span><i className="mr-1 inline-block h-2 w-5 bg-amber-500" />2 points</span><span><i className="mr-1 inline-block h-2 w-5 bg-red-500" />0-1 points</span></div>
+          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400"><span><i className="mr-1 inline-block h-2 w-5 bg-green-500" />2-3 points</span><span><i className="mr-1 inline-block h-2 w-5 bg-amber-500" />1 point</span><span><i className="mr-1 inline-block h-2 w-5 bg-red-500" />0 points</span></div>
         </div>
 
         <aside className="relative border border-white/10 bg-slate-900/60 p-4">
