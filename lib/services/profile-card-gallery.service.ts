@@ -163,17 +163,6 @@ export async function getAllApprovedBaseCards() {
     const key = String(row.player_id)
     if (!latestCompetitionByPlayer.has(key)) latestCompetitionByPlayer.set(key, row)
   }
-  const teamCompetitionIds = [...latestCompetitionByPlayer.values()]
-    .map((row) => row.team_competition_id)
-    .filter((id): id is mongoose.Types.ObjectId => id instanceof mongoose.Types.ObjectId)
-  const teamCompetitions = db && teamCompetitionIds.length
-    ? await db.collection("teamcompetitions")
-        .find({ _id: { $in: teamCompetitionIds } })
-        .project({ _id: 1, team_id: 1 })
-        .toArray()
-    : []
-  const teamByCompetition = new Map(teamCompetitions.map((row) => [String(row._id), String(row.team_id)]))
-
   return latestRequests
     .map((request): ProfileCardGalleryItem => {
       const player = playersById.get(request.playerId.toString())
@@ -185,7 +174,7 @@ export async function getAllApprovedBaseCards() {
         playerId: typeof player?.player_id === "number" ? player.player_id : null,
         country: player?.country || "",
         position: String(latestCompetition?.position || "").toUpperCase(),
-        teamId: teamByCompetition.get(String(latestCompetition?.team_competition_id)) || "",
+        teamId: String(latestCompetition?.team_competition_id || ""),
         approvedImageUrl: request.approvedImageUrl || null,
         botRating: request.botRating,
         finalRating: request.finalRating || null,
