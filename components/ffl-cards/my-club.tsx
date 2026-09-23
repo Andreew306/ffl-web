@@ -27,8 +27,10 @@ function buildLinks(slots: PitchSlot[]) {
   )
 
   for (const row of rows) {
-    for (let index = 0; index < row.length - 1; index += 1) {
-      links.push([row[index].index, row[index + 1].index])
+    for (let first = 0; first < row.length; first += 1) {
+      for (let second = first + 1; second < row.length; second += 1) {
+        links.push([row[first].index, row[second].index])
+      }
     }
   }
 
@@ -37,13 +39,17 @@ function buildLinks(slots: PitchSlot[]) {
     const lower = rows[row + 1]
 
     for (const player of upper) {
-      const nearest = [...lower].sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0]
-      if (nearest) links.push([player.index, nearest.index])
+      const minimumDistance = Math.min(...lower.map((candidate) => Math.abs(candidate.x - player.x)))
+      for (const nearest of lower.filter((candidate) => Math.abs(candidate.x - player.x) === minimumDistance)) {
+        links.push([player.index, nearest.index])
+      }
     }
     for (const player of lower) {
-      const nearest = [...upper].sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0]
-      if (nearest && !links.some(([a, b]) => a === nearest.index && b === player.index)) {
-        links.push([nearest.index, player.index])
+      const minimumDistance = Math.min(...upper.map((candidate) => Math.abs(candidate.x - player.x)))
+      for (const nearest of upper.filter((candidate) => Math.abs(candidate.x - player.x) === minimumDistance)) {
+        if (!links.some(([a, b]) => a === nearest.index && b === player.index)) {
+          links.push([nearest.index, player.index])
+        }
       }
     }
   }
