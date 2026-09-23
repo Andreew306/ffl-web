@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
 import { AuthControls } from "@/components/auth/auth-controls"
-import { ChevronDown, Gamepad2, Grid3X3, HandCoins, LayoutTemplate, ListOrdered, Menu, Scale, Swords, Trophy, TrendingUp, Users, Calendar, ImageIcon, Medal, Keyboard } from "lucide-react"
+import { ChevronDown, Gamepad2, Grid3X3, HandCoins, LayoutTemplate, ListOrdered, Menu, Scale, Swords, Trophy, TrendingUp, Users, Calendar, ImageIcon, Medal, Keyboard, Layers3 } from "lucide-react"
 
 function DiscordIcon(props: SVGProps<SVGSVGElement>) {
   return (
@@ -33,6 +33,7 @@ export function Navigation() {
     { href: "https://discord.gg/n26a4FsAtT", label: "Discord", icon: DiscordIcon, external: true },
   ]
   const minigameItems = [
+    { href: "/ffl-cards", label: "FFL Cards", icon: Layers3 },
     { href: "/elo", label: "Elo", icon: TrendingUp },
     { href: "/fantasy", label: "Fantasy", icon: Swords },
     { href: "/betball", label: "BetBall", icon: HandCoins },
@@ -43,7 +44,8 @@ export function Navigation() {
     { href: "/compare", label: "Head2Head", icon: Scale },
   ]
   const isMinigamesActive =
-    pathname?.startsWith("/elo")
+    pathname?.startsWith("/ffl-cards")
+    || pathname?.startsWith("/elo")
     || pathname?.startsWith("/fantasy")
     || pathname?.startsWith("/betball")
     || pathname?.startsWith("/tic-tac-toe")
