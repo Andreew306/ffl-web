@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import { unstable_noStore as noStore } from "next/cache"
 import dbConnect from "@/lib/db/mongoose"
 import CardRequestModel, { type CardRating } from "@/lib/models/CardRequest"
 import PlayerModel from "@/lib/models/Player"
@@ -116,6 +117,7 @@ export async function getPlayerCardGallery(playerObjectId: string) {
 }
 
 export async function getAllApprovedBaseCards() {
+  noStore()
   await dbConnect()
 
   const requests = await CardRequestModel.find({

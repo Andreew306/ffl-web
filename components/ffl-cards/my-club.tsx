@@ -130,9 +130,15 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     let points = 0
     const firstInPosition = isPositionMatch(first.position, slots[a].position)
     const secondInPosition = isPositionMatch(second.position, slots[b].position)
+    const sameCountry = Boolean(first.country && second.country
+      && first.country.trim().toLowerCase() === second.country.trim().toLowerCase())
+    const sameTeam = Boolean(first.teamId && second.teamId && first.teamId === second.teamId)
+
+    if ((!firstInPosition || !secondInPosition) && !sameCountry && !sameTeam) return "#ef4444"
+
     points += firstInPosition && secondInPosition ? 1 : -1
-    if (first.country && second.country && first.country.trim().toLowerCase() === second.country.trim().toLowerCase()) points += 1
-    if (first.teamId && second.teamId && first.teamId === second.teamId) points += 1
+    if (sameCountry) points += 1
+    if (sameTeam) points += 1
 
     return points >= 2 ? "#22c55e" : points === 1 ? "#f59e0b" : "#ef4444"
   }
