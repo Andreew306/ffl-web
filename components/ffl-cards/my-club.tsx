@@ -26,8 +26,14 @@ function buildLinks(slots: PitchSlot[]) {
     const upper = slots.map((slot, index) => ({ ...slot, index })).filter((slot) => slot.row === row)
     const lower = slots.map((slot, index) => ({ ...slot, index })).filter((slot) => slot.row === row + 1)
     for (const low of lower) {
-      const nearest = [...upper].sort((a, b) => Math.abs(a.x - low.x) - Math.abs(b.x - low.x)).slice(0, upper.length > 1 ? 2 : 1)
-      for (const high of nearest) links.push([low.index, high.index])
+      const nearest = [...upper].sort((a, b) => Math.abs(a.x - low.x) - Math.abs(b.x - low.x))[0]
+      if (nearest) links.push([low.index, nearest.index])
+    }
+    for (const high of upper) {
+      const nearest = [...lower].sort((a, b) => Math.abs(a.x - high.x) - Math.abs(b.x - high.x))[0]
+      if (nearest && !links.some(([a, b]) => a === nearest.index && b === high.index)) {
+        links.push([nearest.index, high.index])
+      }
     }
   }
   return links
@@ -42,6 +48,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
   const [squad, setSquad] = useState<Array<string | null>>(() => Array(7).fill(null))
   const [activeSlot, setActiveSlot] = useState<number | null>(null)
   const [query, setQuery] = useState("")
+  const [previewCard, setPreviewCard] = useState<ProfileCardGalleryItem | null>(null)
   const [loaded, setLoaded] = useState(false)
   const slots = useMemo(() => buildSlots(formation), [formation])
   const links = useMemo(() => buildLinks(slots), [slots])
@@ -137,7 +144,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               const card = squad[index] ? cardsById.get(squad[index]!) : null
               return (
                 <div key={`${formation}-${index}`} className="absolute z-20 -translate-x-1/2 -translate-y-1/2" style={{ left: `${slot.x}%`, top: `${slot.y}%` }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/card-id"); if (id) placeCard(id, index) }}>
-                  <button type="button" draggable={Boolean(card)} onDragStart={(event) => { if (card) { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "move" } }} onClick={() => setActiveSlot(index)} className={`relative flex h-32 w-24 items-center justify-center transition sm:h-40 sm:w-28 ${activeSlot === index ? "drop-shadow-[0_0_12px_rgba(252,211,77,.9)]" : "drop-shadow-[0_10px_10px_rgba(0,0,0,.55)]"}`} aria-label={`Select ${slot.position} slot`}>
+                  <button type="button" draggable={Boolean(card)} onDragStart={(event) => { if (card) { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "move" } }} onClick={() => setActiveSlot(index)} className={`relative flex h-28 w-20 items-center justify-center transition sm:h-36 sm:w-24 ${activeSlot === index ? "drop-shadow-[0_0_12px_rgba(252,211,77,.9)]" : "drop-shadow-[0_10px_10px_rgba(0,0,0,.55)]"}`} aria-label={`Select ${slot.position} slot`}>
                     {card ? <img src={card.approvedImageUrl!} alt={card.playerName} className="h-full w-full object-contain" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-white/45 bg-slate-950/65 text-sm font-semibold">{slot.position}</span>}
                   </button>
                   {card ? <button type="button" onClick={() => { setSquad((current) => current.map((id, i) => i === index ? null : id)); setActiveSlot(index) }} className="absolute right-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-slate-950" title={`Remove ${card.playerName}`} aria-label={`Remove ${card.playerName}`}><X className="h-4 w-4" /></button> : null}
@@ -148,12 +155,13 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
           <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400"><span><i className="mr-1 inline-block h-2 w-5 bg-green-500" />Strong</span><span><i className="mr-1 inline-block h-2 w-5 bg-amber-500" />Balanced</span><span><i className="mr-1 inline-block h-2 w-5 bg-red-500" />Weak</span></div>
         </div>
 
-        <aside className="border border-white/10 bg-slate-900/60 p-4">
+        <aside className="relative border border-white/10 bg-slate-900/60 p-4">
           <div className="flex items-end justify-between"><div><h3 className="font-semibold">Collection</h3><p className="mt-1 text-xs text-slate-400">Base cards</p></div><span className="text-xs text-slate-400">{filteredCards.length}</span></div>
           <label className="mt-4 flex h-10 items-center gap-2 border border-white/10 bg-slate-950 px-3 focus-within:border-amber-300/50"><Search className="h-4 w-4 text-slate-500" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search player" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-600" /></label>
           <div className="mt-4 grid max-h-[720px] grid-cols-5 gap-1.5 overflow-y-auto pr-1">
-            {filteredCards.map((card) => <button key={card.id} type="button" draggable title={`${card.playerName} · OVR ${overall(card)}`} onDragStart={(event) => { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "copyMove" }} onClick={() => chooseCard(card.id)} className={`min-w-0 bg-transparent text-left transition ${selectedIds.has(card.id) ? "drop-shadow-[0_0_6px_rgba(252,211,77,.9)]" : "opacity-90 hover:opacity-100"}`}><div className="aspect-[670/1080]"><img src={card.approvedImageUrl!} alt={`${card.playerName} card`} className="h-full w-full object-contain" /></div><div className="truncate px-0.5 pb-1 text-center text-[9px] font-medium text-slate-300">{card.playerName}</div></button>)}
+            {filteredCards.map((card) => <button key={card.id} type="button" draggable title={`${card.playerName} - OVR ${overall(card)}`} onMouseEnter={() => setPreviewCard(card)} onMouseLeave={() => setPreviewCard(null)} onFocus={() => setPreviewCard(card)} onBlur={() => setPreviewCard(null)} onDragStart={(event) => { setPreviewCard(null); event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "copyMove" }} onClick={() => chooseCard(card.id)} className={`min-w-0 bg-transparent text-left transition ${selectedIds.has(card.id) ? "drop-shadow-[0_0_6px_rgba(252,211,77,.9)]" : "opacity-90 hover:opacity-100"}`}><div className="aspect-[670/1080]"><img src={card.approvedImageUrl!} alt={`${card.playerName} card`} className="h-full w-full object-contain" /></div><div className="truncate px-0.5 pb-1 text-center text-[9px] font-medium text-slate-300">{card.playerName}</div></button>)}
           </div>
+          {previewCard ? <div className="pointer-events-none fixed bottom-6 right-6 z-50 hidden w-64 border border-amber-300/40 bg-slate-950/95 p-2 shadow-2xl shadow-black/70 lg:block"><img src={previewCard.approvedImageUrl!} alt="" className="aspect-[670/1080] w-full object-contain" /><div className="mt-1 truncate text-center text-sm font-semibold text-white">{previewCard.playerName} <span className="text-amber-300">OVR {overall(previewCard)}</span></div></div> : null}
         </aside>
       </div>
     </section>
