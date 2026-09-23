@@ -13,11 +13,17 @@ const rowXs: Record<number, number[]> = { 1: [50], 2: [32, 68], 3: [20, 50, 80] 
 function buildSlots(formation: Formation): PitchSlot[] {
   const [, defenders, midfielders, attackers] = formation.split("-").map(Number)
   return [
-    { count: attackers, position: "ST", y: 13, row: 0 },
-    { count: midfielders, position: "CM", y: 38, row: 1 },
-    { count: defenders, position: "CB", y: 63, row: 2 },
-    { count: 1, position: "GK", y: 88, row: 3 },
-  ].flatMap(({ count, position, y, row }) => rowXs[count].map((x) => ({ position, x, y, row })))
+    { count: attackers, positions: attackers === 1 ? ["ST"] : attackers === 2 ? ["LW", "RW"] : ["LW", "ST", "RW"], y: 13, row: 0 },
+    { count: midfielders, positions: Array(midfielders).fill("CM"), y: 38, row: 1 },
+    { count: defenders, positions: Array(defenders).fill("CB"), y: 63, row: 2 },
+    { count: 1, positions: ["GK"], y: 88, row: 3 },
+  ].flatMap(({ count, positions, y, row }) => rowXs[count].map((x, index) => ({ position: positions[index], x, y, row })))
+}
+
+function isPositionMatch(playerPosition: string | undefined, slotPosition: string) {
+  const actual = playerPosition?.toUpperCase() || ""
+  if (["LW", "RW"].includes(actual) && ["LW", "RW"].includes(slotPosition)) return true
+  return actual === slotPosition
 }
 
 function buildLinks(slots: PitchSlot[]) {
@@ -122,8 +128,8 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     if (!first || !second) return "rgba(148,163,184,.28)"
 
     let points = 0
-    const bothInPosition = first.position?.toUpperCase() === slots[a].position
-      && second.position?.toUpperCase() === slots[b].position
+    const bothInPosition = isPositionMatch(first.position, slots[a].position)
+      && isPositionMatch(second.position, slots[b].position)
     points += bothInPosition ? 1 : -1
     if (first.country && second.country && first.country.trim().toLowerCase() === second.country.trim().toLowerCase()) points += 1
     if (first.teamId && second.teamId && first.teamId === second.teamId) points += 1
