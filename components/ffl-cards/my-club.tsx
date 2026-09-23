@@ -120,8 +120,15 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     const first = squad[a] ? cardsById.get(squad[a]!) : null
     const second = squad[b] ? cardsById.get(squad[b]!) : null
     if (!first || !second) return "rgba(148,163,184,.28)"
-    const difference = Math.abs(overall(first) - overall(second))
-    return difference <= 3 ? "#22c55e" : difference <= 7 ? "#f59e0b" : "#ef4444"
+
+    let points = 0
+    const bothInPosition = first.position?.toUpperCase() === slots[a].position
+      && second.position?.toUpperCase() === slots[b].position
+    if (bothInPosition) points += 1
+    if (first.country && second.country && first.country.trim().toLowerCase() === second.country.trim().toLowerCase()) points += 1
+    if (first.teamId && second.teamId && first.teamId === second.teamId) points += 1
+
+    return points === 3 ? "#22c55e" : points === 2 ? "#f59e0b" : "#ef4444"
   }
 
   return (
@@ -164,12 +171,12 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
                   <button type="button" draggable={Boolean(card)} onDragStart={(event) => { if (card) { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "move" } }} onClick={() => setActiveSlot(index)} className={`relative flex h-24 w-16 items-center justify-center transition sm:h-32 sm:w-20 ${activeSlot === index ? "drop-shadow-[0_0_12px_rgba(252,211,77,.9)]" : "drop-shadow-[0_10px_10px_rgba(0,0,0,.55)]"}`} aria-label={`Select ${slot.position} slot`}>
                     {card ? <img src={card.approvedImageUrl!} alt={card.playerName} className="h-full w-full object-contain" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-white/45 bg-slate-950/65 text-sm font-semibold">{slot.position}</span>}
                   </button>
-                  {card ? <button type="button" onClick={() => { setSquad((current) => current.map((id, i) => i === index ? null : id)); setActiveSlot(index) }} className="absolute right-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-slate-950" title={`Remove ${card.playerName}`} aria-label={`Remove ${card.playerName}`}><X className="h-4 w-4" /></button> : null}
+                  {card ? <button type="button" onClick={() => { setSquad((current) => current.map((id, i) => i === index ? null : id)); setActiveSlot(index) }} className="absolute -right-7 top-1 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-slate-950" title={`Remove ${card.playerName}`} aria-label={`Remove ${card.playerName}`}><X className="h-4 w-4" /></button> : null}
                 </div>
               )
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400"><span><i className="mr-1 inline-block h-2 w-5 bg-green-500" />Strong</span><span><i className="mr-1 inline-block h-2 w-5 bg-amber-500" />Balanced</span><span><i className="mr-1 inline-block h-2 w-5 bg-red-500" />Weak</span></div>
+          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400"><span><i className="mr-1 inline-block h-2 w-5 bg-green-500" />3 points</span><span><i className="mr-1 inline-block h-2 w-5 bg-amber-500" />2 points</span><span><i className="mr-1 inline-block h-2 w-5 bg-red-500" />0-1 points</span></div>
         </div>
 
         <aside className="relative border border-white/10 bg-slate-900/60 p-4">

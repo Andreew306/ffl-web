@@ -8,6 +8,9 @@ export type ProfileCardGalleryItem = {
   status: "open" | "pending_approval" | "approved" | "rejected" | "failed"
   playerName: string
   playerId: number | null
+  country?: string
+  position?: string
+  teamId?: string
   approvedImageUrl: string | null
   botRating: CardRating
   finalRating: CardRating | null
@@ -143,18 +146,46 @@ export async function getAllApprovedBaseCards() {
   const latestRequests = [...latestByPlayer.values()]
   const playerIds = latestRequests.map((request) => request.playerId)
   const players = await PlayerModel.find({ _id: { $in: playerIds } })
-    .select("_id player_id player_name")
-    .lean<Array<{ _id: mongoose.Types.ObjectId; player_id?: number; player_name?: string }>>()
+    .select("_id player_id player_name country")
+    .lean<Array<{ _id: mongoose.Types.ObjectId; player_id?: number; player_name?: string; country?: string }>>()
   const playersById = new Map(players.map((player) => [player._id.toString(), player]))
+
+  const db = mongoose.connection.db
+  const playerCompetitions = db
+    ? await db.collection("playercompetitions")
+        .find({ player_id: { $in: playerIds } })
+        .project({ player_id: 1, team_competition_id: 1, player_competition_id: 1, position: 1 })
+        .sort({ player_competition_id: -1 })
+        .toArray()
+    : []
+  const latestCompetitionByPlayer = new Map<string, (typeof playerCompetitions)[number]>()
+  for (const row of playerCompetitions) {
+    const key = String(row.player_id)
+    if (!latestCompetitionByPlayer.has(key)) latestCompetitionByPlayer.set(key, row)
+  }
+  const teamCompetitionIds = [...latestCompetitionByPlayer.values()]
+    .map((row) => row.team_competition_id)
+    .filter((id): id is mongoose.Types.ObjectId => id instanceof mongoose.Types.ObjectId)
+  const teamCompetitions = db && teamCompetitionIds.length
+    ? await db.collection("teamcompetitions")
+        .find({ _id: { $in: teamCompetitionIds } })
+        .project({ _id: 1, team_id: 1 })
+        .toArray()
+    : []
+  const teamByCompetition = new Map(teamCompetitions.map((row) => [String(row._id), String(row.team_id)]))
 
   return latestRequests
     .map((request): ProfileCardGalleryItem => {
       const player = playersById.get(request.playerId.toString())
+      const latestCompetition = latestCompetitionByPlayer.get(request.playerId.toString())
       return {
         id: request._id.toString(),
         status: request.status,
         playerName: player?.player_name || "Unknown player",
         playerId: typeof player?.player_id === "number" ? player.player_id : null,
+        country: player?.country || "",
+        position: String(latestCompetition?.position || "").toUpperCase(),
+        teamId: teamByCompetition.get(String(latestCompetition?.team_competition_id)) || "",
         approvedImageUrl: request.approvedImageUrl || null,
         botRating: request.botRating,
         finalRating: request.finalRating || null,
