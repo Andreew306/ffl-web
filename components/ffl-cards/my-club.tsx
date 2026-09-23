@@ -13,27 +13,28 @@ const rowXs: Record<number, number[]> = { 1: [50], 2: [32, 68], 3: [20, 50, 80] 
 function buildSlots(formation: Formation): PitchSlot[] {
   const [, defenders, midfielders, attackers] = formation.split("-").map(Number)
   return [
-    { count: attackers, position: "ST", y: 17, row: 0 },
-    { count: midfielders, position: "CM", y: 42, row: 1 },
-    { count: defenders, position: "CB", y: 67, row: 2 },
+    { count: attackers, position: "ST", y: 13, row: 0 },
+    { count: midfielders, position: "CM", y: 38, row: 1 },
+    { count: defenders, position: "CB", y: 63, row: 2 },
     { count: 1, position: "GK", y: 88, row: 3 },
   ].flatMap(({ count, position, y, row }) => rowXs[count].map((x) => ({ position, x, y, row })))
 }
 
 function buildLinks(slots: PitchSlot[]) {
   const links: Array<[number, number]> = []
-  for (let row = 0; row < 3; row += 1) {
-    const upper = slots.map((slot, index) => ({ ...slot, index })).filter((slot) => slot.row === row)
-    const lower = slots.map((slot, index) => ({ ...slot, index })).filter((slot) => slot.row === row + 1)
-    for (const low of lower) {
-      const nearest = [...upper].sort((a, b) => Math.abs(a.x - low.x) - Math.abs(b.x - low.x))[0]
-      if (nearest) links.push([low.index, nearest.index])
+  const rows = Array.from({ length: 4 }, (_, row) =>
+    slots.map((slot, index) => ({ ...slot, index })).filter((slot) => slot.row === row),
+  )
+
+  for (const row of rows) {
+    for (let index = 0; index < row.length - 1; index += 1) {
+      links.push([row[index].index, row[index + 1].index])
     }
-    for (const high of upper) {
-      const nearest = [...lower].sort((a, b) => Math.abs(a.x - high.x) - Math.abs(b.x - high.x))[0]
-      if (nearest && !links.some(([a, b]) => a === nearest.index && b === high.index)) {
-        links.push([nearest.index, high.index])
-      }
+  }
+
+  for (let row = 0; row < rows.length - 1; row += 1) {
+    for (const upper of rows[row]) {
+      for (const lower of rows[row + 1]) links.push([upper.index, lower.index])
     }
   }
   return links
@@ -144,7 +145,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               const card = squad[index] ? cardsById.get(squad[index]!) : null
               return (
                 <div key={`${formation}-${index}`} className="absolute z-20 -translate-x-1/2 -translate-y-1/2" style={{ left: `${slot.x}%`, top: `${slot.y}%` }} onDragOver={(event) => event.preventDefault()} onDrop={(event) => { event.preventDefault(); const id = event.dataTransfer.getData("text/card-id"); if (id) placeCard(id, index) }}>
-                  <button type="button" draggable={Boolean(card)} onDragStart={(event) => { if (card) { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "move" } }} onClick={() => setActiveSlot(index)} className={`relative flex h-28 w-20 items-center justify-center transition sm:h-36 sm:w-24 ${activeSlot === index ? "drop-shadow-[0_0_12px_rgba(252,211,77,.9)]" : "drop-shadow-[0_10px_10px_rgba(0,0,0,.55)]"}`} aria-label={`Select ${slot.position} slot`}>
+                  <button type="button" draggable={Boolean(card)} onDragStart={(event) => { if (card) { event.dataTransfer.setData("text/card-id", card.id); event.dataTransfer.effectAllowed = "move" } }} onClick={() => setActiveSlot(index)} className={`relative flex h-24 w-16 items-center justify-center transition sm:h-32 sm:w-20 ${activeSlot === index ? "drop-shadow-[0_0_12px_rgba(252,211,77,.9)]" : "drop-shadow-[0_10px_10px_rgba(0,0,0,.55)]"}`} aria-label={`Select ${slot.position} slot`}>
                     {card ? <img src={card.approvedImageUrl!} alt={card.playerName} className="h-full w-full object-contain" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full border-2 border-dashed border-white/45 bg-slate-950/65 text-sm font-semibold">{slot.position}</span>}
                   </button>
                   {card ? <button type="button" onClick={() => { setSquad((current) => current.map((id, i) => i === index ? null : id)); setActiveSlot(index) }} className="absolute right-0 top-0 flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-slate-950" title={`Remove ${card.playerName}`} aria-label={`Remove ${card.playerName}`}><X className="h-4 w-4" /></button> : null}
