@@ -33,8 +33,18 @@ function buildLinks(slots: PitchSlot[]) {
   }
 
   for (let row = 0; row < rows.length - 1; row += 1) {
-    for (const upper of rows[row]) {
-      for (const lower of rows[row + 1]) links.push([upper.index, lower.index])
+    const upper = rows[row]
+    const lower = rows[row + 1]
+
+    for (const player of upper) {
+      const nearest = [...lower].sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0]
+      if (nearest) links.push([player.index, nearest.index])
+    }
+    for (const player of lower) {
+      const nearest = [...upper].sort((a, b) => Math.abs(a.x - player.x) - Math.abs(b.x - player.x))[0]
+      if (nearest && !links.some(([a, b]) => a === nearest.index && b === player.index)) {
+        links.push([nearest.index, player.index])
+      }
     }
   }
   return links
