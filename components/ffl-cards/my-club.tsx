@@ -124,7 +124,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     let points = 0
     const bothInPosition = first.position?.toUpperCase() === slots[a].position
       && second.position?.toUpperCase() === slots[b].position
-    if (bothInPosition) points += 1
+    points += bothInPosition ? 1 : -1
     if (first.country && second.country && first.country.trim().toLowerCase() === second.country.trim().toLowerCase()) points += 1
     if (first.teamId && second.teamId && first.teamId === second.teamId) points += 1
 
