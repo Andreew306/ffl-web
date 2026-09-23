@@ -1,9 +1,10 @@
 import Link from "next/link"
 import { redirect } from "next/navigation"
 import { getServerSession } from "next-auth"
-import { Boxes, Layers3, PackageOpen, Shield, Swords, Trophy } from "lucide-react"
+import { Layers3, PackageOpen, Shield, Swords, Trophy } from "lucide-react"
 import { authOptions } from "@/lib/auth"
-import { getProfileCardGallery } from "@/lib/services/profile-card-gallery.service"
+import { getAllApprovedBaseCards } from "@/lib/services/profile-card-gallery.service"
+import { MyClub } from "@/components/ffl-cards/my-club"
 
 type FflCardsPageProps = {
   searchParams?: Promise<{ view?: string }>
@@ -30,7 +31,7 @@ export default async function FflCardsPage({ searchParams }: FflCardsPageProps) 
     ? requestedView as SectionKey
     : "club"
   const cards = activeView === "club"
-    ? await getProfileCardGallery(session.user.discordId, session.user.playerId)
+    ? await getAllApprovedBaseCards()
     : []
   const activeSection = sections.find((section) => section.key === activeView) || sections[0]
 
@@ -69,44 +70,7 @@ export default async function FflCardsPage({ searchParams }: FflCardsPageProps) 
         </nav>
 
         {activeView === "club" ? (
-          <section className="mt-10">
-            <div className="flex items-end justify-between gap-4 border-b border-white/10 pb-4">
-              <div>
-                <h2 className="text-2xl font-semibold">My Club</h2>
-                <p className="mt-1 text-sm text-slate-400">Your approved base cards.</p>
-              </div>
-              <div className="text-sm text-amber-300">{cards.length} cards</div>
-            </div>
-
-            {cards.length ? (
-              <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-                {cards.map((card) => (
-                  <article key={card.id} className="overflow-hidden border border-white/10 bg-slate-900/70">
-                    <div className="flex aspect-[670/1080] items-center justify-center bg-slate-950">
-                      <img
-                        src={card.approvedImageUrl!}
-                        alt={`${card.playerName} card`}
-                        className="h-full w-full object-contain"
-                      />
-                    </div>
-                    <div className="flex items-center justify-between gap-3 border-t border-white/10 p-4">
-                      <div className="min-w-0">
-                        <div className="truncate font-semibold text-white">{card.playerName}</div>
-                        <div className="mt-1 text-xs text-slate-400">#{card.playerId || "unknown"} · Base</div>
-                      </div>
-                      <Layers3 className="h-5 w-5 shrink-0 text-amber-300" />
-                    </div>
-                  </article>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-6 flex min-h-56 flex-col items-center justify-center border border-dashed border-white/15 bg-slate-900/40 px-6 text-center">
-                <Boxes className="h-8 w-8 text-slate-500" />
-                <div className="mt-4 font-semibold text-white">Your club is empty</div>
-                <div className="mt-1 text-sm text-slate-400">Approved cards will appear here.</div>
-              </div>
-            )}
-          </section>
+          <MyClub availableCards={cards} />
         ) : (
           <section className="mt-10 flex min-h-72 flex-col items-center justify-center border border-white/10 bg-slate-900/50 px-6 text-center">
             <activeSection.icon className="h-9 w-9 text-amber-300" />
