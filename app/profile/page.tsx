@@ -112,7 +112,7 @@ function CardGallery({ cards }: { cards: ProfileCardGalleryItem[] }) {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
                       <div className="truncate text-base font-semibold text-white">{card.playerName}</div>
-                      <div className="text-xs text-slate-400">#{card.playerId || "unknown"} · Round {card.reviewRound}</div>
+                      <div className="text-xs text-slate-400">#{card.playerId || "unknown"} · Base</div>
                     </div>
                     <span className="shrink-0 rounded-full border border-emerald-400/25 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
                       Approved
