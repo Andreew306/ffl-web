@@ -128,9 +128,9 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     if (!first || !second) return "rgba(148,163,184,.28)"
 
     let points = 0
-    const bothInPosition = isPositionMatch(first.position, slots[a].position)
-      && isPositionMatch(second.position, slots[b].position)
-    points += bothInPosition ? 1 : -1
+    const firstInPosition = isPositionMatch(first.position, slots[a].position)
+    const secondInPosition = isPositionMatch(second.position, slots[b].position)
+    if (firstInPosition === secondInPosition) points += firstInPosition ? 1 : -1
     if (first.country && second.country && first.country.trim().toLowerCase() === second.country.trim().toLowerCase()) points += 1
     if (first.teamId && second.teamId && first.teamId === second.teamId) points += 1
 
