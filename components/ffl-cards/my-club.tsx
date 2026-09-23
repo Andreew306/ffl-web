@@ -174,7 +174,17 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               <img src="/ffl-logo.png" alt="" className="h-full w-full object-contain grayscale" />
             </div>
             <svg className="pointer-events-none absolute inset-0 z-10 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-              {links.map(([a, b]) => <line key={`${a}-${b}`} x1={slots[a].x} y1={slots[a].y} x2={slots[b].x} y2={slots[b].y} stroke={chemistryColor(a, b)} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />)}
+              {links.map(([a, b]) => {
+                const first = slots[a]
+                const second = slots[b]
+                const isLongSameRowLink = first.row === second.row && Math.abs(first.x - second.x) > 40
+                if (isLongSameRowLink) {
+                  const middleX = (first.x + second.x) / 2
+                  const curveY = first.y + (first.row < 2 ? 9 : -9)
+                  return <path key={`${a}-${b}`} d={`M ${first.x} ${first.y} Q ${middleX} ${curveY} ${second.x} ${second.y}`} fill="none" stroke={chemistryColor(a, b)} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
+                }
+                return <line key={`${a}-${b}`} x1={first.x} y1={first.y} x2={second.x} y2={second.y} stroke={chemistryColor(a, b)} strokeWidth="0.7" vectorEffect="non-scaling-stroke" />
+              })}
             </svg>
             {slots.map((slot, index) => {
               const card = squad[index] ? cardsById.get(squad[index]!) : null
