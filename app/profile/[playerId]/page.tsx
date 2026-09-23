@@ -1,4 +1,5 @@
 import Image from "next/image"
+import Link from "next/link"
 import { notFound } from "next/navigation"
 import { Shield } from "lucide-react"
 import { getUserProfileDataByPlayerId } from "@/lib/services/profile.service"
@@ -62,15 +63,22 @@ function getRoleSeasonNumber(roleName: string) {
   return -1
 }
 
-export default async function PublicProfilePage({ params }: { params: Promise<{ playerId: string }> }) {
+type PublicProfilePageProps = {
+  params: Promise<{ playerId: string }>
+  searchParams?: Promise<{ tab?: string }>
+}
+
+export default async function PublicProfilePage({ params, searchParams }: PublicProfilePageProps) {
   const { playerId } = await params
+  const resolvedSearchParams = await searchParams
   const profile = await getUserProfileDataByPlayerId(playerId)
 
   if (!profile || !profile.player) {
     return notFound()
   }
 
-  const cards = await getPlayerCardGallery(profile.player.id)
+  const activeTab = resolvedSearchParams?.tab === "cards" ? "cards" : "profile"
+  const cards = activeTab === "cards" ? await getPlayerCardGallery(profile.player.id) : []
 
   const visibleRoles = profile.user.roles
     .filter((role) => isSeasonRole(role.name))
@@ -182,11 +190,35 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
           </div>
         </section>
 
-        <div className="mt-10">
-          <ObjectivesMap objectives={profile.objectives} />
+        <div className="mt-8 flex gap-2 border-b border-white/10">
+          <Link
+            href={`/profile/${playerId}`}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "profile"
+                ? "border-b-2 border-teal-300 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Profile
+          </Link>
+          <Link
+            href={`/profile/${playerId}?tab=cards`}
+            className={`px-4 py-2 text-sm font-medium transition-colors ${
+              activeTab === "cards"
+                ? "border-b-2 border-teal-300 text-white"
+                : "text-slate-400 hover:text-white"
+            }`}
+          >
+            Cards
+          </Link>
         </div>
 
-        <section className="mt-10">
+        {activeTab === "profile" ? (
+          <div className="mt-10">
+            <ObjectivesMap objectives={profile.objectives} />
+          </div>
+        ) : (
+        <section className="mt-8">
           <div className="mb-5">
             <h2 className="text-2xl font-semibold text-white">Cards</h2>
             <p className="mt-1 text-sm text-slate-400">Approved cards for {profile.player.name}.</p>
@@ -224,6 +256,7 @@ export default async function PublicProfilePage({ params }: { params: Promise<{ 
             </div>
           )}
         </section>
+        )}
       </div>
     </div>
   )
