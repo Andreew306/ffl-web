@@ -35,6 +35,8 @@ function buildLinks(slots: PitchSlot[]) {
   for (const row of rows) {
     for (let first = 0; first < row.length; first += 1) {
       for (let second = first + 1; second < row.length; second += 1) {
+        const positions = new Set([row[first].position, row[second].position])
+        if (positions.has("LW") && positions.has("RW")) continue
         links.push([row[first].index, row[second].index])
       }
     }
