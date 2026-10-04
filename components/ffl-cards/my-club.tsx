@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Search, Trash2, X } from "lucide-react"
+import { ChevronDown, Search, Trash2, X } from "lucide-react"
 import type { ProfileCardGalleryItem } from "@/lib/services/profile-card-gallery.service"
 
 const STORAGE_KEY = "ffl-cards-base-squad"
@@ -153,19 +153,27 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(340px,0.65fr)]">
-        <div className="border border-white/10 bg-slate-900/60 p-4 sm:p-5">
-          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
-            <div><div className="font-semibold">Squad Builder</div><div className="text-xs text-slate-400">{selectedIds.size}/7 selected</div></div>
-            <div className="flex items-center gap-2">
-              <label className="text-xs text-slate-400" htmlFor="formation">Formation</label>
-              <select id="formation" value={formation} onChange={(event) => { setFormation(event.target.value as Formation); setActiveSlot(null) }} className="h-9 border border-white/15 bg-slate-950 px-3 text-sm text-white outline-none focus:border-amber-300/60">
-                {formations.map((value) => <option key={value}>{value}</option>)}
-              </select>
-              <button type="button" onClick={() => { setSquad(Array(7).fill(null)); setActiveSlot(null) }} disabled={!selectedIds.size} className="flex h-9 w-9 items-center justify-center border border-white/10 text-slate-400 hover:border-red-400/40 hover:text-red-300 disabled:opacity-30" title="Clear squad" aria-label="Clear squad"><Trash2 className="h-4 w-4" /></button>
+        <div className="overflow-hidden rounded-md border border-white/10 bg-[#09101f] shadow-[0_18px_55px_rgba(0,0,0,.28)]">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-white/10 bg-slate-900/75 px-4 py-3.5 sm:px-5">
+            <div>
+              <div className="text-base font-semibold text-white">Squad Builder</div>
+              <div className="mt-1 flex items-center gap-2 text-xs text-slate-400"><span>{selectedIds.size}/7 selected</span><span className="h-1 w-1 rounded-full bg-slate-600" /><span>{formation}</span></div>
+            </div>
+            <div className="flex items-end gap-2">
+              <div>
+                <label className="mb-1 block text-[10px] font-semibold uppercase text-slate-500" htmlFor="formation">Formation</label>
+                <div className="relative">
+                  <select id="formation" value={formation} onChange={(event) => { setFormation(event.target.value as Formation); setActiveSlot(null) }} className="h-10 min-w-28 appearance-none rounded border border-white/15 bg-slate-950 pl-3 pr-9 text-sm font-semibold text-white outline-none transition hover:border-white/25 focus:border-amber-300/70 focus:ring-1 focus:ring-amber-300/20">
+                    {formations.map((value) => <option key={value}>{value}</option>)}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300" />
+                </div>
+              </div>
+              <button type="button" onClick={() => { setSquad(Array(7).fill(null)); setActiveSlot(null) }} disabled={!selectedIds.size} className="flex h-10 w-10 items-center justify-center rounded border border-white/10 bg-slate-950 text-slate-400 transition hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-300 focus:outline-none focus:ring-1 focus:ring-red-400/40 disabled:cursor-not-allowed disabled:opacity-30" title="Clear squad" aria-label="Clear squad"><Trash2 className="h-4 w-4" /></button>
             </div>
           </div>
 
-          <div className="relative aspect-[16/13] min-h-[570px] overflow-hidden border border-white/10 bg-[#414141]">
+          <div className="m-3 sm:m-4 relative aspect-[16/13] min-h-[570px] overflow-hidden rounded-sm border border-white/15 bg-[#414141] shadow-inner shadow-black/40">
             <div className="pointer-events-none absolute inset-[3%] border-2 border-white/30" />
             <div className="pointer-events-none absolute left-[3%] right-[3%] top-1/2 h-px bg-white/25" />
             <div className="pointer-events-none absolute left-1/2 top-1/2 h-[24%] aspect-square -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white/20" />
@@ -200,7 +208,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               )
             })}
           </div>
-          <div className="mt-3 flex flex-wrap gap-4 text-xs text-slate-400"><span><i className="mr-1 inline-block h-2 w-5 bg-green-500" />2-3 points</span><span><i className="mr-1 inline-block h-2 w-5 bg-amber-500" />1 point</span><span><i className="mr-1 inline-block h-2 w-5 bg-red-500" />0 points</span></div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-slate-950/45 px-4 py-3 text-xs text-slate-400"><span className="mr-1 font-medium text-slate-300">Chemistry</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-green-500" />2-3 points</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-amber-500" />1 point</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-red-500" />0 points</span></div>
         </div>
 
         <aside className="relative border border-white/10 bg-slate-900/60 p-4">
