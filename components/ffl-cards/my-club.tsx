@@ -1,8 +1,9 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ChevronDown, Search, Trash2, X } from "lucide-react"
+import { Search, Trash2, X } from "lucide-react"
 import type { ProfileCardGalleryItem } from "@/lib/services/profile-card-gallery.service"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const STORAGE_KEY = "ffl-cards-base-squad"
 const formations = ["1-3-2-1", "1-3-1-2", "1-2-1-3", "1-2-2-2", "1-1-2-3", "1-1-3-2"] as const
@@ -162,14 +163,16 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
             <div className="flex items-end gap-2">
               <div>
                 <label className="mb-1 block text-[10px] font-semibold uppercase text-slate-500" htmlFor="formation">Formation</label>
-                <div className="relative">
-                  <select id="formation" value={formation} onChange={(event) => { setFormation(event.target.value as Formation); setActiveSlot(null) }} className="h-10 min-w-28 appearance-none rounded border border-white/15 bg-slate-950 pl-3 pr-9 text-sm font-semibold text-white outline-none transition hover:border-white/25 focus:border-amber-300/70 focus:ring-1 focus:ring-amber-300/20">
-                    {formations.map((value) => <option key={value}>{value}</option>)}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-amber-300" />
-                </div>
+                <Select value={formation} onValueChange={(value) => { setFormation(value as Formation); setActiveSlot(null) }}>
+                  <SelectTrigger id="formation" className="h-10 min-w-32 rounded border-amber-300/45 bg-slate-950 px-3 font-semibold text-white shadow-[inset_0_0_0_1px_rgba(251,191,36,.05)] hover:border-amber-300/75 hover:bg-slate-950 focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300/20 [&_svg]:text-amber-300">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="end" className="border-white/15 bg-[#0a1120] p-1 text-white shadow-2xl shadow-black/60">
+                    {formations.map((value) => <SelectItem key={value} value={value} className="h-9 rounded px-3 font-medium text-slate-300 focus:bg-amber-300/10 focus:text-amber-200 data-[state=checked]:text-amber-300">{value}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
-              <button type="button" onClick={() => { setSquad(Array(7).fill(null)); setActiveSlot(null) }} disabled={!selectedIds.size} className="flex h-10 w-10 items-center justify-center rounded border border-white/10 bg-slate-950 text-slate-400 transition hover:border-red-400/50 hover:bg-red-500/10 hover:text-red-300 focus:outline-none focus:ring-1 focus:ring-red-400/40 disabled:cursor-not-allowed disabled:opacity-30" title="Clear squad" aria-label="Clear squad"><Trash2 className="h-4 w-4" /></button>
+              <button type="button" onClick={() => { setSquad(Array(7).fill(null)); setActiveSlot(null) }} disabled={!selectedIds.size} className="group flex h-10 w-10 items-center justify-center rounded border border-white/10 bg-slate-950 text-slate-500 shadow-sm transition hover:border-red-400/60 hover:bg-red-500/15 hover:text-red-300 hover:shadow-[0_0_18px_rgba(248,113,113,.12)] focus:outline-none focus:ring-2 focus:ring-red-400/30 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:border-white/10 disabled:hover:bg-slate-950" title="Clear squad" aria-label="Clear squad"><Trash2 className="h-4 w-4 transition-transform group-hover:scale-110" /></button>
             </div>
           </div>
 
