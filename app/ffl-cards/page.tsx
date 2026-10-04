@@ -5,6 +5,7 @@ import { Layers3, PackageOpen, Shield, Swords, Trophy } from "lucide-react"
 import { authOptions } from "@/lib/auth"
 import { getAllApprovedBaseCards } from "@/lib/services/profile-card-gallery.service"
 import { MyClub } from "@/components/ffl-cards/my-club"
+import { Arena } from "@/components/ffl-cards/arena"
 
 type FflCardsPageProps = {
   searchParams?: Promise<{ view?: string }>
@@ -71,7 +72,7 @@ export default async function FflCardsPage({ searchParams }: FflCardsPageProps) 
 
         {activeView === "club" ? (
           <MyClub availableCards={cards} />
-        ) : (
+        ) : activeView === "arena" ? <Arena /> : (
           <section className="mt-10 flex min-h-72 flex-col items-center justify-center border border-white/10 bg-slate-900/50 px-6 text-center">
             <activeSection.icon className="h-9 w-9 text-amber-300" />
             <h2 className="mt-4 text-2xl font-semibold">{activeSection.label}</h2>

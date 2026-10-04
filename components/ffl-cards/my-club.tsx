@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Search, Trash2, X } from "lucide-react"
+import { Save, Search, Trash2, X } from "lucide-react"
 import type { ProfileCardGalleryItem } from "@/lib/services/profile-card-gallery.service"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
@@ -76,6 +76,8 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
   const [query, setQuery] = useState("")
   const [previewCard, setPreviewCard] = useState<ProfileCardGalleryItem | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [saveStatus, setSaveStatus] = useState('')
+  const [saving, setSaving] = useState(false)
   const slots = useMemo(() => buildSlots(formation), [formation])
   const links = useMemo(() => buildLinks(slots), [slots])
   const cardsById = useMemo(() => new Map(availableCards.map((card) => [card.id, card])), [availableCards])
@@ -88,8 +90,14 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
   }, 0), [cardsById, squad])
 
   useEffect(() => {
+    let cancelled = false
+    async function loadSquad() {
     try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")
+      const response = await fetch('/api/ffl-arena?squad=1')
+      if (!response.ok) throw new Error('Could not load saved squad')
+      const payload = await response.json()
+      const stored = payload.saved || JSON.parse(localStorage.getItem(STORAGE_KEY) || "null")
+      if (cancelled) return
       const storedSquad = Array.isArray(stored) ? stored : stored?.squad
       const storedFormation = formations.includes(stored?.formation) ? stored.formation : "1-2-2-2"
       if (Array.isArray(storedSquad)) {
@@ -97,9 +105,24 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
         setSquad(Array.from({ length: 7 }, (_, index) => availableIds.has(storedSquad[index]) ? storedSquad[index] : null))
       }
       setFormation(storedFormation)
-    } catch {}
-    setLoaded(true)
+      if (!cancelled) setLoaded(true)
+    } catch { if (!cancelled) setSaveStatus('Could not load your squad. Reload before saving.') }
+    }
+    void loadSquad()
+    return () => { cancelled = true }
   }, [availableCards])
+
+  async function saveSquad() {
+    setSaving(true)
+    setSaveStatus('')
+    try {
+      const response = await fetch('/api/ffl-arena', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'save', formation, squad }) })
+      const result = await response.json()
+      if (!response.ok) throw new Error(result.error || 'Could not save squad')
+      setSaveStatus('Squad saved')
+    } catch (error) { setSaveStatus(error instanceof Error ? error.message : 'Could not save squad') }
+    finally { setSaving(false) }
+  }
 
   useEffect(() => {
     if (loaded) localStorage.setItem(STORAGE_KEY, JSON.stringify({ formation, squad }))
@@ -166,7 +189,8 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               <div className="text-base font-semibold text-white">Squad Builder</div>
               <div className="mt-1 flex items-center gap-2 text-xs text-slate-400"><span>{selectedIds.size}/7 selected</span><span className="h-1 w-1 rounded-full bg-slate-600" /><span>{formation}</span></div>
             </div>
-            <div className="flex items-end gap-2">
+            <div className="flex flex-wrap items-end gap-2">
+              <button type="button" disabled={!loaded || saving} onClick={saveSquad} title="Save squad for FFL Arena" aria-label="Save squad for FFL Arena" className="flex h-10 w-10 items-center justify-center rounded border border-emerald-400/40 text-emerald-300 disabled:opacity-40"><Save className="h-4 w-4" /></button>
               <div className="flex flex-col gap-1.5">
                 <div className="h-3 text-[10px] font-semibold uppercase leading-3 text-slate-500">OVR Rating</div>
                 <div className="flex h-10 min-w-24 items-center justify-center rounded border border-emerald-400/25 bg-emerald-400/5 px-3 text-sm font-semibold tabular-nums text-emerald-300">{squadRating}</div>
@@ -186,6 +210,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
             </div>
           </div>
 
+          {saveStatus && <p role="status" className="px-4 pt-3 text-sm text-amber-200">{saveStatus}</p>}
           <div className="m-3 sm:m-4 relative aspect-[16/13] min-h-[570px] overflow-hidden rounded-sm border border-white/15 bg-[#414141] shadow-inner shadow-black/40">
             <div className="pointer-events-none absolute inset-[3%] border-2 border-white/30" />
             <div className="pointer-events-none absolute left-[3%] right-[3%] top-1/2 h-px bg-white/25" />
