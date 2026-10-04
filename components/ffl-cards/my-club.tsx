@@ -80,6 +80,12 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
   const links = useMemo(() => buildLinks(slots), [slots])
   const cardsById = useMemo(() => new Map(availableCards.map((card) => [card.id, card])), [availableCards])
   const selectedIds = useMemo(() => new Set(squad.filter((id): id is string => Boolean(id))), [squad])
+  const squadRating = useMemo(() => squad.reduce((total, id) => {
+    const card = id ? cardsById.get(id) : null
+    if (!card) return total
+    const rating = card.finalRating || card.botRating
+    return total + rating.ovr + rating.sho + rating.pas + rating.def + rating.dri
+  }, 0), [cardsById, squad])
 
   useEffect(() => {
     try {
@@ -161,6 +167,10 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               <div className="mt-1 flex items-center gap-2 text-xs text-slate-400"><span>{selectedIds.size}/7 selected</span><span className="h-1 w-1 rounded-full bg-slate-600" /><span>{formation}</span></div>
             </div>
             <div className="flex items-end gap-2">
+              <div>
+                <div className="mb-1 text-[10px] font-semibold uppercase text-slate-500">OVR Rating</div>
+                <div className="flex h-10 min-w-24 items-center justify-center rounded border border-emerald-400/25 bg-emerald-400/5 px-3 text-sm font-semibold tabular-nums text-emerald-300">{squadRating}</div>
+              </div>
               <div>
                 <label className="mb-1 block text-[10px] font-semibold uppercase text-slate-500" htmlFor="formation">Formation</label>
                 <Select value={formation} onValueChange={(value) => { setFormation(value as Formation); setActiveSlot(null) }}>
