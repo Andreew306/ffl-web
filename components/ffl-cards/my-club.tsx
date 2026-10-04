@@ -167,14 +167,14 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               <div className="mt-1 flex items-center gap-2 text-xs text-slate-400"><span>{selectedIds.size}/7 selected</span><span className="h-1 w-1 rounded-full bg-slate-600" /><span>{formation}</span></div>
             </div>
             <div className="flex items-end gap-2">
-              <div>
-                <div className="mb-1 text-[10px] font-semibold uppercase text-slate-500">OVR Rating</div>
+              <div className="flex flex-col gap-1.5">
+                <div className="h-3 text-[10px] font-semibold uppercase leading-3 text-slate-500">OVR Rating</div>
                 <div className="flex h-10 min-w-24 items-center justify-center rounded border border-emerald-400/25 bg-emerald-400/5 px-3 text-sm font-semibold tabular-nums text-emerald-300">{squadRating}</div>
               </div>
-              <div>
-                <label className="mb-1 block text-[10px] font-semibold uppercase text-slate-500" htmlFor="formation">Formation</label>
+              <div className="flex flex-col gap-1.5">
+                <label className="h-3 text-[10px] font-semibold uppercase leading-3 text-slate-500" htmlFor="formation">Formation</label>
                 <Select value={formation} onValueChange={(value) => { setFormation(value as Formation); setActiveSlot(null) }}>
-                  <SelectTrigger id="formation" className="h-10 min-w-32 rounded border-amber-300/45 bg-slate-950 px-3 font-semibold text-white shadow-[inset_0_0_0_1px_rgba(251,191,36,.05)] hover:border-amber-300/75 hover:bg-slate-950 focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300/20 [&_svg]:text-amber-300">
+                  <SelectTrigger id="formation" className="h-10 min-w-32 rounded border-amber-300/45 bg-slate-950 px-3 font-semibold text-white shadow-[inset_0_0_0_1px_rgba(251,191,36,.05)] hover:border-amber-300/75 hover:bg-slate-950 focus-visible:border-amber-300 focus-visible:ring-2 focus-visible:ring-amber-300/20 data-[size=default]:h-10 [&_svg]:text-amber-300">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent align="end" className="border-white/15 bg-[#0a1120] p-1 text-white shadow-2xl shadow-black/60">
