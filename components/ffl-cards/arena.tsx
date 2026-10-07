@@ -1,7 +1,7 @@
 "use client"
 
 import Link from 'next/link'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw, Search, Swords } from 'lucide-react'
 import type { ArenaReplay, ArenaSquad } from '@/lib/ffl-arena'
 
@@ -14,8 +14,17 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const feed = useRef<HTMLDivElement>(null)
   const duration = 120000
-  const index = Math.min(replay.events.length - 1, Math.floor(elapsed / duration * (replay.events.length - 1)))
+  // Start time of each event. Counter-attack moves (fast) take half the time of a normal move.
+  const starts = useMemo(() => {
+    const weights = replay.events.slice(0, -1).map(e => e.fast ? .5 : 1)
+    const total = weights.reduce((a, b) => a + b, 0) || 1
+    let at = 0
+    return [0, ...weights.map(w => (at += w) / total * duration)]
+  }, [replay])
+  const index = Math.max(0, starts.findLastIndex(start => start <= elapsed))
   const event = replay.events[index]
+  // Replays from engine 1 carry no minute, so their clock follows playback progress.
+  const minuteAt = (entry: ArenaReplay['events'][number], position: number) => entry.minute ?? Math.floor(position / Math.max(1, replay.events.length - 1) * 90)
   useEffect(() => {
     if (!playing) return
     let frame = 0
@@ -36,7 +45,8 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     const ctx = surface?.getContext('2d')
     if (!surface || !ctx) return
     const previous = replay.events[Math.max(0, index - 1)]
-    const progress = elapsed / duration * (replay.events.length - 1) - index
+    const span = (starts[index + 1] ?? duration) - starts[index]
+    const progress = span > 0 ? (elapsed - starts[index]) / span : 1
     const t = Math.min(1, progress * 1.5)
     const lerp = (a: number, b: number) => a + (b - a) * t
     ctx.fillStyle = '#353b39'; ctx.fillRect(0, 0, 1000, 600)
@@ -66,11 +76,11 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.fillStyle = '#071619d9'; ctx.fillRect(365, 250, 270, 70)
       ctx.fillStyle = '#fff'; ctx.font = 'bold 32px Arial'; ctx.fillText('GOL!', 500, 296)
     }
-  }, [elapsed, event, index, replay])
+  }, [elapsed, event, index, replay, starts])
   return <section className="mt-8 border-t border-white/15 pt-6">
     <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
       <h2 className="text-lg font-semibold">{replay.home.name} <span className="mx-3 text-emerald-300 tabular-nums">{event.score[0]} - {event.score[1]}</span> {replay.away.name}</h2>
-      <span className="tabular-nums text-amber-300">{elapsed >= duration ? 'FT' : `${Math.floor(elapsed / duration * 90)}'`}</span>
+      <span className="tabular-nums text-amber-300">{elapsed >= duration ? 'FT' : `${minuteAt(event, index)}'`}</span>
     </div>
     <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(230px,1fr)]">
       <div className="min-w-0">
@@ -83,7 +93,7 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
         </div>
       </div>
       <div ref={feed} className="h-80 overflow-y-auto border-l border-white/15 pl-4 lg:h-96" aria-label="Match commentary">
-        {replay.events.slice(0, index + 1).map((entry, i) => <p key={i} className={`mb-3 border-b border-white/5 pb-2 text-sm ${entry.kind === 'goal' ? 'font-semibold text-amber-300' : 'text-slate-300'}`}><span className="mr-2 text-slate-500">{Math.floor(i / (replay.events.length - 1) * 90)}&apos;</span>{entry.text}</p>)}
+        {replay.events.slice(0, index + 1).map((entry, i) => <p key={i} className={`mb-3 border-b border-white/5 pb-2 text-sm ${entry.kind === 'goal' ? 'font-semibold text-amber-300' : 'text-slate-300'}`}><span className="mr-2 text-slate-500">{minuteAt(entry, i)}&apos;</span>{entry.text}</p>)}
       </div>
     </div>
     <div className="mt-4 grid grid-cols-2 gap-4 border-t border-white/10 pt-3 text-sm">
@@ -131,7 +141,7 @@ export function Arena() {
     {data && !data.own && <div className="py-10"><p>Save a complete seven-player squad in My Club to enter FFL Arena.</p><Link href="/ffl-cards" className="mt-4 inline-block text-emerald-300 underline">Complete squad</Link></div>}
     {data?.own && <>
       {replay && <MatchPlayer key={replay.id} replay={replay} />}
-      <div className="my-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-400">{data.own.formation} <span className="ml-3 text-emerald-300">OVR Rating: {data.own.rating}</span></p><label className="flex items-center gap-2 rounded border border-white/20 px-3 py-2"><Search size={16} /><input aria-label="Search opponents" placeholder="Search opponent" value={query} onChange={e => { setQuery(e.target.value); setPage(0) }} className="min-w-0 bg-transparent outline-none" /></label></div>
+      <div className="my-5 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-400">{data.own.formation} <span className="ml-3 text-emerald-300">OVR {data.own.rating}</span></p><label className="flex items-center gap-2 rounded border border-white/20 px-3 py-2"><Search size={16} /><input aria-label="Search opponents" placeholder="Search opponent" value={query} onChange={e => { setQuery(e.target.value); setPage(0) }} className="min-w-0 bg-transparent outline-none" /></label></div>
       <div className="grid gap-4 md:grid-cols-2">
         {data.rivals.map(rival => <article key={rival.id} className="min-w-0 rounded-md border border-white/15 bg-zinc-900/50 p-4"><div className="flex items-center justify-between gap-3"><div className="min-w-0"><h3 className="truncate font-semibold">{rival.name}</h3><p className="text-xs text-slate-400">{rival.formation} · {rival.rating}</p></div><button disabled={busy || loading} onClick={() => play(rival.id)} className="flex items-center gap-2 rounded bg-emerald-400 px-3 py-2 text-sm font-semibold text-black disabled:opacity-40"><Swords size={16} />Play</button></div><div className="mt-4 grid grid-cols-7 gap-1">{rival.cards.map(card => <img key={card.id} src={card.image} alt={card.playerName} title={`${card.playerName} - ${card.position}`} className="aspect-[670/1080] w-full object-contain" />)}</div></article>)}
       </div>
