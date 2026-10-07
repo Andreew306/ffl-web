@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { Save, Search, Trash2, X } from "lucide-react"
 import type { ProfileCardGalleryItem } from "@/lib/services/profile-card-gallery.service"
+import { arenaLinkPoints, arenaLinks, arenaTuning, sectorRatings, type ArenaCard } from "@/lib/ffl-arena"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 const STORAGE_KEY = "ffl-cards-base-squad"
@@ -21,48 +22,18 @@ function buildSlots(formation: Formation): PitchSlot[] {
   ].flatMap(({ count, positions, y, row }) => rowXs[count].map((x, index) => ({ position: positions[index], x, y, row })))
 }
 
-function isPositionMatch(playerPosition: string | undefined, slotPosition: string) {
-  const actual = playerPosition?.toUpperCase() || ""
-  if (["LW", "RW"].includes(actual) && ["LW", "RW"].includes(slotPosition)) return true
-  return actual === slotPosition
+const emptyCard: ArenaCard = { id: "", playerName: "", position: "", country: "", teamId: "", image: "", rating: { ovr: 0, sho: 0, pas: 0, def: 0, dri: 0 } }
+
+function toArenaCard(card: ProfileCardGalleryItem): ArenaCard {
+  return { id: card.id, playerName: card.playerName, position: card.position || "", country: card.country || "", teamId: card.teamId || "", image: card.approvedImageUrl || "", rating: card.finalRating || card.botRating }
 }
 
-function buildLinks(slots: PitchSlot[]) {
-  const links: Array<[number, number]> = []
-  const rows = Array.from({ length: 4 }, (_, row) =>
-    slots.map((slot, index) => ({ ...slot, index })).filter((slot) => slot.row === row),
-  )
-
-  for (const row of rows) {
-    for (let first = 0; first < row.length; first += 1) {
-      for (let second = first + 1; second < row.length; second += 1) {
-        const positions = new Set([row[first].position, row[second].position])
-        if (positions.has("LW") && positions.has("RW")) continue
-        links.push([row[first].index, row[second].index])
-      }
-    }
-  }
-
-  for (let row = 0; row < rows.length - 1; row += 1) {
-    const upper = rows[row]
-    const lower = rows[row + 1]
-
-    for (const player of upper) {
-      const minimumDistance = Math.min(...lower.map((candidate) => Math.abs(candidate.x - player.x)))
-      for (const nearest of lower.filter((candidate) => Math.abs(candidate.x - player.x) === minimumDistance)) {
-        links.push([player.index, nearest.index])
-      }
-    }
-    for (const player of lower) {
-      const minimumDistance = Math.min(...upper.map((candidate) => Math.abs(candidate.x - player.x)))
-      for (const nearest of upper.filter((candidate) => Math.abs(candidate.x - player.x) === minimumDistance)) {
-        if (!links.some(([a, b]) => a === nearest.index && b === player.index)) {
-          links.push([nearest.index, player.index])
-        }
-      }
-    }
-  }
-  return links
+function RatingBar({ label, value, max }: { label: string; value: number; max: number }) {
+  return <div className="flex min-w-0 items-center gap-2" title={`${label}: ${Math.round(value)}`}>
+    <span className="w-3 shrink-0 text-[10px] text-slate-500">{label}</span>
+    <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-white/10"><span className="block h-full rounded-full bg-emerald-400/80" style={{ width: `${Math.min(100, value / max * 100)}%` }} /></span>
+    <span className="w-7 shrink-0 text-right tabular-nums text-slate-300">{Math.round(value)}</span>
+  </div>
 }
 
 function overall(card: ProfileCardGalleryItem) {
@@ -79,15 +50,11 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
   const [saveStatus, setSaveStatus] = useState('')
   const [saving, setSaving] = useState(false)
   const slots = useMemo(() => buildSlots(formation), [formation])
-  const links = useMemo(() => buildLinks(slots), [slots])
+  const links = useMemo(() => arenaLinks(formation), [formation])
   const cardsById = useMemo(() => new Map(availableCards.map((card) => [card.id, card])), [availableCards])
   const selectedIds = useMemo(() => new Set(squad.filter((id): id is string => Boolean(id))), [squad])
-  const squadRating = useMemo(() => squad.reduce((total, id) => {
-    const card = id ? cardsById.get(id) : null
-    if (!card) return total
-    const rating = card.finalRating || card.botRating
-    return total + rating.ovr + rating.sho + rating.pas + rating.def + rating.dri
-  }, 0), [cardsById, squad])
+  // The same sector ratings FFL Arena plays with. Empty slots count as zero.
+  const ratings = useMemo(() => sectorRatings({ id: "", name: "", formation, rating: 0, cards: squad.map((id) => { const card = id ? cardsById.get(id) : null; return card ? toArenaCard(card) : emptyCard }) }), [cardsById, formation, squad])
 
   useEffect(() => {
     let cancelled = false
@@ -159,19 +126,7 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
     const second = squad[b] ? cardsById.get(squad[b]!) : null
     if (!first || !second) return "rgba(148,163,184,.28)"
 
-    let points = 0
-    const firstInPosition = isPositionMatch(first.position, slots[a].position)
-    const secondInPosition = isPositionMatch(second.position, slots[b].position)
-    const sameCountry = Boolean(first.country && second.country
-      && first.country.trim().toLowerCase() === second.country.trim().toLowerCase())
-    const sameTeam = Boolean(first.teamId && second.teamId && first.teamId === second.teamId)
-
-    if ((!firstInPosition || !secondInPosition) && !sameCountry && !sameTeam) return "#ef4444"
-
-    points += firstInPosition && secondInPosition ? 1 : -1
-    if (sameCountry) points += 1
-    if (sameTeam) points += 1
-
+    const points = arenaLinkPoints(first, second, slots[a].position, slots[b].position)
     return points >= 2 ? "#22c55e" : points === 1 ? "#f59e0b" : "#ef4444"
   }
 
@@ -191,10 +146,6 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
             </div>
             <div className="flex flex-wrap items-end gap-2">
               <button type="button" disabled={!loaded || saving} onClick={saveSquad} title="Save squad for FFL Arena" aria-label="Save squad for FFL Arena" className="flex h-10 w-10 items-center justify-center rounded border border-emerald-400/40 text-emerald-300 disabled:opacity-40"><Save className="h-4 w-4" /></button>
-              <div className="flex flex-col gap-1.5">
-                <div className="h-3 text-[10px] font-semibold uppercase leading-3 text-slate-500">OVR Rating</div>
-                <div className="flex h-10 min-w-24 items-center justify-center rounded border border-emerald-400/25 bg-emerald-400/5 px-3 text-sm font-semibold tabular-nums text-emerald-300">{squadRating}</div>
-              </div>
               <div className="flex flex-col gap-1.5">
                 <label className="h-3 text-[10px] font-semibold uppercase leading-3 text-slate-500" htmlFor="formation">Formation</label>
                 <Select value={formation} onValueChange={(value) => { setFormation(value as Formation); setActiveSlot(null) }}>
@@ -246,7 +197,13 @@ export function MyClub({ availableCards }: { availableCards: ProfileCardGalleryI
               )
             })}
           </div>
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-slate-950/45 px-4 py-3 text-xs text-slate-400"><span className="mr-1 font-medium text-slate-300">Chemistry</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-green-500" />2-3 points</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-amber-500" />1 point</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-red-500" />0 points</span></div>
+          <div className="grid gap-x-6 gap-y-3 border-t border-white/10 bg-slate-950/45 px-4 py-3 text-xs text-slate-400 sm:grid-cols-2">
+            <div className="flex flex-col gap-1.5"><div className="flex justify-between font-medium text-slate-300"><span>Midfield</span><span className="text-slate-500">wins possession</span></div><RatingBar label="" value={ratings.midfield} max={350} /></div>
+            <div className="flex flex-col gap-1.5"><div className="flex justify-between font-medium text-slate-300"><span>Keeper</span><span className="text-slate-500">stops shots</span></div><RatingBar label="" value={ratings.keeper} max={99} /></div>
+            <div className="flex flex-col gap-1.5"><div className="flex justify-between font-medium text-slate-300"><span>Attack</span><span className="text-slate-500">creates chances</span></div>{["L", "C", "R"].map((lane, i) => <RatingBar key={lane} label={lane} value={ratings.attack[i]} max={150} />)}</div>
+            <div className="flex flex-col gap-1.5"><div className="flex justify-between font-medium text-slate-300"><span>Defence</span><span className="text-slate-500">stops chances</span></div>{["L", "C", "R"].map((lane, i) => <RatingBar key={lane} label={lane} value={ratings.defence[i]} max={150} />)}</div>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/10 bg-slate-950/45 px-4 py-3 text-xs text-slate-400"><span className="mr-1 font-medium text-slate-300">Chemistry <span className="tabular-nums text-emerald-300">+{Math.round(ratings.chemistry * arenaTuning.chemistryBonus * 100)}%</span></span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-green-500" />2-3 points</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-amber-500" />1 point</span><span className="flex items-center gap-2"><i className="inline-block h-1.5 w-6 rounded-full bg-red-500" />0 points</span></div>
         </div>
 
         <aside className="relative border border-white/10 bg-slate-900/60 p-4">

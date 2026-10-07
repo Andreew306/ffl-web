@@ -23,5 +23,5 @@ export function resolveArenaSquad(saved: SavedArenaSquad, catalog: Map<string, A
   const cards = saved.squad.map(key => key ? catalog.get(key) : undefined)
   if (cards.some(card => !card)) return null
   const complete = cards as ArenaCard[]
-  return { id, name: saved.name, formation: saved.formation, cards: complete, rating: complete.reduce((sum, c) => sum + Object.values(c.rating).reduce((a, b) => a + b, 0), 0) }
+  return { id, name: saved.name, formation: saved.formation, cards: complete, rating: Math.round(complete.reduce((sum, c) => sum + c.rating.ovr, 0) / complete.length) }
 }
