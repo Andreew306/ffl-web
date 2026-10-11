@@ -44,10 +44,10 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     const surface = canvas.current
     const ctx = surface?.getContext('2d')
     if (!surface || !ctx) return
-    const previous = replay.events[Math.max(0, index - 1)]
+    const next = replay.events[Math.min(replay.events.length - 1, index + 1)]
     const span = (starts[index + 1] ?? duration) - starts[index]
-    const progress = span > 0 ? (elapsed - starts[index]) / span : 1
-    const t = Math.min(1, progress * 1.5)
+    const progress = Math.max(0, Math.min(1, span > 0 ? (elapsed - starts[index]) / span : 1))
+    const t = progress * progress * (3 - 2 * progress)
     const lerp = (a: number, b: number) => a + (b - a) * t
     ctx.fillStyle = '#353b39'; ctx.fillRect(0, 0, 1000, 600)
     for (let stripe = 0; stripe < 10; stripe++) { ctx.fillStyle = stripe % 2 ? '#ffffff03' : '#00000006'; ctx.fillRect(stripe * 100, 0, 100, 600) }
