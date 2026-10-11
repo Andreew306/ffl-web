@@ -3,13 +3,13 @@ export type ArenaCard = { id: string; playerName: string; position: string; coun
 export type ArenaSquad = { id: string; name: string; formation: string; cards: ArenaCard[]; rating: number }
 export type Point = { x: number; y: number }
 // minute and fast were added by engine 2; replays saved before it have neither.
-export type ArenaEvent = { kind: string; text: string; team: number; actor: number; target: number; ball: Point; players: Point[]; score: number[]; minute?: number; fast?: boolean }
+export type ArenaEvent = { kind: string; text: string; team: number; actor: number; target: number; ball: Point; players: Point[]; score: number[]; minute?: number; fast?: boolean; durationMs?: number }
 export type ArenaReplay = { id: string; home: ArenaSquad; away: ArenaSquad; events: ArenaEvent[]; createdAt: string; engine?: number }
 
 type Stat = keyof ArenaCard['rating']
 type Line = 'gk' | 'def' | 'mid' | 'att'
 
-export const arenaEngineVersion = 2
+export const arenaEngineVersion = 3
 
 // Sector model (see "FFL Arena Engine v2 - Sector Model"). Every value here is tuned by scripts/arena-balance.cjs.
 export const arenaTuning = {
@@ -176,13 +176,13 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
     return currentPlayers.map(point => ({ ...point }))
   }
   const emit = (kind: string, text: string, team: number, actor: number, target = actor, fast = false, celebrate = false, visualTeam = team) => {
-    const hasContact = !['goal', 'miss', 'shot', 'celebration', 'fulltime'].includes(kind)
+    const hasContact = !['goal', 'miss', 'shot', 'celebration', 'reset', 'fulltime'].includes(kind)
     const players = positions(visualTeam, celebrate, fast, hasContact ? { side: team, index: target } : undefined)
     events.push({ kind, text, team, actor, target, ball: { ...ball }, players, score: [...score], minute, ...(fast ? { fast } : {}) })
   }
-  const kickoff = (team: number) => {
+  const kickoff = (team: number, taker?: number) => {
     ball = { x: 50, y: 50 }
-    emit('kickoff', `${squads[team].name}: saque de centro.`, team, pick(ratings[team].players.map(p => p.mid)))
+    emit('kickoff', `${squads[team].name}: saque de centro.`, team, taker ?? pick(ratings[team].players.map(p => p.mid)))
   }
   const shoot = (team: number, shooter: number, fast: boolean) => {
     const opponent = 1 - team
@@ -190,20 +190,44 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
     const quality = (card.rating.sho * (tuning.mix.shot.sho ?? 0) + card.rating.ovr * (tuning.mix.shot.ovr ?? 0)) * ratings[team].players[shooter].fit
     const goalChance = clamp(tuning.goalBase + (quality - ratings[opponent].keeper) / tuning.goalScale, tuning.goalMin, tuning.goalMax)
     const originY = ball.y
-    ball = { x: toward(team, 98), y: 43 + random() * 14 }
+    // The shot event is the strike, not a ball already waiting at the goal.
+    const aim = { x: toward(team, 100), y: 44 + random() * 12 }
+    const goal = random() < goalChance
+    const saved = !goal && random() < tuning.saveShare
+    emit('windup', `${card.playerName} prepara el remate.`, team, shooter)
+    events[events.length - 1].durationMs = 300
     emit('shot', `${card.playerName} dispara a puerta.`, team, shooter, shooter, fast)
-    if (random() < goalChance) {
+    events[events.length - 1].durationMs = 700
+    ball = saved ? { x: toward(team, 96), y: aim.y } : goal ? aim : { x: aim.x, y: aim.y < 50 ? 36 : 64 }
+    if (goal) {
       score[team]++
       emit('goal', `GOL de ${card.playerName}! ${score[0]} - ${score[1]}.`, team, shooter)
-      emit('celebration', `${squads[team].name} celebra el gol.`, team, shooter, shooter, false, true)
-      kickoff(opponent)
-    } else if (random() < tuning.saveShare) {
+      const goalEvent = events[events.length - 1]
+      goalEvent.durationMs = 700
+      goalEvent.players[opponent * 7 + 6] = moveToward(events[events.length - 2].players[opponent * 7 + 6], { x: toward(team, 96), y: aim.y < 50 ? aim.y + 5 : aim.y - 5 }, 10)
+      currentPlayers = goalEvent.players.map(p => ({ ...p }))
+      for (let step = 0; step < 3; step++) {
+        emit('celebration', step === 0 ? `${squads[team].name} celebra el gol.` : '', team, shooter, shooter, false, true)
+        events[events.length - 1].durationMs = 900
+      }
+      // Return to the correct halves while the ball stays in the net.
+      for (let step = 0; step < 6; step++) {
+        const targets = slots.flatMap((line, side) => line.map(slot => ({ x: toward(side, Math.min(44, slot.x * .65)), y: slot.y })))
+        targets[opponent * 7 + 3] = { x: toward(opponent, 49), y: 50 }
+        currentPlayers = currentPlayers.map((p, i) => moveToward(p, targets[i], 10))
+        events.push({ kind: 'reset', text: step === 0 ? 'Los equipos vuelven a su campo.' : '', team: opponent, actor: 3, target: 3, ball: { ...ball }, players: currentPlayers.map(p => ({ ...p })), score: [...score], minute, durationMs: 1100 })
+      }
+      kickoff(opponent, 3)
+      events[events.length - 1].durationMs = 1300
+    } else if (saved) {
       emit('save', `${name(opponent, 6)} detiene el disparo.`, opponent, 6)
+      events[events.length - 1].durationMs = 900
       ball = { x: toward(opponent, 8), y: clamp(ball.y, 38, 62) }
       emit('keeper-ball', `${name(opponent, 6)} asegura el balon.`, opponent, 6)
+      events[events.length - 1].durationMs = 1000
     } else {
-      ball.y = random() < .5 ? 30 : 70
       emit('miss', `${card.playerName} dispara fuera.`, team, shooter)
+      events[events.length - 1].durationMs = 900
       ball = { x: toward(opponent, 8), y: originY }
       emit('restart', `${name(opponent, 6)} saca de puerta.`, opponent, 6)
     }

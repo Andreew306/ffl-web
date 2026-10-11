@@ -8,21 +8,22 @@ import { buildArenaMotion, sampleArenaMotion } from '@/lib/arena-motion'
 
 type Directory = { own: ArenaSquad | null; rivals: ArenaSquad[]; nextPage: boolean; history: { id: string; home: string; away: string; score: number[]; createdAt: string }[] }
 
-function MatchPlayer({ replay }: { replay: ArenaReplay }) {
+export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
   const [elapsed, setElapsed] = useState(0)
   const [playing, setPlaying] = useState(true)
   const [speed, setSpeed] = useState(1)
   const canvas = useRef<HTMLCanvasElement>(null)
   const feed = useRef<HTMLDivElement>(null)
-  const duration = 120000
   // Start time of each event. Counter-attack moves (fast) take half the time of a normal move.
   const starts = useMemo(() => {
-    const weights = replay.events.slice(0, -1).map(e => e.fast ? .5 : 1)
-    const total = weights.reduce((a, b) => a + b, 0) || 1
+    const timed = replay.events.some(e => e.durationMs !== undefined)
+    const weights = replay.events.slice(0, -1).map(e => e.durationMs ?? (e.fast ? 600 : 1200))
+    const scale = timed ? 1 : 120000 / (weights.reduce((a, b) => a + b, 0) || 1)
     let at = 0
-    return [0, ...weights.map(w => (at += w) / total * duration)]
+    return [0, ...weights.map(w => (at += w * scale))]
   }, [replay])
-  const motion = useMemo(() => buildArenaMotion(replay.events, starts, duration), [replay, starts])
+  const duration = starts[starts.length - 1] || 1
+  const motion = useMemo(() => buildArenaMotion(replay.events, starts, duration), [replay, starts, duration])
   const index = Math.max(0, starts.findLastIndex(start => start <= elapsed))
   const event = replay.events[index]
   // Replays from engine 1 carry no minute, so their clock follows playback progress.
@@ -39,8 +40,8 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
-  }, [playing, speed])
-  useEffect(() => { if (elapsed >= duration) setPlaying(false) }, [elapsed])
+  }, [playing, speed, duration])
+  useEffect(() => { if (elapsed >= duration) setPlaying(false) }, [elapsed, duration])
   useEffect(() => { if (feed.current) feed.current.scrollTop = feed.current.scrollHeight }, [index])
   useEffect(() => {
     const surface = canvas.current
@@ -50,7 +51,6 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     const span = (starts[index + 1] ?? duration) - starts[index]
     const progress = Math.max(0, Math.min(1, span > 0 ? (elapsed - starts[index]) / span : 1))
     const t = progress * progress * (3 - 2 * progress)
-    const lerp = (a: number, b: number) => a + (b - a) * t
     ctx.fillStyle = '#353b39'; ctx.fillRect(0, 0, 1000, 600)
     for (let stripe = 0; stripe < 10; stripe++) { ctx.fillStyle = stripe % 2 ? '#ffffff03' : '#00000006'; ctx.fillRect(stripe * 100, 0, 100, 600) }
     ctx.strokeStyle = '#ffffff38'; ctx.lineWidth = 2
@@ -59,21 +59,57 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     ctx.beginPath(); ctx.arc(500, 300, 78, 0, Math.PI * 2); ctx.stroke()
     ctx.strokeRect(30, 180, 115, 240); ctx.strokeRect(855, 180, 115, 240)
     ctx.strokeStyle = '#e2e8f0'; ctx.strokeRect(10, 255, 20, 90); ctx.strokeRect(970, 255, 20, 90)
+    ctx.strokeStyle = '#ffffff30'; ctx.lineWidth = 1
+    for (const gx of [10, 970]) for (let gy = 265; gy < 345; gy += 10) {
+      ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + 20, gy); ctx.stroke()
+    }
     const cards = [...replay.home.cards, ...replay.away.cards]
     const movingPlayers = sampleArenaMotion(motion, elapsed)
     movingPlayers.forEach((point, i) => {
       const x = point.x + 30
       const y = point.y + 25
       ctx.shadowColor = '#0008'; ctx.shadowBlur = 8
-      ctx.beginPath(); ctx.arc(x, y, surface.clientWidth < 500 ? 22 : 17, 0, Math.PI * 2)
+      const isDiving = event.kind === 'shot' && event.durationMs !== undefined && i === (1 - event.team) * 7 + 6
+      if (isDiving) {
+        const reach = Math.sin(progress * Math.PI) * 19
+        const direction = next.ball.y < 50 ? -1 : 1
+        ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 7; ctx.lineCap = 'round'
+        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + (event.team === 0 ? 9 : -9), y + direction * (17 + reach)); ctx.stroke()
+        ctx.lineCap = 'butt'
+      }
+      const radius = surface.clientWidth < 500 ? 22 : 17
+      ctx.beginPath()
+      if (isDiving) ctx.ellipse(x, y, radius, radius + Math.sin(progress * Math.PI) * 10, next.ball.y < 50 ? -.35 : .35, 0, Math.PI * 2)
+      else ctx.arc(x, y, radius, 0, Math.PI * 2)
       ctx.fillStyle = i < 7 ? '#12b8ad' : '#ee9858'; ctx.fill()
       ctx.shadowBlur = 0; ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke()
       ctx.fillStyle = '#071619'; ctx.font = surface.clientWidth < 500 ? 'bold 20px Arial' : 'bold 14px Arial'; ctx.textAlign = 'center'; ctx.fillText(String(i % 7 + 1), x, y + 5)
       ctx.font = '12px Arial'; ctx.fillStyle = '#fff'; ctx.fillText(cards[i].playerName.slice(0, 16), x, y + 33)
     })
-    const bx = lerp(event.ball.x, next.ball.x) * 9.4 + 30
-    const by = lerp(event.ball.y, next.ball.y) * 5.5 + 25
+    const ballPoint = (entry: typeof event, at: number) => {
+      if (entry.durationMs !== undefined && ['windup', 'shot', 'save', 'keeper-ball'].includes(entry.kind)) {
+        const player = ['save', 'keeper-ball'].includes(entry.kind) ? entry.team * 7 + 6 : entry.team * 7 + entry.actor
+        const point = sampleArenaMotion(motion, at)[player]
+        return { x: point.x + 30, y: point.y + 25 }
+      }
+      const net = ['goal', 'celebration', 'reset'].includes(entry.kind) && (entry.ball.x === 0 || entry.ball.x === 100)
+      return { x: entry.ball.x * 9.4 + 30 + (net ? entry.ball.x === 0 ? -12 : 12 : 0), y: entry.ball.y * 5.5 + 25 }
+    }
+    const from = ballPoint(event, starts[index])
+    const to = ballPoint(next, starts[Math.min(index + 1, starts.length - 1)])
+    const flight = event.kind === 'shot' && event.durationMs !== undefined
+    const ballT = flight ? progress : t
+    let bx = from.x + (to.x - from.x) * ballT
+    let by = from.y + (to.y - from.y) * ballT - (flight ? Math.sin(progress * Math.PI) * 7 : 0)
+    const resetBall = event.kind === 'reset' && next.kind === 'kickoff'
+    if (resetBall) { bx = progress < .5 ? from.x : to.x; by = progress < .5 ? from.y : to.y }
+    ctx.globalAlpha = resetBall ? Math.abs(progress * 2 - 1) : 1
+    if (flight) {
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - (to.x - from.x) * .055, by - (to.y - from.y) * .055)
+      ctx.strokeStyle = '#ffffff70'; ctx.lineWidth = 3; ctx.stroke()
+    }
     ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#111'; ctx.stroke()
+    ctx.globalAlpha = 1
     if (next.kind === 'save' || event.kind === 'save') {
       const save = next.kind === 'save' ? next : event
       const keeper = movingPlayers[save.team * 7 + 6]
@@ -82,10 +118,10 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.strokeStyle = '#f8fafc99'; ctx.lineWidth = 4; ctx.stroke()
     }
     if (['goal', 'celebration'].includes(event.kind)) {
-      ctx.fillStyle = '#071619d9'; ctx.fillRect(365, 250, 270, 70)
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 32px Arial'; ctx.fillText('GOL!', 500, 296)
+      ctx.fillStyle = '#071619e8'; ctx.fillRect(290, 32, 420, 48)
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`GOL! ${cards[event.team * 7 + event.actor].playerName}`, 500, 63, 400)
     }
-  }, [elapsed, event, index, replay, starts, motion])
+  }, [elapsed, event, index, replay, starts, motion, duration])
   return <section className="mt-8 border-t border-white/15 pt-6">
     <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
       <h2 className="text-lg font-semibold">{replay.home.name} <span className="mx-3 text-emerald-300 tabular-nums">{event.score[0]} - {event.score[1]}</span> {replay.away.name}</h2>
@@ -102,7 +138,7 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
         </div>
       </div>
       <div ref={feed} className="h-80 overflow-y-auto border-l border-white/15 pl-4 lg:h-96" aria-label="Match commentary">
-        {replay.events.slice(0, index + 1).map((entry, i) => <p key={i} className={`mb-3 border-b border-white/5 pb-2 text-sm ${entry.kind === 'goal' ? 'font-semibold text-amber-300' : 'text-slate-300'}`}><span className="mr-2 text-slate-500">{minuteAt(entry, i)}&apos;</span>{entry.text}</p>)}
+        {replay.events.slice(0, index + 1).map((entry, i) => entry.text && <p key={i} className={`mb-3 border-b border-white/5 pb-2 text-sm ${entry.kind === 'goal' ? 'font-semibold text-amber-300' : 'text-slate-300'}`}><span className="mr-2 text-slate-500">{minuteAt(entry, i)}&apos;</span>{entry.text}</p>)}
       </div>
     </div>
     <div className="mt-4 grid grid-cols-2 gap-4 border-t border-white/10 pt-3 text-sm">

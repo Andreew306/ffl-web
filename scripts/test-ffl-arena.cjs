@@ -40,6 +40,24 @@ for (const formation of arenaFormations) {
   }
   assert.ok(events.filter(event => event.kind === 'pass').length >= arenaTuning.phases * arenaTuning.buildUpPasses, 'Each phase includes a passing build-up')
   assert.ok(events.some(event => event.kind === 'pressure'), 'Defensive pressure is represented')
+  events.forEach((event, i) => {
+    if (event.kind === 'shot') {
+      assert.equal(events[i - 1].kind, 'windup')
+      assert.ok(['goal', 'save', 'miss'].includes(events[i + 1].kind))
+      assert.ok(event.ball.x > 0 && event.ball.x < 100, 'Shot starts on the pitch')
+      assert.equal(event.durationMs, 700)
+    }
+    if (event.kind === 'goal') {
+      assert.equal(event.ball.x, event.team === 0 ? 100 : 0, 'Goal reaches the goal line')
+      assert.ok(event.ball.y >= 44 && event.ball.y <= 56, 'Goal is inside the posts')
+      let next = i + 1
+      while (events[next].kind === 'celebration') next++
+      assert.equal(events[next].kind, 'reset')
+      while (events[next].kind === 'reset') next++
+      assert.equal(events[next].kind, 'kickoff')
+      assert.equal(events[next].team, 1 - event.team)
+    }
+  })
   for (let i = 1; i < events.length; i++) for (let player = 0; player < 14; player++) {
     const from = events[i - 1].players[player], to = events[i].players[player]
     assert.ok(Math.hypot(from.x - to.x, from.y - to.y) <= 16.001, 'Player movement stays continuous')
