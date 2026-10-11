@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw, Search, Swords } from 'lucide-react'
 import type { ArenaReplay, ArenaSquad } from '@/lib/ffl-arena'
-import { buildArenaMotion, sampleArenaMotion } from '@/lib/arena-motion'
+import { arenaOwners, arenaTimeline, buildArenaMotion, sampleArenaBall, sampleArenaMotion } from '@/lib/arena-motion'
 
 type Directory = { own: ArenaSquad | null; rivals: ArenaSquad[]; nextPage: boolean; history: { id: string; home: string; away: string; score: number[]; createdAt: string }[] }
 
@@ -14,14 +14,10 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
   const [speed, setSpeed] = useState(1)
   const canvas = useRef<HTMLCanvasElement>(null)
   const feed = useRef<HTMLDivElement>(null)
-  // Start time of each event. Counter-attack moves (fast) take half the time of a normal move.
-  const starts = useMemo(() => {
-    const timed = replay.events.some(e => e.durationMs !== undefined)
-    const weights = replay.events.slice(0, -1).map(e => e.durationMs ?? (e.fast ? 600 : 1200))
-    const scale = timed ? 1 : 120000 / (weights.reduce((a, b) => a + b, 0) || 1)
-    let at = 0
-    return [0, ...weights.map(w => (at += w * scale))]
-  }, [replay])
+  const playbackTime = useRef(0)
+  const paint = useRef<(time: number) => void>(() => {})
+  const starts = useMemo(() => arenaTimeline(replay.events), [replay])
+  const owners = useMemo(() => arenaOwners(replay.events), [replay])
   const duration = starts[starts.length - 1] || 1
   const motion = useMemo(() => buildArenaMotion(replay.events, starts, duration), [replay, starts, duration])
   const index = Math.max(0, starts.findLastIndex(start => start <= elapsed))
@@ -32,11 +28,18 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     if (!playing) return
     let frame = 0
     let last = performance.now()
+    let lastUpdate = last
     const tick = (now: number) => {
       const delta = Math.min(now - last, 100) * speed
       last = now
-      setElapsed(time => Math.min(duration, time + delta))
-      frame = requestAnimationFrame(tick)
+      playbackTime.current = Math.min(duration, playbackTime.current + delta)
+      paint.current(playbackTime.current)
+      // The pitch renders every frame; React only updates the controls and commentary.
+      if (now - lastUpdate >= 100 || playbackTime.current >= duration) {
+        setElapsed(playbackTime.current)
+        lastUpdate = now
+      }
+      if (playbackTime.current < duration) frame = requestAnimationFrame(tick)
     }
     frame = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(frame)
@@ -47,10 +50,12 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     const surface = canvas.current
     const ctx = surface?.getContext('2d')
     if (!surface || !ctx) return
-    const next = replay.events[Math.min(replay.events.length - 1, index + 1)]
-    const span = (starts[index + 1] ?? duration) - starts[index]
-    const progress = Math.max(0, Math.min(1, span > 0 ? (elapsed - starts[index]) / span : 1))
-    const t = progress * progress * (3 - 2 * progress)
+    const draw = (time: number) => {
+    const frameIndex = Math.max(0, starts.findLastIndex(start => start <= time))
+    const event = replay.events[frameIndex]
+    const next = replay.events[Math.min(replay.events.length - 1, frameIndex + 1)]
+    const span = (starts[frameIndex + 1] ?? duration) - starts[frameIndex]
+    const progress = Math.max(0, Math.min(1, span > 0 ? (time - starts[frameIndex]) / span : 1))
     ctx.fillStyle = '#353b39'; ctx.fillRect(0, 0, 1000, 600)
     for (let stripe = 0; stripe < 10; stripe++) { ctx.fillStyle = stripe % 2 ? '#ffffff03' : '#00000006'; ctx.fillRect(stripe * 100, 0, 100, 600) }
     ctx.strokeStyle = '#ffffff38'; ctx.lineWidth = 2
@@ -64,7 +69,7 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx + 20, gy); ctx.stroke()
     }
     const cards = [...replay.home.cards, ...replay.away.cards]
-    const movingPlayers = sampleArenaMotion(motion, elapsed)
+    const movingPlayers = sampleArenaMotion(motion, time)
     movingPlayers.forEach((point, i) => {
       const x = point.x + 30
       const y = point.y + 25
@@ -86,26 +91,11 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.fillStyle = '#071619'; ctx.font = surface.clientWidth < 500 ? 'bold 20px Arial' : 'bold 14px Arial'; ctx.textAlign = 'center'; ctx.fillText(String(i % 7 + 1), x, y + 5)
       ctx.font = '12px Arial'; ctx.fillStyle = '#fff'; ctx.fillText(cards[i].playerName.slice(0, 16), x, y + 33)
     })
-    const ballPoint = (entry: typeof event, at: number) => {
-      if (entry.durationMs !== undefined && ['windup', 'shot', 'save', 'keeper-ball'].includes(entry.kind)) {
-        const player = ['save', 'keeper-ball'].includes(entry.kind) ? entry.team * 7 + 6 : entry.team * 7 + entry.actor
-        const point = sampleArenaMotion(motion, at)[player]
-        return { x: point.x + 30, y: point.y + 25 }
-      }
-      const net = ['goal', 'celebration', 'reset'].includes(entry.kind) && (entry.ball.x === 0 || entry.ball.x === 100)
-      return { x: entry.ball.x * 9.4 + 30 + (net ? entry.ball.x === 0 ? -12 : 12 : 0), y: entry.ball.y * 5.5 + 25 }
-    }
-    const from = ballPoint(event, starts[index])
-    const to = ballPoint(next, starts[Math.min(index + 1, starts.length - 1)])
-    const flight = event.kind === 'shot' && event.durationMs !== undefined
-    const ballT = flight ? progress : t
-    let bx = from.x + (to.x - from.x) * ballT
-    let by = from.y + (to.y - from.y) * ballT - (flight ? Math.sin(progress * Math.PI) * 7 : 0)
-    const resetBall = event.kind === 'reset' && next.kind === 'kickoff'
-    if (resetBall) { bx = progress < .5 ? from.x : to.x; by = progress < .5 ? from.y : to.y }
-    ctx.globalAlpha = resetBall ? Math.abs(progress * 2 - 1) : 1
-    if (flight) {
-      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(bx - (to.x - from.x) * .055, by - (to.y - from.y) * .055)
+    const ball = sampleArenaBall(replay.events, starts, motion, owners, time)
+    const bx = ball.x + 30, by = ball.y + 25
+    ctx.globalAlpha = ball.alpha
+    if (ball.trail) {
+      ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(ball.trail.x + 30, ball.trail.y + 25)
       ctx.strokeStyle = '#ffffff70'; ctx.lineWidth = 3; ctx.stroke()
     }
     ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#111'; ctx.stroke()
@@ -121,7 +111,23 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.fillStyle = '#071619e8'; ctx.fillRect(290, 32, 420, 48)
       ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`GOL! ${cards[event.team * 7 + event.actor].playerName}`, 500, 63, 400)
     }
-  }, [elapsed, event, index, replay, starts, motion, duration])
+    }
+    paint.current = draw
+    draw(playbackTime.current)
+    const resize = new ResizeObserver(() => draw(playbackTime.current))
+    resize.observe(surface)
+    return () => resize.disconnect()
+  }, [replay, starts, motion, duration, owners])
+  function seek(time: number) {
+    playbackTime.current = time
+    paint.current(time)
+    setElapsed(time)
+  }
+  function togglePlayback() {
+    if (playing) setElapsed(playbackTime.current)
+    else if (playbackTime.current >= duration) seek(0)
+    setPlaying(!playing)
+  }
   return <section className="mt-8 border-t border-white/15 pt-6">
     <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
       <h2 className="text-lg font-semibold">{replay.home.name} <span className="mx-3 text-emerald-300 tabular-nums">{event.score[0]} - {event.score[1]}</span> {replay.away.name}</h2>
@@ -131,9 +137,9 @@ export function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       <div className="min-w-0">
         <canvas ref={canvas} width={1000} height={600} className="aspect-[5/3] w-full rounded border border-white/20" aria-label="Animated match replay" />
         <div className="mt-3 flex items-center gap-3">
-          <button className="rounded border border-white/20 p-2" title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'} onClick={() => setPlaying(!playing)}>{playing ? <Pause size={18} /> : <Play size={18} />}</button>
-          <button className="rounded border border-white/20 p-2" title="Replay" aria-label="Replay" onClick={() => { setElapsed(0); setPlaying(true) }}><RotateCcw size={18} /></button>
-          <input aria-label="Match progress" type="range" min={0} max={duration} value={elapsed} onChange={e => setElapsed(Number(e.target.value))} className="min-w-0 flex-1 accent-emerald-400" />
+          <button className="rounded border border-white/20 p-2" title={playing ? 'Pause' : 'Play'} aria-label={playing ? 'Pause' : 'Play'} onClick={togglePlayback}>{playing ? <Pause size={18} /> : <Play size={18} />}</button>
+          <button className="rounded border border-white/20 p-2" title="Replay" aria-label="Replay" onClick={() => { seek(0); setPlaying(true) }}><RotateCcw size={18} /></button>
+          <input aria-label="Match progress" type="range" min={0} max={duration} value={elapsed} onChange={e => seek(Number(e.target.value))} className="min-w-0 flex-1 accent-emerald-400" />
           <select aria-label="Replay speed" value={speed} onChange={e => setSpeed(Number(e.target.value))} className="rounded bg-zinc-800 p-2">{[1, 2, 4].map(value => <option key={value} value={value}>{value}x</option>)}</select>
         </div>
       </div>
