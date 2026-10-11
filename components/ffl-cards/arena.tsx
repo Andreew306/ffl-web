@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Pause, Play, RotateCcw, Search, Swords } from 'lucide-react'
 import type { ArenaReplay, ArenaSquad } from '@/lib/ffl-arena'
+import { buildArenaMotion, sampleArenaMotion } from '@/lib/arena-motion'
 
 type Directory = { own: ArenaSquad | null; rivals: ArenaSquad[]; nextPage: boolean; history: { id: string; home: string; away: string; score: number[]; createdAt: string }[] }
 
@@ -21,6 +22,7 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     let at = 0
     return [0, ...weights.map(w => (at += w) / total * duration)]
   }, [replay])
+  const motion = useMemo(() => buildArenaMotion(replay.events, starts, duration), [replay, starts])
   const index = Math.max(0, starts.findLastIndex(start => start <= elapsed))
   const event = replay.events[index]
   // Replays from engine 1 carry no minute, so their clock follows playback progress.
@@ -58,10 +60,10 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     ctx.strokeRect(30, 180, 115, 240); ctx.strokeRect(855, 180, 115, 240)
     ctx.strokeStyle = '#e2e8f0'; ctx.strokeRect(10, 255, 20, 90); ctx.strokeRect(970, 255, 20, 90)
     const cards = [...replay.home.cards, ...replay.away.cards]
-    event.players.forEach((point, i) => {
-      const destination = next.players[i]
-      const x = lerp(point.x, destination.x) * 9.4 + 30
-      const y = lerp(point.y, destination.y) * 5.5 + 25
+    const movingPlayers = sampleArenaMotion(motion, elapsed)
+    movingPlayers.forEach((point, i) => {
+      const x = point.x + 30
+      const y = point.y + 25
       ctx.shadowColor = '#0008'; ctx.shadowBlur = 8
       ctx.beginPath(); ctx.arc(x, y, surface.clientWidth < 500 ? 22 : 17, 0, Math.PI * 2)
       ctx.fillStyle = i < 7 ? '#12b8ad' : '#ee9858'; ctx.fill()
@@ -73,8 +75,9 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     const by = lerp(event.ball.y, next.ball.y) * 5.5 + 25
     ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#111'; ctx.stroke()
     if (next.kind === 'save' || event.kind === 'save') {
-      const keeper = next.players[next.team * 7 + 6]
-      const kx = keeper.x * 9.4 + 30, ky = keeper.y * 5.5 + 25
+      const save = next.kind === 'save' ? next : event
+      const keeper = movingPlayers[save.team * 7 + 6]
+      const kx = keeper.x + 30, ky = keeper.y + 25
       ctx.beginPath(); ctx.arc(kx, ky, 27 + Math.sin(progress * Math.PI) * 8, 0, Math.PI * 2)
       ctx.strokeStyle = '#f8fafc99'; ctx.lineWidth = 4; ctx.stroke()
     }
@@ -82,7 +85,7 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.fillStyle = '#071619d9'; ctx.fillRect(365, 250, 270, 70)
       ctx.fillStyle = '#fff'; ctx.font = 'bold 32px Arial'; ctx.fillText('GOL!', 500, 296)
     }
-  }, [elapsed, event, index, replay, starts])
+  }, [elapsed, event, index, replay, starts, motion])
   return <section className="mt-8 border-t border-white/15 pt-6">
     <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
       <h2 className="text-lg font-semibold">{replay.home.name} <span className="mx-3 text-emerald-300 tabular-nums">{event.score[0]} - {event.score[1]}</span> {replay.away.name}</h2>
