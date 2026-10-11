@@ -4,7 +4,7 @@ import { randomInt } from 'node:crypto'
 import { ObjectId } from 'mongodb'
 import { authOptions } from '@/lib/auth'
 import { arenaDb, arenaCatalog, resolveArenaSquad, type SavedArenaSquad } from '@/lib/services/ffl-arena.service'
-import { arenaFormations, simulateArena, type ArenaReplay } from '@/lib/ffl-arena'
+import { arenaEngineVersion, arenaFormations, simulateArena, type ArenaReplay } from '@/lib/ffl-arena'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
   const events = simulateArena(home, away, () => randomInt(0, 1000000) / 1000000)
   const id = new ObjectId()
   const createdAt = new Date()
-  const replay: ArenaReplay = { id: String(id), home, away, events, createdAt: createdAt.toISOString() }
+  const replay: ArenaReplay = { id: String(id), home, away, events, createdAt: createdAt.toISOString(), engine: arenaEngineVersion }
   await db.collection('fflarenamatches').insertOne({ _id: id, owner, createdAt, replay, summary: { home: home.name, away: away.name, score: events[events.length - 1].score, createdAt: createdAt.toISOString() } })
   return NextResponse.json(replay)
 }
