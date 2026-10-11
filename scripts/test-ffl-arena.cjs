@@ -5,7 +5,7 @@ const ts = require('typescript')
 const output = ts.transpileModule(fs.readFileSync('lib/ffl-arena.ts', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText
 const sandbox = { exports: {} }
 vm.runInNewContext(output, sandbox)
-const { simulateArena, arenaSlots, arenaFormations, positionFit, sectorRatings, arenaChemistry, arenaLinks } = sandbox.exports
+const { simulateArena, arenaSlots, arenaFormations, arenaTuning, positionFit, sectorRatings, arenaChemistry, arenaLinks } = sandbox.exports
 const rng = seed => () => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return seed / 4294967296 }
 function squad(value, formation = '1-2-2-2', chem = true) {
   return { id: String(value), name: `Team ${value}`, formation, cards: arenaSlots(formation).map((slot, i) => ({ id: String(i), playerName: `Player ${i}`, position: slot.position, country: chem ? 'ES' : `C${i}`, teamId: chem ? 'team' : `T${i}`, rating: { ovr: value, sho: value, pas: value, def: value, dri: value } })) }
@@ -37,6 +37,12 @@ for (const formation of arenaFormations) {
   for (const event of events) {
     assert.equal(event.players.length, 14)
     for (const point of [...event.players, event.ball]) assert.ok(point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100)
+  }
+  assert.ok(events.filter(event => event.kind === 'pass').length >= arenaTuning.phases * arenaTuning.buildUpPasses, 'Each phase includes a passing build-up')
+  assert.ok(events.some(event => event.kind === 'pressure'), 'Defensive pressure is represented')
+  for (let i = 1; i < events.length; i++) for (let player = 0; player < 14; player++) {
+    const from = events[i - 1].players[player], to = events[i].players[player]
+    assert.ok(Math.hypot(from.x - to.x, from.y - to.y) <= 16.001, 'Player movement stays continuous')
   }
   for (const side of [0, 1]) assert.equal(events.at(-1).score[side], events.filter(e => e.kind === 'goal' && e.team === side).length)
 }

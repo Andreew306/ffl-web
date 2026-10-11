@@ -14,6 +14,7 @@ export const arenaEngineVersion = 2
 // Sector model (see "FFL Arena Engine v2 - Sector Model"). Every value here is tuned by scripts/arena-balance.cjs.
 export const arenaTuning = {
   phases: 16,
+  buildUpPasses: 2,
   k: 1.7,
   lambda: 1,
   laneFocus: .8,
@@ -155,15 +156,28 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
   const events: ArenaEvent[] = []
   let ball: Point = { x: 50, y: 50 }
   let minute = 0
-  const positions = (team: number, celebrate: boolean) => slots.flatMap((line, side) => line.map((slot, i) => {
+  let currentPlayers = slots.flatMap((line, side) => line.map(slot => ({ x: toward(side, slot.x), y: slot.y })))
+  const moveToward = (from: Point, to: Point, limit: number) => {
+    const dx = to.x - from.x, dy = to.y - from.y
+    const distance = Math.hypot(dx, dy)
+    if (!distance || distance <= limit) return { ...to }
+    return { x: from.x + dx / distance * limit, y: from.y + dy / distance * limit }
+  }
+  const positions = (team: number, celebrate: boolean, fast: boolean, contact?: { side: number; index: number }) => {
+    const targets = slots.flatMap((line, side) => line.map((slot, i) => {
     const baseX = toward(side, slot.x + (side === team ? 6 : -4))
     const mobility = squads[side].cards[i].rating.dri / 100
     if (celebrate && side === team && i !== 6) return { x: clamp(ball.x + (random() - .5) * 10, 5, 95), y: clamp(ball.y + (random() - .5) * 12, 8, 92) }
-    return { x: clamp(baseX + (ball.x - 50) * (i === 6 ? .04 : .22) + (random() - .5) * 6 * mobility, 5, 95), y: clamp(slot.y + (ball.y - 50) * .12 + (random() - .5) * 6, 7, 93) }
-  }))
-  const emit = (kind: string, text: string, team: number, actor: number, target = actor, fast = false, celebrate = false) => {
-    const players = positions(team, celebrate)
-    if (!['goal', 'miss', 'shot', 'celebration', 'fulltime'].includes(kind)) players[team * 7 + target] = { ...ball }
+    return { x: clamp(baseX + (ball.x - 50) * (i === 6 ? .04 : .22) + (random() - .5) * 2 * mobility, 5, 95), y: clamp(slot.y + (ball.y - 50) * .12 + (random() - .5) * 2, 7, 93) }
+    }))
+    if (contact) targets[contact.side * 7 + contact.index] = { ...ball }
+    const limit = celebrate ? 16 : fast ? 14 : 10
+    currentPlayers = targets.map((target, index) => moveToward(currentPlayers[index], target, limit))
+    return currentPlayers.map(point => ({ ...point }))
+  }
+  const emit = (kind: string, text: string, team: number, actor: number, target = actor, fast = false, celebrate = false, visualTeam = team) => {
+    const hasContact = !['goal', 'miss', 'shot', 'celebration', 'fulltime'].includes(kind)
+    const players = positions(visualTeam, celebrate, fast, hasContact ? { side: team, index: target } : undefined)
     events.push({ kind, text, team, actor, target, ball: { ...ball }, players, score: [...score], minute, ...(fast ? { fast } : {}) })
   }
   const kickoff = (team: number) => {
@@ -184,8 +198,9 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
       emit('celebration', `${squads[team].name} celebra el gol.`, team, shooter, shooter, false, true)
       kickoff(opponent)
     } else if (random() < tuning.saveShare) {
-      ball = { x: toward(opponent, 8), y: 50 }
       emit('save', `${name(opponent, 6)} detiene el disparo.`, opponent, 6)
+      ball = { x: toward(opponent, 8), y: clamp(ball.y, 38, 62) }
+      emit('keeper-ball', `${name(opponent, 6)} asegura el balon.`, opponent, 6)
     } else {
       ball.y = random() < .5 ? 30 : 70
       emit('miss', `${card.playerName} dispara fuera.`, team, shooter)
@@ -196,6 +211,8 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
   // The lane's attack against the opponent's defence in the same lane. Returns the defender who stopped it, or -1.
   const attack = (team: number, carrier: number, lane: number, defenceFactor: number, fast: boolean) => {
     const opponent = 1 - team
+    const defender = pick(ratings[opponent].players.map(p => p.defence[lane]))
+    emit('pressure', `${name(opponent, defender)} presiona a ${name(team, carrier)}.`, opponent, defender, defender, fast, false, team)
     if (random() < contest(ratings[team].attack[lane], tuning.lambda * defenceFactor * ratings[opponent].defence[lane])) {
       const shooter = pick(ratings[team].players.map(p => p.attack[lane]))
       if (shooter === carrier) {
@@ -208,7 +225,6 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
       shoot(team, shooter, fast)
       return -1
     }
-    const defender = pick(ratings[opponent].players.map(p => p.defence[lane]))
     if (random() < .5) emit('tackle', `${name(opponent, defender)} le roba el balon a ${name(team, carrier)}.`, opponent, defender, defender, fast)
     else emit('interception', `${name(opponent, defender)} corta el avance de ${name(team, carrier)}.`, opponent, defender, defender, fast)
     return defender
@@ -225,9 +241,15 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
     const odds = own.attack.map((a, l) => contest(a, tuning.lambda * ratings[1 - team].defence[l]))
     const totalOdds = odds.reduce((a, b) => a + b, 0) || 1
     const lane = pick(odds.map(o => (1 - tuning.laneFocus) / 3 + tuning.laneFocus * o / totalOdds))
-    const carrier = pick(own.players.map(p => p.attack[lane]), winner)
-    ball = { x: toward(team, 58 + random() * 10), y: laneY[lane] + (random() - .5) * 16 }
-    emit('pass', `${name(team, winner)} abre el juego para ${name(team, carrier)} ${lane === 1 ? 'por el centro' : 'por la banda'}.`, team, winner, carrier)
+    let carrier = winner
+    for (let pass = 0; pass < tuning.buildUpPasses; pass++) {
+      const receiverWeights = own.players.map(player => player.mid * (pass ? .35 : .7) + player.attack[lane] * (pass ? 1 : .45))
+      const receiver = pick(receiverWeights, carrier)
+      const depth = 46 + pass * 12 + random() * 6
+      ball = { x: toward(team, depth), y: laneY[lane] + (random() - .5) * (pass ? 18 : 28) }
+      emit('pass', pass ? `${name(team, carrier)} combina con ${name(team, receiver)}.` : `${name(team, carrier)} abre el juego para ${name(team, receiver)} ${lane === 1 ? 'por el centro' : 'por la banda'}.`, team, carrier, receiver)
+      carrier = receiver
+    }
     const defender = attack(team, carrier, lane, 1, false)
     if (defender < 0 || random() >= tuning.counterRate) continue
     const opponent = 1 - team
