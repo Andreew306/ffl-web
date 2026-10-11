@@ -23,6 +23,17 @@ for (const formation of arenaFormations) {
     assert.equal(event.players.length, 14)
     for (const point of [...event.players, event.ball]) assert.ok(point.x >= 0 && point.x <= 100 && point.y >= 0 && point.y <= 100)
   }
+  for (let i = 1; i < events.length; i++) {
+    for (let player = 0; player < 14; player++) {
+      const a = events[i - 1].players[player], b = events[i].players[player]
+      assert.ok(Math.hypot(a.x - b.x, a.y - b.y) <= 16.001, 'Players must move continuously between events')
+    }
+  }
+  for (let i = 0; i < events.length; i++) if (events[i].kind === 'save') {
+    assert.equal(events[i - 1].kind, 'shot')
+    assert.equal(events[i + 1].kind, 'keeper-ball')
+    assert.deepEqual(events[i].ball, events[i - 1].ball)
+  }
   for (const side of [0, 1]) assert.equal(events.at(-1).score[side], events.filter(e => e.kind === 'goal' && e.team === side).length)
 }
 let strongerWins = 0, weakerWins = 0, draws = 0

@@ -14,7 +14,8 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
   const canvas = useRef<HTMLCanvasElement>(null)
   const feed = useRef<HTMLDivElement>(null)
   const duration = 120000
-  const index = Math.min(replay.events.length - 1, Math.floor(elapsed / duration * (replay.events.length - 1)))
+  const timeline = elapsed / duration * (replay.events.length - 1)
+  const index = Math.min(replay.events.length - 1, Math.floor(timeline))
   const event = replay.events[index]
   useEffect(() => {
     if (!playing) return
@@ -35,9 +36,9 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     const surface = canvas.current
     const ctx = surface?.getContext('2d')
     if (!surface || !ctx) return
-    const previous = replay.events[Math.max(0, index - 1)]
-    const progress = elapsed / duration * (replay.events.length - 1) - index
-    const t = Math.min(1, progress * 1.5)
+    const next = replay.events[Math.min(replay.events.length - 1, index + 1)]
+    const progress = timeline - index
+    const t = progress * progress * (3 - 2 * progress)
     const lerp = (a: number, b: number) => a + (b - a) * t
     ctx.fillStyle = '#353b39'; ctx.fillRect(0, 0, 1000, 600)
     for (let stripe = 0; stripe < 10; stripe++) { ctx.fillStyle = stripe % 2 ? '#ffffff03' : '#00000006'; ctx.fillRect(stripe * 100, 0, 100, 600) }
@@ -49,9 +50,9 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
     ctx.strokeStyle = '#e2e8f0'; ctx.strokeRect(10, 255, 20, 90); ctx.strokeRect(970, 255, 20, 90)
     const cards = [...replay.home.cards, ...replay.away.cards]
     event.players.forEach((point, i) => {
-      const old = previous.players[i]
-      const x = lerp(old.x, point.x) * 9.4 + 30
-      const y = lerp(old.y, point.y) * 5.5 + 25
+      const destination = next.players[i]
+      const x = lerp(point.x, destination.x) * 9.4 + 30
+      const y = lerp(point.y, destination.y) * 5.5 + 25
       ctx.shadowColor = '#0008'; ctx.shadowBlur = 8
       ctx.beginPath(); ctx.arc(x, y, surface.clientWidth < 500 ? 22 : 17, 0, Math.PI * 2)
       ctx.fillStyle = i < 7 ? '#12b8ad' : '#ee9858'; ctx.fill()
@@ -59,14 +60,20 @@ function MatchPlayer({ replay }: { replay: ArenaReplay }) {
       ctx.fillStyle = '#071619'; ctx.font = surface.clientWidth < 500 ? 'bold 20px Arial' : 'bold 14px Arial'; ctx.textAlign = 'center'; ctx.fillText(String(i % 7 + 1), x, y + 5)
       ctx.font = '12px Arial'; ctx.fillStyle = '#fff'; ctx.fillText(cards[i].playerName.slice(0, 16), x, y + 33)
     })
-    const bx = lerp(previous.ball.x, event.ball.x) * 9.4 + 30
-    const by = lerp(previous.ball.y, event.ball.y) * 5.5 + 25
+    const bx = lerp(event.ball.x, next.ball.x) * 9.4 + 30
+    const by = lerp(event.ball.y, next.ball.y) * 5.5 + 25
     ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#111'; ctx.stroke()
+    if (next.kind === 'save' || event.kind === 'save') {
+      const keeper = next.players[next.team * 7 + 6]
+      const kx = keeper.x * 9.4 + 30, ky = keeper.y * 5.5 + 25
+      ctx.beginPath(); ctx.arc(kx, ky, 27 + Math.sin(progress * Math.PI) * 8, 0, Math.PI * 2)
+      ctx.strokeStyle = '#f8fafc99'; ctx.lineWidth = 4; ctx.stroke()
+    }
     if (['goal', 'celebration'].includes(event.kind)) {
       ctx.fillStyle = '#071619d9'; ctx.fillRect(365, 250, 270, 70)
       ctx.fillStyle = '#fff'; ctx.font = 'bold 32px Arial'; ctx.fillText('GOL!', 500, 296)
     }
-  }, [elapsed, event, index, replay])
+  }, [elapsed, event, index, replay, timeline])
   return <section className="mt-8 border-t border-white/15 pt-6">
     <div className="flex flex-wrap items-center justify-between gap-3 pb-4">
       <h2 className="text-lg font-semibold">{replay.home.name} <span className="mx-3 text-emerald-300 tabular-nums">{event.score[0]} - {event.score[1]}</span> {replay.away.name}</h2>

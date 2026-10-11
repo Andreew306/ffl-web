@@ -29,34 +29,51 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
   let team = random() < .5 ? 0 : 1
   let actor = 3
   let ball: Point = { x: 50, y: 50 }
+  let currentPlayers = slots.flatMap((line, side) => line.map(slot => ({ x: side === 0 ? slot.x : 100 - slot.x, y: slot.y })))
   const attribute = (side: number, index: number, key: keyof ArenaCard['rating']) => {
     const card = squads[side].cards[index]
     const fit = inPosition(card.position, slots[side][index].position) ? 1 : .84
     return card.rating[key] * fit
   }
-  const positions = (celebrate = false) => slots.flatMap((line, side) => line.map((slot, i) => {
+  const moveToward = (from: Point, to: Point, limit: number) => {
+    const dx = to.x - from.x, dy = to.y - from.y
+    const distance = Math.hypot(dx, dy)
+    if (!distance || distance <= limit) return { ...to }
+    return { x: from.x + dx / distance * limit, y: from.y + dy / distance * limit }
+  }
+  const positions = (celebrate = false, contact?: { side: number; index: number }) => {
+    const targets = slots.flatMap((line, side) => line.map((slot, i) => {
     const baseX = side === 0 ? slot.x : 100 - slot.x
     const mobility = squads[side].cards[i].rating.dri / 100
     if (celebrate && side === team && i !== 6) return { x: clamp(ball.x + (random() - .5) * 10, 5, 95), y: clamp(ball.y + (random() - .5) * 12, 8, 92) }
-    return { x: clamp(baseX + (ball.x - 50) * (i === 6 ? .04 : .22) + (random() - .5) * 6 * mobility, 5, 95), y: clamp(slot.y + (ball.y - 50) * .12 + (random() - .5) * 6, 7, 93) }
-  }))
-  const emit = (kind: string, text: string, target = actor, celebrate = false) => {
-    const players = positions(celebrate)
-    if (!['goal', 'miss', 'shot', 'celebration', 'fulltime'].includes(kind)) players[team * 7 + target] = { ...ball }
+    const jitter = celebrate ? 0 : 2
+    return { x: clamp(baseX + (ball.x - 50) * (i === 6 ? .04 : .22) + (random() - .5) * jitter * mobility, 5, 95), y: clamp(slot.y + (ball.y - 50) * .12 + (random() - .5) * jitter, 7, 93) }
+    }))
+    if (contact) targets[contact.side * 7 + contact.index] = { ...ball }
+    currentPlayers = targets.map((target, i) => moveToward(currentPlayers[i], target, celebrate ? 16 : 11))
+    return currentPlayers.map(point => ({ ...point }))
+  }
+  const emit = (kind: string, text: string, target = actor, celebrate = false, contact = true) => {
+    const players = positions(celebrate, contact ? { side: team, index: target } : undefined)
     events.push({ kind, text, team, actor, target, ball: { ...ball }, players, score: [...score] })
   }
+  const nearestDefender = (side: number) => [3, 4, 5].reduce((nearest, index) => {
+    const point = currentPlayers[side * 7 + index]
+    const best = currentPlayers[side * 7 + nearest]
+    return Math.hypot(point.x - ball.x, point.y - ball.y) < Math.hypot(best.x - ball.x, best.y - ball.y) ? index : nearest
+  }, 3)
   const kickoff = () => { ball = { x: 50, y: 50 }; actor = Math.min(3, 5); emit('kickoff', `${squads[team].name}: saque de centro.`) }
   kickoff()
   // Around 60 actions, rendered over two minutes. Outcome is never selected in advance.
   for (let step = 0; step < 60; step++) {
     const opponent = 1 - team
-    const defender = 3 + Math.floor(random() * 3)
+    const defender = nearestDefender(opponent)
     const player = squads[team].cards[actor]
     const progress = team === 0 ? ball.x : 100 - ball.x
     if (progress > 62 && random() < .4 + attribute(team, actor, 'sho') / 400) {
       const origin = { ...ball }
       ball = { x: team === 0 ? 98 : 2, y: 43 + random() * 14 }
-      emit('shot', `${player.playerName} dispara a puerta.`)
+      emit('shot', `${player.playerName} dispara a puerta.`, actor, false, false)
       const shooting = attribute(team, actor, 'sho') * .85 + attribute(team, actor, 'ovr') * .15
       const keeping = attribute(opponent, 6, 'def') * .85 + attribute(opponent, 6, 'ovr') * .15
       const goalChance = clamp(.23 + (shooting - keeping) / 170 + (progress - 70) / 180, .08, .65)
@@ -67,11 +84,13 @@ export function simulateArena(home: ArenaSquad, away: ArenaSquad, random: () => 
         team = opponent
         kickoff()
       } else if (random() < .7) {
-        team = opponent; actor = 6; ball = { x: team === 0 ? 8 : 92, y: 50 }
+        team = opponent; actor = 6
         emit('save', `${squads[team].cards[6].playerName} detiene el disparo.`)
+        ball = { x: team === 0 ? 8 : 92, y: clamp(ball.y, 38, 62) }
+        emit('keeper-ball', `${squads[team].cards[6].playerName} asegura el balon.`)
       } else {
         ball.y = random() < .5 ? 30 : 70
-        emit('miss', `${player.playerName} dispara fuera.`)
+        emit('miss', `${player.playerName} dispara fuera.`, actor, false, false)
         team = opponent; actor = 6; ball = { x: team === 0 ? 8 : 92, y: origin.y }
         emit('restart', `${squads[team].cards[6].playerName} saca de puerta.`)
       }
